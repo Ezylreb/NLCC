@@ -23,10 +23,14 @@ export async function POST(request: Request) {
     const userId = insertRes.rows[0].id;
 
     // Log the activity
-    await query(
-      "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
-      [userId, 'Teacher Registered', 'system', `Admin created teacher: ${firstName} ${lastName} (${email})`]
-    );
+    try {
+      await query(
+        "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+        [userId, 'Teacher Registered', 'system', `Admin created teacher: ${firstName} ${lastName} (${email})`]
+      );
+    } catch (err) {
+      console.warn('Could not log teacher activity:', err);
+    }
 
     return NextResponse.json({ success: true, userId });
   } catch (error: any) {

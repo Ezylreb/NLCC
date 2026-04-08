@@ -6,8 +6,9 @@ interface CreateYunitFormProps {
     isOpen: boolean;
     onClose: () => void;
     onSubmit: (data: any) => void;
-    classId: string;
-    lessonId: string;
+    classId?: string;
+    bahagiId?: number;
+    lessonId?: string;
     isLoading?: boolean;
 }
 
@@ -16,6 +17,7 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
     onClose,
     onSubmit,
     classId,
+    bahagiId,
     lessonId,
     isLoading = false
 }) => {
@@ -36,7 +38,8 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
             content,
             mediaUrl: hasMedia ? mediaUrl : null,
             classId,
-            lessonId
+            bahagiId: bahagiId || null,
+            lessonId: lessonId || null
         };
 
         onSubmit(data);

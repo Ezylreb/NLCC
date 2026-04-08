@@ -9,17 +9,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Title, Category, and Teacher ID are required' }, { status: 400 });
     }
 
-    // Quick Migration: Add className and teacher_id columns if they don't exist
-    try {
-      await query(`
-        ALTER TABLE lessons 
-        ADD COLUMN IF NOT EXISTS class_name VARCHAR(255),
-        ADD COLUMN IF NOT EXISTS teacher_id VARCHAR(255)
-      `);
-    } catch (dbErr) {
-      console.warn('Migration warning:', dbErr);
-    }
-
     // Generate a unique ID for the lesson (slug-style) - limited to safe length just in case
     const slug = title.toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')

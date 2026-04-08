@@ -50,10 +50,15 @@ export async function POST(request: NextRequest) {
         created_at: assessmentData.created_at
       }
     });
-  } catch (error) {
-    console.error('Error creating assessment:', error);
+  } catch (error: any) {
+    console.error('CRITICAL: Create Assessment Error:', {
+        message: error?.message,
+        stack: error?.stack,
+        code: error?.code,
+        detail: error?.detail
+    });
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to create assessment', details: error.message },
       { status: 500 }
     );
   }

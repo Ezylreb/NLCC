@@ -6,6 +6,7 @@ import { TeacherOverviewPage } from './TeacherComponents/TeacherOverviewPage';
 import { TeacherClassesPage } from './TeacherComponents/TeacherClassesPage';
 import { TeacherProfilePage } from './TeacherComponents/TeacherProfilePage';
 import { ClassDetailPage } from './TeacherComponents/ClassDetailPage';
+import { CreateBahagiForm } from './TeacherComponents/CreateBahagiForm';
 import { CreateLessonForm } from './TeacherComponents/CreateLessonForm';
 import { CreateYunitForm } from './TeacherComponents/CreateYunitForm';
 import { CreateAssessmentForm } from './TeacherComponents/CreateAssessmentForm';
@@ -31,12 +32,14 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Class Detail states
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
     const [selectedClassName, setSelectedClassName] = useState<string>('');
-    const [classLessons, setClassLessons] = useState<any[]>([]);
+    const [classBahagi, setClassBahagi] = useState<any[]>([]);
 
     // Form states
+    const [showBahagiForm, setShowBahagiForm] = useState(false);
     const [showLessonForm, setShowLessonForm] = useState(false);
     const [showYunitForm, setShowYunitForm] = useState(false);
     const [showAssessmentForm, setShowAssessmentForm] = useState(false);
+    const [selectedBahagiId, setSelectedBahagiId] = useState<number | null>(null);
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
 
@@ -125,19 +128,24 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         if (selectedClass) {
             setSelectedClassId(classId);
             setSelectedClassName(selectedClass.name);
-            // Load lessons for this class
+            // Load Bahagi for this class
             try {
-                const res = await fetch(`/api/teacher/class-lessons?classId=${classId}`);
+                const url = new URL('/api/teacher/class-bahagi', window.location.origin);
+                url.searchParams.append('classId', classId);
+                url.searchParams.append('className', selectedClass.name);
+                
+                const res = await fetch(url.toString());
                 if (res.ok) {
                     const data = await res.json();
-                    setClassLessons(data.lessons || []);
+                    console.log(`Loaded ${data.bahagi?.length || 0} bahagi for class ${selectedClass.name}`);
+                    setClassBahagi(data.bahagi || []);
                 } else {
-                    console.warn('Failed to fetch lessons');
-                    setClassLessons([]);
+                    console.warn('Failed to fetch bahagi');
+                    setClassBahagi([]);
                 }
             } catch (err) {
-                console.error('Error fetching lessons:', err);
-                setClassLessons([]);
+                console.error('Error fetching bahagi:', err);
+                setClassBahagi([]);
             }
         }
     };
@@ -146,7 +154,40 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleBackFromClassDetail = () => {
         setSelectedClassId(null);
         setSelectedClassName('');
-        setClassLessons([]);
+        setClassBahagi([]);
+    };
+
+    // Handle creating bahagi (show modal)
+    const handleCreateBahagi = () => {
+        setShowBahagiForm(true);
+    };
+
+    // Handle bahagi form submission
+    const handleBahagiSubmit = async (data: any) => {
+        try {
+            const res = await fetch('/api/teacher/create-bahagi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...data,
+                    teacherId: user?.id
+                })
+            });
+
+            if (res.ok) {
+                const newBahagi = await res.json();
+                alert('✅ Bahagi created successfully!');
+                setShowBahagiForm(false);
+                // Add the new bahagi to classBahagi
+                setClassBahagi([newBahagi.bahagi, ...classBahagi]);
+            } else {
+                const error = await res.json();
+                alert(`❌ Error: ${error.error}`);
+            }
+        } catch (err) {
+            console.error('Error creating bahagi:', err);
+            alert('❌ Failed to create bahagi');
+        }
     };
 
     // Handle creating lesson (show modal)
@@ -171,8 +212,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 const newLesson = await res.json();
                 alert('✅ Lesson created successfully!');
                 setShowLessonForm(false);
-                // Add the new lesson to classLessons
-                setClassLessons([newLesson.lesson, ...classLessons]);
+                // TODO: Refresh Bahagi view
             } else {
                 const error = await res.json();
                 alert(`❌ Error: ${error.error}`);
@@ -183,9 +223,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         }
     };
 
-    // Handle creating yunit
-    const handleCreateYunit = (lessonId: string) => {
-        setSelectedLessonId(lessonId);
+    // Handle creating yunit (for Bahagi)
+    const handleCreateYunit = (bahagiId: number) => {
+        setSelectedBahagiId(bahagiId);
         setShowYunitForm(true);
     };
 
@@ -263,8 +303,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             if (res.ok) {
                 alert('✅ Lesson deleted successfully!');
-                // Remove from classLessons
-                setClassLessons(classLessons.filter(l => l.id !== lessonId));
+                // TODO: Refresh Bahagi view
             } else {
                 const error = await res.json();
                 alert(`❌ Error: ${error.error}`);
@@ -302,17 +341,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             if (res.ok) {
                 alert('✅ Yunit deleted successfully!');
-                // Update classLessons
-                const updatedLessons = classLessons.map(lesson => {
-                    if (lesson.id === lessonId) {
-                        return {
-                            ...lesson,
-                            yunits: lesson.yunits?.filter((y: any) => y.id !== yunitId) || []
-                        };
-                    }
-                    return lesson;
-                });
-                setClassLessons(updatedLessons);
+                // TODO: Refresh Bahagi view
             } else {
                 const error = await res.json();
                 alert(`❌ Error: ${error.error}`);
@@ -344,17 +373,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             if (res.ok) {
                 alert('✅ Assessment deleted successfully!');
-                // Update classLessons
-                const updatedLessons = classLessons.map(lesson => {
-                    if (lesson.id === lessonId) {
-                        return {
-                            ...lesson,
-                            assessments: lesson.assessments?.filter((a: any) => a.id !== assessmentId) || []
-                        };
-                    }
-                    return lesson;
-                });
-                setClassLessons(updatedLessons);
+                // TODO: Refresh Bahagi view
             } else {
                 const error = await res.json();
                 alert(`❌ Error: ${error.error}`);
@@ -440,7 +459,8 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                             classId={selectedClassId}
                             className={selectedClassName}
                             onBack={handleBackFromClassDetail}
-                            onCreateLesson={handleCreateLesson}
+                            onCreateBahagi={handleCreateBahagi}
+                            onCreateLessonLegs={handleCreateLesson}
                             onCreateYunit={handleCreateYunit}
                             onCreateAssessment={handleCreateAssessment}
                             onEditLesson={handleEditLesson}
@@ -448,7 +468,8 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                             onEditAssessment={handleEditAssessment}
                             onDeleteYunit={handleDeleteYunit}
                             onDeleteAssessment={handleDeleteAssessment}
-                            lessons={classLessons}
+                            bahagi={classBahagi}
+                            lessons={lessons}
                             onDeleteLesson={handleDeleteLesson}
                         />
                     ) : (
@@ -485,6 +506,17 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                     )}
                 </div>
             </main>
+
+            {/* Bahagi Form Modal */}
+            {showBahagiForm && selectedClassId && (
+                <CreateBahagiForm
+                    isOpen={showBahagiForm}
+                    onClose={() => setShowBahagiForm(false)}
+                    onSubmit={handleBahagiSubmit}
+                    classId={selectedClassId}
+                    className={selectedClassName}
+                />
+            )}
 
             {/* Lesson Form Modal */}
             {showLessonForm && selectedClassId && (

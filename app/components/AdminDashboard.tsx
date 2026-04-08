@@ -458,7 +458,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                     value={newTeacher.password}
                                     onChange={(e) => setNewTeacher({...newTeacher, password: e.target.value})}
                                     placeholder="••••••"
-                                    minLength="6"
+                                    minLength={6}
                                     className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" 
                                 />
                                 <p className="text-[8px] text-slate-500 ml-1">Minimum 6 characters</p>

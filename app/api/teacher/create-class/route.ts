@@ -6,6 +6,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, teacherId } = body;
 
+    console.log(`Creating class: "${name}" for teacher: ${teacherId} (type: ${typeof teacherId})`);
+
     if (!name || !teacherId) {
       return NextResponse.json(
         { error: 'Class name and teacher ID are required' },
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
       );
 
       if (!result.rows || result.rows.length === 0) {
+        console.error('Failed to insert class');
         return NextResponse.json(
           { error: 'Failed to create class' },
           { status: 500 }
@@ -42,6 +45,12 @@ export async function POST(request: NextRequest) {
       }
 
       const classData = result.rows[0];
+      console.log(`✅ Class created successfully:`, {
+        id: classData.id,
+        name: classData.name,
+        teacher_id: classData.teacher_id,
+        created_at: classData.created_at
+      });
       
       return NextResponse.json({
         class: {

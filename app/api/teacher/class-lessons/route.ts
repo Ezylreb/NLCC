@@ -1,67 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { query } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const classId = searchParams.get('classId');
+    const className = searchParams.get('className');
 
-    if (!classId) {
+    if (!classId && !className) {
       return NextResponse.json(
-        { error: 'Class ID is required' },
+        { error: 'Class ID or Class Name is required' },
         { status: 400 }
       );
     }
 
-    // Fetch lessons for the class
-    const { data: lessons, error: lessonsError } = await supabase
-      .from('lessons')
-      .select('*')
-      .eq('class_id', classId);
+    console.log(`Fetching lessons for class: classId=${classId}, className=${className}`);
 
-    if (lessonsError) {
-      console.error('Supabase error fetching lessons:', lessonsError);
-      return NextResponse.json(
-        { error: 'Failed to fetch lessons' },
-        { status: 500 }
+    // Fetch lessons for the class - use class_id first, then fall back to class_name
+    let lessonsRes;
+    if (classId) {
+      lessonsRes = await query(
+        `SELECT * FROM lessons WHERE class_id = $1 ORDER BY created_at DESC`,
+        [classId]
+      );
+    } else {
+      lessonsRes = await query(
+        `SELECT * FROM lessons WHERE class_name = $1 ORDER BY created_at DESC`,
+        [className]
       );
     }
 
+    const lessons = lessonsRes.rows || [];
+    console.log(`Found ${lessons.length} lessons`);
+
     // Fetch yunits and assessments for each lesson
     const lessonsWithContent = await Promise.all(
-      (lessons || []).map(async (lesson) => {
+      lessons.map(async (lesson: any) => {
         // Fetch yunits
-        const { data: yunits } = await supabase
-          .from('yunits')
-          .select('*')
-          .eq('lesson_id', lesson.id);
+        const yunitsRes = await query(
+          `SELECT id, title, content, media_url, published_at FROM yunits WHERE lesson_id = $1 ORDER BY created_at DESC`,
+          [lesson.id]
+        );
 
         // Fetch assessments
-        const { data: assessments } = await supabase
-          .from('assessments')
-          .select('*')
-          .eq('lesson_id', lesson.id);
+        const assessmentsRes = await query(
+          `SELECT id, title, type, reward, published_at FROM assessments WHERE lesson_id = $1 ORDER BY created_at DESC`,
+          [lesson.id]
+        );
 
         return {
           ...lesson,
-          yunits: yunits || [],
-          assessments: assessments || []
+          yunits: yunitsRes.rows || [],
+          assessments: assessmentsRes.rows || []
         };
       })
     );
 
+    console.log(`Returning ${lessonsWithContent.length} lessons with content`);
+
     return NextResponse.json({
       lessons: lessonsWithContent
     });
-  } catch (error) {
-    console.error('Error fetching class lessons:', error);
+  } catch (error: any) {
+    console.error('Error fetching class lessons:', error.message);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to fetch lessons', details: error.message },
       { status: 500 }
     );
   }

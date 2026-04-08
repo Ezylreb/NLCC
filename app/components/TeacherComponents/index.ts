@@ -4,5 +4,6 @@ export { TeacherOverviewPage } from './TeacherOverviewPage';
 export { TeacherClassesPage } from './TeacherClassesPage';
 export { ClassDetailPage } from './ClassDetailPage';
 export { TeacherProfilePage } from './TeacherProfilePage';
+export { CreateBahagiForm } from './CreateBahagiForm';
 export { CreateYunitForm } from './CreateYunitForm';
 export { CreateAssessmentForm } from './CreateAssessmentForm';

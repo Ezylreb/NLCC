@@ -14,24 +14,91 @@ export async function GET(request: Request) {
     }
 
     // Default empty data
-    const students = [];
-    const stats = [
+    const students: any[] = [];
+    const stats: any[] = [
         { label: 'Total Students', value: '0', icon: '👥', color: 'text-brand-purple' },
         { label: 'Class Average', value: '0%', icon: '📈', color: 'text-emerald-400' },
         { label: 'Login Today', value: '0 Students', icon: '👤', color: 'text-amber-500' },
         { label: 'Total Lessons', value: '0', icon: '📝', color: 'text-brand-sky' },
     ];
 
-    const classes = [
+    let classes = [
         { 
             id: 'class-all', 
             name: 'All Students', 
             students: 0, 
             progress: 0, 
             nextLesson: 'Lesson Plan Active', 
-            color: 'border-brand-sky' 
+            color: 'border-brand-sky',
+            student_count: 0,
+            lesson_count: 0,
+            is_archived: false
         }
     ];
+
+    try {
+        // Fetch teacher's created classes from database
+        console.log(`Fetching classes for teacher: ${teacherId}`);
+        
+        const classesRes = await query(`
+          SELECT 
+              c.id,
+              c.name,
+              c.teacher_id,
+              c.is_archived,
+              c.created_at,
+              (SELECT COUNT(*) FROM users WHERE role = 'USER' AND class_name = c.name)::INT as student_count,
+              (SELECT COUNT(*) FROM lessons WHERE class_name = c.name AND teacher_id::uuid = c.teacher_id)::INT as lesson_count
+          FROM classes c
+          WHERE c.teacher_id = $1 AND c.is_archived = FALSE
+          GROUP BY c.id, c.name, c.teacher_id, c.is_archived, c.created_at
+          ORDER BY c.created_at DESC
+        `, [teacherId]);
+
+        console.log(`Query result for teacher ${teacherId}:`, classesRes.rows?.length || 0, 'classes');
+
+        if (classesRes.rows && classesRes.rows.length > 0) {
+          classes = classesRes.rows.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            student_count: parseInt(row.student_count || '0'),
+            lesson_count: parseInt(row.lesson_count || '0'),
+            progress: 0,
+            is_archived: row.is_archived,
+            students: parseInt(row.student_count || '0'),
+            nextLesson: 'Lesson Plan Active',
+            color: 'border-brand-purple'
+          }));
+          console.log(`✅ Found ${classes.length} classes for teacher`);
+        } else {
+          console.log('No classes found for this teacher, using default');
+          classes = [{
+            id: 'class-all', 
+            name: 'All Students', 
+            students: 0,
+            student_count: 0,
+            lesson_count: 0,
+            progress: 0,
+            is_archived: false,
+            nextLesson: 'Lesson Plan Active',
+            color: 'border-brand-sky'
+          }];
+        }
+    } catch (classError: any) {
+        console.error('Error fetching classes from database:', classError.message);
+        // If table doesn't exist yet, use default
+        classes = [{
+          id: 'class-all', 
+          name: 'All Students', 
+          students: 0,
+          student_count: 0,
+          lesson_count: 0,
+          progress: 0,
+          is_archived: false,
+          nextLesson: 'Lesson Plan Active',
+          color: 'border-brand-sky'
+        }];
+    }
 
     try {
         // Try to fetch real students from database
@@ -77,10 +144,11 @@ export async function GET(request: Request) {
                 };
             });
 
-            // Update stats
+            // Update stats based on classes and students
             const totalStudents = processedStudents.length;
             let activeTodayCount = 0;
             let totalScoreSum = 0;
+            let totalLessons = 0;
             
             processedStudents.forEach(s => {
                totalScoreSum += s.progress;
@@ -89,14 +157,15 @@ export async function GET(request: Request) {
                }
             });
 
+            // Calculate total lessons from all classes
+            totalLessons = classes.reduce((sum, cls) => sum + (cls.lesson_count || 0), 0);
+
             const classAvg = totalStudents > 0 ? Math.round(totalScoreSum / totalStudents) : 0;
             
             stats[0].value = totalStudents.toString();
             stats[1].value = `${classAvg}%`;
             stats[2].value = `${activeTodayCount} Students`;
-            
-            classes[0].students = totalStudents;
-            classes[0].progress = classAvg;
+            stats[3].value = totalLessons.toString();
 
             return NextResponse.json({
                 stats,

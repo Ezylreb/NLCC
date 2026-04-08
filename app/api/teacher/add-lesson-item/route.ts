@@ -3,13 +3,6 @@ import { query } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    // Quick Migration
-    try {
-      await query(`ALTER TABLE lesson_items ADD COLUMN IF NOT EXISTS link_url TEXT`);
-    } catch (dbErr) {
-      console.warn('Migration warning:', dbErr);
-    }
-
     const { lessonId, primaryText, secondaryText, imageEmoji, pronunciation, itemOrder, linkUrl } = await request.json();
 
     if (!lessonId || !primaryText) {
