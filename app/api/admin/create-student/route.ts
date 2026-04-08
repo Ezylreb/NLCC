@@ -43,10 +43,14 @@ export async function POST(request: Request) {
     );
 
     // Log the activity
-    await query(
-      "INSERT INTO activity_logs (action, type, details) VALUES ($1, $2, $3)",
-      ['Student Registered', 'system', `Admin created student: ${firstName} ${lastName} (LRN: ${lrn})`]
-    );
+    try {
+      await query(
+        "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+        [userId, 'Student Registered', 'system', `Admin created student: ${firstName} ${lastName} (LRN: ${lrn})`]
+      );
+    } catch (err) {
+      console.warn('Could not log activity:', err);
+    }
 
     return NextResponse.json({ success: true, userId });
   } catch (error: any) {

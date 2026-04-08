@@ -7,10 +7,31 @@ if (!supabaseUrl || !supabaseServiceRoleKey) {
   console.warn('Supabase credentials missing. Image storage will be disabled.');
 }
 
-export const supabase = createClient(
-  supabaseUrl || '',
-  supabaseServiceRoleKey || ''
-);
+let supabaseClient: any = null;
+
+const initSupabase = () => {
+  if (supabaseClient) return supabaseClient;
+  
+  try {
+    supabaseClient = createClient(
+      supabaseUrl || 'https://placeholder.supabase.co',
+      supabaseServiceRoleKey || 'placeholder-key'
+    );
+    return supabaseClient;
+  } catch (err) {
+    console.error('Failed to initialize Supabase client:', err);
+    return null;
+  }
+};
+
+export const supabase = initSupabase() || {
+  storage: {
+    from: () => ({
+      upload: async () => ({ data: null, error: new Error('Supabase not configured') }),
+      download: async () => ({ data: null, error: new Error('Supabase not configured') }),
+    }),
+  },
+};
 
 export const uploadImageToSupabase = async (buffer: Buffer, fileName: string, bucket: string = 'lesson-images') => {
   const { data, error } = await supabase.storage

@@ -12,7 +12,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'User already exists' }, { status: 400 });
       }
 
-      // Create new user (plain text password for now, though hashed is better)
+      // Create new user
       const insertRes = await query(
         'INSERT INTO users (first_name, last_name, email, password, role) VALUES ($1, $2, $3, $4, $5) RETURNING id',
         [firstName || '', lastName || '', email, password, 'USER']
@@ -20,17 +20,25 @@ export async function POST(request: Request) {
       const user = insertRes.rows[0];
       const userId = user.id;
 
-      // Create default preferences
-      await query(
-        'INSERT INTO preferences (user_id, dark_mode, sound_effects, learning_language, daily_goal) VALUES ($1, $2, $3, $4, $5)',
-        [userId, false, true, 'tl', 20]
-      );
+      // Create default preferences (if table exists)
+      try {
+        await query(
+          'INSERT INTO preferences (user_id, dark_mode, sound_effects, learning_language, daily_goal) VALUES ($1, $2, $3, $4, $5)',
+          [userId, false, true, 'tl', 20]
+        );
+      } catch (err) {
+        console.warn('Could not create preferences:', err);
+      }
 
-      // Create default notifications
-      await query(
-        'INSERT INTO notifications (user_id, daily_reminders, friend_activity, weekly_report) VALUES ($1, $2, $3, $4)',
-        [userId, true, true, true]
-      );
+      // Create default notifications (if table exists)
+      try {
+        await query(
+          'INSERT INTO notifications (user_id, daily_reminders, friend_activity, weekly_report) VALUES ($1, $2, $3, $4)',
+          [userId, true, true, true]
+        );
+      } catch (err) {
+        console.warn('Could not create notifications:', err);
+      }
 
       return NextResponse.json({ 
         success: true, 
@@ -47,14 +55,21 @@ export async function POST(request: Request) {
     }
 
     if (action === 'login') {
-      // Support login via email or LRN
-      const userRes = await query('SELECT * FROM users WHERE email = $1 OR lrn = $1', [email]);
+      // Support login via email
+      let userRes;
+      try {
+        userRes = await query('SELECT * FROM users WHERE email = $1', [email]);
+      } catch (err) {
+        console.error('Database query error:', err);
+        return NextResponse.json({ error: 'Unable to connect to database' }, { status: 503 });
+      }
+
       if (userRes.rows.length === 0) {
-        return NextResponse.json({ error: 'User not found. Please check your Email or LRN.' }, { status: 404 });
+        return NextResponse.json({ error: 'User not found. Please check your email.' }, { status: 404 });
       }
 
       const user = userRes.rows[0];
-      // Basic plain text check
+      // Basic plain text check (should use bcrypt in production)
       if (user.password !== password) {
         return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
       }
@@ -72,11 +87,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'This portal is restricted to teachers.' }, { status: 403 });
       }
 
-      // Log the login activity
-      await query(
-        "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
-        [user.id, 'User Login', 'auth', `User logged in using ${email.includes('@') ? 'email' : 'LRN'}`]
-      );
+      // Try to log the login activity (if table exists)
+      try {
+        await query(
+          "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+          [user.id, 'User Login', 'auth', `User logged in using email`]
+        );
+      } catch (err) {
+        console.warn('Could not log activity:', err);
+      }
 
       return NextResponse.json({ 
         success: true, 
@@ -86,19 +105,18 @@ export async function POST(request: Request) {
           lastName: user.last_name,
           email: user.email,
           role: user.role,
-          class_name: user.class_name,
-          className: user.class_name
+          class_name: user.class_name || null,
+          className: user.class_name || null
         } 
       });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
-    console.error('Auth Error Detailed:', error);
+    console.error('Auth Error:', error);
     return NextResponse.json({ 
       error: 'Internal Server Error', 
-      details: error.message,
-      code: error.code 
+      details: error.message
     }, { status: 500 });
   }
 }

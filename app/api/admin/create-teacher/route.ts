@@ -24,8 +24,8 @@ export async function POST(request: Request) {
 
     // Log the activity
     await query(
-      "INSERT INTO activity_logs (action, type, details) VALUES ($1, $2, $3)",
-      ['Teacher Registered', 'system', `Admin created teacher: ${firstName} ${lastName} (${email})`]
+      "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+      [userId, 'Teacher Registered', 'system', `Admin created teacher: ${firstName} ${lastName} (${email})`]
     );
 
     return NextResponse.json({ success: true, userId });

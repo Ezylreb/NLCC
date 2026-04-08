@@ -170,7 +170,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
                             
                                 <button
                                 onClick={onBack}
-                                className="w-full py-4 md:py-8 text-xs md:text-3xl font-black bg-brand-sky rounded-2xl md:rounded-[2.5rem] text-white shadow-glow-sky hover:scale-105 active:scale-95 transition-all uppercase tracking-widest mt-4 md:mt-8 z-10"
+                                className="w-full py-4 md:py-8 text-xs md:text-3xl font-black bg-gradient-to-r from-brand-purple to-purple-600 rounded-2xl md:rounded-[2.5rem] text-white shadow-lg hover:scale-105 active:scale-95 transition-all uppercase tracking-widest mt-4 md:mt-8 z-10"
                             >
                                 Bumalik sa Nexus
                             </button>
@@ -223,14 +223,14 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
                                                 href={currentItem.link_url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="w-full py-4 md:py-6 text-xs md:text-2xl font-black rounded-2xl md:rounded-[2rem] bg-emerald-500 text-white shadow-lg flex items-center justify-center gap-3 hover:scale-[1.02] transition-all"
+                                                className="w-full py-4 md:py-6 text-xs md:text-2xl font-black rounded-2xl md:rounded-[2rem] bg-gradient-to-r from-brand-purple to-purple-600 text-white shadow-lg flex items-center justify-center gap-3 hover:scale-[1.02] transition-all"
                                             >
                                                 <span>🔗</span> Buksan ang Link
                                             </a>
                                         )}
                                         <button
                                             onClick={() => setShowGame(true)}
-                                            className="w-full py-4 md:py-8 text-xs md:text-3xl font-black rounded-2xl md:rounded-[2.5rem] bg-brand-sky text-white shadow-glow-sky border-none hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 md:gap-6"
+                                            className="w-full py-4 md:py-8 text-xs md:text-3xl font-black rounded-2xl md:rounded-[2.5rem] bg-gradient-to-r from-brand-purple to-purple-600 text-white shadow-lg border-none hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 md:gap-6"
                                             aria-label={lessonId === 'alpabeto' || lessonId === 'pantig' ? "Play an interactive game" : "Susunod na aralin"}
                                         >
                                             <span className="text-xl md:text-5xl drop-shadow-lg" aria-hidden="true">{lessonId === 'alpabeto' || lessonId === 'pantig' ? '🧩' : '➡️'}</span> 
@@ -253,7 +253,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
                                         <p className="text-lg md:text-4xl font-black text-white text-center italic drop-shadow-glow-sky uppercase tracking-tighter">Mahusay! Nakumpleto mo ito.</p>
                                         <button 
                                             onClick={nextItem}
-                                            className="w-full py-4 md:py-8 bg-brand-sky rounded-2xl md:rounded-3xl text-xs md:text-2xl font-black text-white shadow-glow-sky hover:scale-105 active:scale-95 transition-all uppercase tracking-widest"
+                                            className="w-full py-4 md:py-8 bg-gradient-to-r from-brand-purple to-purple-600 rounded-2xl md:rounded-3xl text-xs md:text-2xl font-black text-white shadow-lg hover:scale-105 active:scale-95 transition-all uppercase tracking-widest"
                                         >
                                             Susunod na Aralin →
                                         </button>
@@ -262,7 +262,7 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
                             </div>
                             <button
                                 onClick={() => setShowGame(false)}
-                                className="mt-6 md:mt-8 text-white/50 font-black uppercase tracking-[0.3em] text-[8px] md:text-xs hover:text-brand-sky transition-colors w-full text-center p-2 md:p-4 focus:outline-none focus:ring-2 focus:ring-brand-sky rounded-xl"
+                                className="mt-6 md:mt-8 text-white/50 font-black uppercase tracking-[0.3em] text-[8px] md:text-xs hover:text-brand-purple transition-colors w-full text-center p-2 md:p-4 focus:outline-none focus:ring-2 focus:ring-brand-purple rounded-xl"
                                 aria-label="Return to the lesson overview"
                             >
                                 ← BUMALIK SA ARALIN

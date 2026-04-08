@@ -27,6 +27,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         password: '',
         className: '',
     });
+    const [newTeacher, setNewTeacher] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        password: '',
+        className: '',
+    });
     const [isDataLoading, setIsDataLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false); // This state is now for the generic "Add User" modal, but the instruction implies specific student/teacher modals. I will rename this to showCreateStudent for clarity based on the instruction's usage.
     const [showManageModal, setShowManageModal] = useState(false);
@@ -47,8 +54,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         setError(null);
         setIsLoading(true);
 
-        if (newStudent.lrn && newStudent.lrn.length !== 12) {
+        if (!newStudent.firstName.trim() || !newStudent.lastName.trim() || !newStudent.email.trim() || !newStudent.password.trim() || !newStudent.lrn.trim()) {
+            setError('All fields are required. Please fill out the form completely.');
+            setIsLoading(false);
+            return;
+        }
+
+        if (newStudent.lrn.length !== 12 || !/^\d+$/.test(newStudent.lrn)) {
             setError('Student LRN must be exactly 12 digits.');
+            setIsLoading(false);
+            return;
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newStudent.email)) {
+            setError('Please enter a valid email address.');
             setIsLoading(false);
             return;
         }
@@ -63,17 +82,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             const data = await response.json();
 
             if (response.ok) {
-                setShowCreateStudent(false); // Changed from setShowAddModal
+                setShowCreateStudent(false);
                 setNewStudent({ firstName: '', lastName: '', email: '', lrn: '', password: '', className: '' });
-                alert('Student account created successfully!');
+                alert('✅ Student account created successfully!');
                 fetchDashboardData();
             } else {
-                setError(data.error || 'Failed to create student');
+                setError(data.error || 'Failed to create student account.');
             }
         } catch (err) {
+            console.error('Error creating student:', err);
             setError('Connection error. Please try again.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleCreateTeacher = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+        setIsCreating(true);
+
+        if (!newTeacher.firstName.trim() || !newTeacher.lastName.trim() || !newTeacher.email.trim() || !newTeacher.password.trim()) {
+            setError('All fields are required. Please fill out the form completely.');
+            setIsCreating(false);
+            return;
+        }
+
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newTeacher.email)) {
+            setError('Please enter a valid email address.');
+            setIsCreating(false);
+            return;
+        }
+
+        if (newTeacher.password.length < 6) {
+            setError('Password must be at least 6 characters long.');
+            setIsCreating(false);
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/admin/create-teacher', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newTeacher),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setShowCreateTeacher(false);
+                setNewTeacher({ firstName: '', lastName: '', email: '', password: '', className: '' });
+                alert('✅ Teacher account created successfully!');
+                fetchDashboardData();
+            } else {
+                setError(data.error || 'Failed to create teacher account.');
+            }
+        } catch (err) {
+            console.error('Error creating teacher:', err);
+            setError('Connection error. Please try again.');
+        } finally {
+            setIsCreating(false);
         }
     };
     const handleUpdateUser = async (e: React.FormEvent) => {
@@ -250,13 +318,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             {/* Sidebar Overlay for Mobile */}
             {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] md:hidden"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
 
             {/* Sidebar */}
-            <aside className={`w-64 bg-slate-950 border-r border-slate-800 flex flex-col fixed md:relative inset-y-0 left-0 z-[100] transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:flex shrink-0'}`}>
+            <aside className={`w-64 bg-slate-950 border-r border-slate-800 flex flex-col fixed md:relative inset-y-0 left-0 z-50 transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:flex shrink-0'}`}>
                 <div className="p-6 border-b border-slate-800 flex items-center gap-3">
                     <Image src="/logo/logo.png" alt="NLLC Logo" width={40} height={40} className="rounded-xl shadow-lg shadow-slate-900 shrink-0" />
                     <div>
@@ -301,7 +369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
             {/* Logout Confirmation Modal */}
             {showLogoutModal && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden text-center">
                         <div className="w-20 h-20 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center text-4xl mb-6 mx-auto shadow-inner shadow-red-500/20">
                             🚪
@@ -333,7 +401,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
             {/* Create Teacher Modal */}
             {showCreateTeacher && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
                         <div className="flex justify-between items-center mb-10">
                             <div>
@@ -343,63 +411,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                             <button onClick={() => setShowCreateTeacher(false)} className="text-2xl text-slate-500 hover:text-white transition-colors">✕</button>
                         </div>
 
-                        <form onSubmit={async (e: React.FormEvent<HTMLFormElement>) => {
-                            e.preventDefault();
-                            setIsCreating(true);
-                            const formData = new FormData(e.currentTarget);
-                            
-                            try {
-                                const response = await fetch('/api/admin/create-teacher', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        firstName: formData.get('firstName'),
-                                        lastName: formData.get('lastName'),
-                                        email: formData.get('email'),
-                                        password: formData.get('password'),
-                                        className: formData.get('className'),
-                                    })
-                                });
-                                if (response.ok) {
-                                    setShowCreateTeacher(false);
-                                    alert('Teacher account created successfully!');
-                                    fetchDashboardData();
-                                } else {
-                                    const data = await response.json();
-                                    setError(data.error || 'Failed to create teacher');
-                                }
-                            } catch (err) {
-                                setError('Connection error. Please try again.');
-                            } finally {
-                                setIsCreating(false);
-                            }
-                        }} className="flex flex-col gap-6">
+                        <form onSubmit={handleCreateTeacher} className="flex flex-col gap-6">
                             {error && <p className="text-red-400 text-xs font-bold text-center bg-red-400/10 py-2 rounded-lg">{error}</p>}
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">First Name</label>
-                                    <input required name="firstName" type="text" className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" />
+                                    <input 
+                                        required 
+                                        type="text" 
+                                        value={newTeacher.firstName}
+                                        onChange={(e) => setNewTeacher({...newTeacher, firstName: e.target.value})}
+                                        placeholder="Juan"
+                                        className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" 
+                                    />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Last Name</label>
-                                    <input required name="lastName" type="text" className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" />
+                                    <input 
+                                        required 
+                                        type="text" 
+                                        value={newTeacher.lastName}
+                                        onChange={(e) => setNewTeacher({...newTeacher, lastName: e.target.value})}
+                                        placeholder="Dela Cruz"
+                                        className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" 
+                                    />
                                 </div>
                             </div>
 
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
-                                <input required name="email" type="email" className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" />
+                                <input 
+                                    required 
+                                    type="email" 
+                                    value={newTeacher.email}
+                                    onChange={(e) => setNewTeacher({...newTeacher, email: e.target.value})}
+                                    placeholder="juan.delacruz@school.edu.ph"
+                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" 
+                                />
                             </div>
 
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Initial Password</label>
-                                <input required name="password" type="password" className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" />
+                                <input 
+                                    required 
+                                    type="password" 
+                                    value={newTeacher.password}
+                                    onChange={(e) => setNewTeacher({...newTeacher, password: e.target.value})}
+                                    placeholder="••••••"
+                                    minLength="6"
+                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors" 
+                                />
+                                <p className="text-[8px] text-slate-500 ml-1">Minimum 6 characters</p>
                             </div>
 
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Class</label>
                                 <select 
-                                    name="className"
+                                    value={newTeacher.className}
+                                    onChange={(e) => setNewTeacher({...newTeacher, className: e.target.value})}
                                     className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
                                 >
                                     <option value="">No Class Assigned</option>
@@ -468,7 +537,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
                     {/* Registration Modal */}
                     {showCreateStudent && ( // Changed from showAddModal
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
                             <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-brand-purple/10 rounded-full -mr-16 -mt-16" aria-hidden="true"></div>
                                 
@@ -577,7 +646,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     )}
                     {/* Manage User Modal */}
                     {showManageModal && selectedUser && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
                             <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-brand-purple/10 rounded-full -mr-16 -mt-16" aria-hidden="true"></div>
                                 

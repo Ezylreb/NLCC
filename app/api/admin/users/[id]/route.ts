@@ -67,10 +67,14 @@ export async function PATCH(
     );
 
     // Log activity
-    await query(
-      "INSERT INTO activity_logs (action, type, details) VALUES ($1, $2, $3)",
-      ['User Updated', 'system', `Admin updated user: ${firstName} ${lastName} (ID: ${id})`]
-    );
+    try {
+      await query(
+        "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+        [id, 'User Updated', 'system', `Admin updated user: ${firstName} ${lastName} (ID: ${id})`]
+      );
+    } catch (err) {
+      console.warn('Could not log activity:', err);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -96,10 +100,14 @@ export async function DELETE(
     await query('DELETE FROM users WHERE id = $1', [id]);
 
     // Log activity
-    await query(
-      "INSERT INTO activity_logs (action, type, details) VALUES ($1, $2, $3)",
-      ['User Deleted', 'system', `Admin deleted user: ${user.first_name} ${user.last_name} (ID: ${id})`]
-    );
+    try {
+      await query(
+        "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
+        [id, 'User Deleted', 'system', `Admin deleted user: ${user.first_name} ${user.last_name} (ID: ${id})`]
+      );
+    } catch (err) {
+      console.warn('Could not log activity:', err);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { TeacherBahagi } from './TeacherBahagi';
+import { TeacherLessonEditor } from './TeacherLessonEditor';
+import { BahagiCard } from './BahagiCard';
 
 interface TeacherDashboardProps {
     onLogout: () => void;
@@ -9,7 +12,7 @@ interface TeacherDashboardProps {
 }
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, user }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'students' | 'content' | 'assignments'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'students' | 'content' | 'assignments' | 'bahagis'>('overview');
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState<any[]>([]);
     const [allStudentExplorersList, setAllStudentExplorersList] = useState<any[]>([]);
@@ -47,6 +50,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
     const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
     const [isStatsLoading, setIsStatsLoading] = useState(false);
     const [statAssignmentTitle, setStatAssignmentTitle] = useState('');
+
+    // Bahagi State
+    const [bahagis, setBahagis] = useState<any[]>([]);
+    const [showBahagiModal, setShowBahagiModal] = useState(false);
+    const [showLessonEditor, setShowLessonEditor] = useState(false);
+    const [selectedBahagiForEdit, setSelectedBahagiForEdit] = useState<any>(null);
+    const [isBahagiLoading, setIsBahagiLoading] = useState(false);
 
     const [isSaving, setIsSaving] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -247,6 +257,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                 const linksData = await linksRes.json();
                 setLessonLinks(linksData.links || []);
             }
+
+            // 5. Fetch Bahagis (New Course System)
+            const bahagisRes = await fetch(`/api/teacher/bahagi?v=${Date.now()}`);
+            if (bahagisRes.ok) {
+                const bahagisData = await bahagisRes.json();
+                setBahagis(bahagisData.bahagis || []);
+            }
         } catch (error) {
             console.error('Failed to fetch teacher dashboard data:', error);
         } finally {
@@ -262,6 +279,63 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
     useEffect(() => {
         if (user?.id) fetchData();
     }, [activeTab]);
+
+    // Bahagi Handlers
+    const handleCreateBahagi = async (data: any) => {
+        try {
+            const res = await fetch('/api/teacher/bahagi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...data, teacherId: user?.id })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to create bahagi');
+            
+            setBahagis([result.bahagi, ...bahagis]);
+            setShowBahagiModal(false);
+            alert('✅ Bahagi created successfully!');
+        } catch (err: any) {
+            alert(`🛑 Error: ${err.message}`);
+        }
+    };
+
+    const handleDeleteBahagi = async (bahagiId: string) => {
+        if (!confirm('🛑 Are you sure? This will delete the entire Bahagi and all associated lessons and assessments!')) return;
+        try {
+            const res = await fetch(`/api/teacher/bahagi/${bahagiId}`, { method: 'DELETE' });
+            if (res.ok) {
+                setBahagis(bahagis.filter(b => b.id !== bahagiId));
+                alert('✅ Bahagi deleted successfully!');
+            } else {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to delete');
+            }
+        } catch (err: any) {
+            alert(`🛑 Error: ${err.message}`);
+        }
+    };
+
+    const handleEditBahagi = (bahagi: any) => {
+        setSelectedBahagiForEdit(bahagi);
+        setShowLessonEditor(true);
+    };
+
+    const handleBahagiSave = async (bahagiId: string, status: 'open' | 'archived') => {
+        try {
+            const res = await fetch(`/api/teacher/bahagi/${bahagiId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_open: status === 'open' })
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to update');
+            
+            setBahagis(bahagis.map(b => b.id === bahagiId ? result.bahagi : b));
+            alert(`✅ Bahagi ${status === 'open' ? 'opened' : 'archived'}!`);
+        } catch (err: any) {
+            alert(`🛑 Error: ${err.message}`);
+        }
+    };
 
     const handlePostLink = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -302,16 +376,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
             {/* Sidebar Overlay for Mobile */}
             {isSidebarOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] md:hidden"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-90 md:hidden"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
 
             {/* Sidebar */}
-            <aside className={`w-64 bg-[#020617] border-r border-slate-800 flex flex-col fixed md:relative inset-y-0 left-0 z-[100] transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:flex'}`}>
+            <aside className={`w-64 bg-[#020617] border-r border-slate-800 flex flex-col fixed md:relative inset-y-0 left-0 z-100 transition-transform duration-300 md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:flex'}`}>
                 <div className="p-6 border-b border-slate-800/50 flex items-center gap-3">
                     <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-brand-purple to-brand-sky rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                        <div className="absolute -inset-1 bg-linear-to-r from-brand-purple to-brand-sky rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
                         <Image src="/logo/logo.png" alt="NLLC Logo" width={36} height={36} className="rounded-xl relative z-10" />
                     </div>
                     <div>
@@ -323,6 +397,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                 <nav className="flex-1 p-4 flex flex-col gap-1.5 mt-4">
                     {[
                         { id: 'overview', label: 'Overview', icon: '📊' },
+                        { id: 'bahagis', label: 'Course Sections', icon: '🎯' },
                         { id: 'content', label: 'My Lessons', icon: '📚' },
                         { id: 'assignments', label: 'Assignments', icon: '📝' },
                         { id: 'classes', label: 'My Classes', icon: '🏫' },
@@ -437,7 +512,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
 
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                 {/* Recent Progress Chart Placeholder */}
-                                <div className="lg:col-span-8 bg-slate-900/50 border border-slate-800/50 rounded-[2rem] p-8">
+                                <div className="lg:col-span-8 bg-slate-900/50 border border-slate-800/50 rounded-4xl p-8">
                                     <div className="flex justify-between items-center mb-8">
                                         <h3 className="text-lg font-black text-white">Class Progress Trends</h3>
                                         <div className="flex gap-2">
@@ -480,7 +555,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                                         <div key={i} className="flex flex-col items-center gap-1 flex-1 group">
                                                             <span className="text-[9px] font-black text-brand-purple opacity-0 group-hover:opacity-100 transition-opacity">{item.value}%</span>
                                                             <div
-                                                                className="w-full rounded-t-lg bg-gradient-to-t from-brand-purple/40 to-brand-purple transition-all duration-700 relative"
+                                                                className="w-full rounded-t-lg bg-linear-to-t from-brand-purple/40 to-brand-purple transition-all duration-700 relative"
                                                                 style={{ height: `${(item.value / maxVal) * 150}px`, minHeight: item.value > 0 ? '4px' : '0' }}
                                                             >
                                                                 <div className="absolute inset-x-0 top-0 h-1 bg-brand-purple/60 rounded-t-lg" />
@@ -501,7 +576,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                 </div>
 
                                 {/* Active Students List */}
-                                <div className="lg:col-span-4 bg-slate-900/50 border border-slate-800/50 rounded-[2rem] p-8">
+                                <div className="lg:col-span-4 bg-slate-900/50 border border-slate-800/50 rounded-4xl p-8">
                                     <h3 className="text-lg font-black text-white mb-6">Student Activity</h3>
                                     <div className="flex flex-col gap-5">
                                         {allStudentExplorersList.map(student => (
@@ -516,7 +591,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                                     <p className="text-xs font-black text-white truncate group-hover:text-brand-purple transition-colors">{student.name}</p>
                                                     <div className="flex items-center gap-2 mt-0.5">
                                                         <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-gradient-to-r from-brand-purple to-brand-sky rounded-full transition-all duration-500" style={{ width: `${student.progress}%` }}></div>
+                                                            <div className="h-full bg-linear-to-r from-brand-purple to-brand-sky rounded-full transition-all duration-500" style={{ width: `${student.progress}%` }}></div>
                                                         </div>
                                                         <span className="text-[9px] font-black text-slate-500">{student.progress}%</span>
                                                     </div>
@@ -531,6 +606,50 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                         View All Students
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'bahagis' && (
+                        <div className="flex flex-col gap-8 animate-in fade-in duration-700">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-black text-white">Course Sections (Bahagi)</h3>
+                                    <p className="text-slate-500 font-bold text-xs mt-1">Organize content into structured learning sections</p>
+                                </div>
+                                <button 
+                                    onClick={() => setShowBahagiModal(true)}
+                                    className="bg-brand-purple hover:bg-brand-purple/80 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-purple-500/20"
+                                >
+                                    + Create New Bahagi
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {bahagis.length > 0 ? bahagis.map(bahagi => (
+                                    <BahagiCard 
+                                        key={bahagi.id}
+                                        id={bahagi.id}
+                                        title={bahagi.title}
+                                        yunit={bahagi.yunit}
+                                        image={bahagi.image_url || 'https://via.placeholder.com/400x200?text=Course'}
+                                        description={bahagi.description}
+                                        isOpen={bahagi.is_open}
+                                        lessonCount={bahagi.lessonCount || 0}
+                                        assessmentCount={bahagi.assessmentCount || 0}
+                                        totalXP={bahagi.totalXP || 0}
+                                        onEdit={() => handleEditBahagi(bahagi)}
+                                        onDelete={() => handleDeleteBahagi(bahagi.id)}
+                                        onToggleStatus={(newStatus) => handleBahagiSave(bahagi.id, newStatus ? 'open' : 'archived')}
+                                        onOpenEditor={() => handleEditBahagi(bahagi)}
+                                    />
+                                )) : (
+                                    <div className="col-span-full py-20 bg-slate-900/30 rounded-[3rem] border-4 border-dashed border-slate-800 flex flex-col items-center justify-center text-center">
+                                        <span className="text-5xl mb-4">📭</span>
+                                        <h4 className="text-lg font-black text-white">No Course Sections Yet</h4>
+                                        <p className="text-slate-500 text-xs font-bold max-w-xs mt-2">Create your first Bahagi to start organizing your lessons and assessments!</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -555,7 +674,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {lessons.length > 0 ? lessons.map(lesson => (
-                                    <div key={lesson.id} className="bg-slate-900/50 border border-slate-800/50 rounded-[2rem] p-6 flex flex-col relative group hover:border-brand-purple/30 transition-all">
+                                    <div key={lesson.id} className="bg-slate-900/50 border border-slate-800/50 rounded-4xl p-6 flex flex-col relative group hover:border-brand-purple/30 transition-all">
                                         <div className="flex justify-between items-start mb-4">
                                             <span className="bg-slate-950 border border-slate-800 text-slate-400 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
                                                 {lesson.category}
@@ -596,7 +715,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
 
                             {/* Create Lesson Modal */}
                             {showCreateLesson && (
-                                <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                                <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-100 flex items-center justify-center p-4">
                                     <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl max-h-[90vh] overflow-auto rounded-[2.5rem] p-10 shadow-2xl relative custom-scrollbar">
                                         <button onClick={() => setShowCreateLesson(false)} className="absolute top-8 right-8 text-2xl text-slate-500 hover:text-white transition-colors">✕</button>
                                         
@@ -765,7 +884,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                                     </button>
                                                 </div>
 
-                                                <div className="flex flex-col gap-4 max-h-[400px] overflow-auto pr-2 custom-scrollbar">
+                                                <div className="flex flex-col gap-4 max-h-96 overflow-auto pr-2 custom-scrollbar">
                                                     {newItems.map((item, idx) => (
                                                         <div key={idx} className="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 flex flex-col gap-4 relative group">
                                                             <button 
@@ -885,7 +1004,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-right-4 duration-700">
                              {classes.map((cls, i) => (
-                                 <button key={i} onClick={() => setActiveTab('students')} className={`bg-slate-900/50 border-t-4 ${cls.color} border-x border-b border-slate-800/50 rounded-[2rem] p-8 flex flex-col group hover:bg-slate-900/80 transition-all text-left block w-full`}>
+                                 <button key={i} onClick={() => setActiveTab('students')} className={`bg-slate-900/50 border-t-4 ${cls.color} border-x border-b border-slate-800/50 rounded-4xl p-8 flex flex-col group hover:bg-slate-900/80 transition-all text-left block w-full`}>
                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 w-full block">Classroom ID: {i+1024}</span>
                                      <h3 className="text-xl font-black text-white mb-6 group-hover:text-brand-purple transition-colors w-full">{cls.name}</h3>
                                      
@@ -915,7 +1034,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                     )}
 
                     {activeTab === 'students' && (
-                         <div className="bg-slate-900/50 border border-slate-800/50 rounded-[2rem] overflow-hidden animate-in fade-in zoom-in-95 duration-700">
+                         <div className="bg-slate-900/50 border border-slate-800/50 rounded-4xl overflow-hidden animate-in fade-in zoom-in-95 duration-700">
                              <div className="p-8 border-b border-slate-800/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/80">
                                  <div>
                                      <h3 className="text-lg font-black text-white">Class List</h3>
@@ -1016,7 +1135,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                                                  <span className="text-brand-sky">{student.progress}%</span>
                                                              </div>
                                                              <div className="h-2 bg-slate-800 rounded-full overflow-hidden w-full">
-                                                                 <div className="h-full bg-gradient-to-r from-brand-sky to-brand-purple rounded-full" style={{ width: `${student.progress}%` }}></div>
+                                                                 <div className="h-full bg-linear-to-r from-brand-sky to-brand-purple rounded-full" style={{ width: `${student.progress}%` }}></div>
                                                              </div>
                                                          </div>
                                                      </td>
@@ -1052,7 +1171,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                      
                     {activeTab === 'assignments' && (
                         <div className="flex flex-col gap-8 animate-in fade-in duration-700">
-                            <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-[2rem] border border-slate-800/50">
+                            <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-4xl border border-slate-800/50">
                                 <div>
                                     <h3 className="text-xl font-black text-white">Assignment Management</h3>
                                     <p className="text-slate-500 font-bold text-xs mt-1">Manage and draft upcoming class challenges</p>
@@ -1134,7 +1253,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                      </div>
                                 )}
                             </div>
-                            <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-[2rem] border border-slate-800/50 mt-10">
+                            <div className="flex justify-between items-center bg-slate-900/50 p-6 rounded-4xl border border-slate-800/50 mt-10">
                                 <div>
                                     <h3 className="text-xl font-black text-white">Lesson Links & Resources</h3>
                                     <p className="text-slate-500 font-bold text-xs mt-1">Post external resources or lesson materials</p>
@@ -1181,7 +1300,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
 
                             {/* Post Link Modal */}
                             {showPostLink && (
-                                <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+                                <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-200 flex items-center justify-center p-4">
                                     <div className="bg-slate-900 border border-slate-800 w-full max-w-xl rounded-[2.5rem] p-10 shadow-2xl relative">
                                         <button onClick={() => setShowPostLink(false)} className="absolute top-8 right-8 text-2xl text-slate-500 hover:text-white transition-colors">✕</button>
                                         <h2 className="text-2xl font-black text-white tracking-tight mb-2">Post Resource Link</h2>
@@ -1408,12 +1527,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                 )}
             </main>
 
+            {/* Create Bahagi Modal */}
+            {showBahagiModal && (
+                <TeacherBahagi 
+                    isOpen={showBahagiModal}
+                    onClose={() => setShowBahagiModal(false)}
+                    onCreate={handleCreateBahagi}
+                    isLoading={isBahagiLoading}
+                />
+            )}
+
+            {/* Lesson Editor Modal */}
+            {showLessonEditor && selectedBahagiForEdit && (
+                <TeacherLessonEditor 
+                    isOpen={showLessonEditor}
+                    onClose={() => {
+                        setShowLessonEditor(false);
+                        setSelectedBahagiForEdit(null);
+                    }}
+                    bahagiId={selectedBahagiForEdit.id}
+                    bahagiTitle={selectedBahagiForEdit.title}
+                    onSave={async (updatedData) => {
+                        // updatedData contains { lessons, assessments, rewards }
+                        // We already have selectedBahagiForEdit with the id
+                        const updatedBahagi = {
+                            ...selectedBahagiForEdit,
+                            ...updatedData
+                        };
+                        setBahagis(bahagis.map(b => b.id === selectedBahagiForEdit.id ? updatedBahagi : b));
+                        setShowLessonEditor(false);
+                        setSelectedBahagiForEdit(null);
+                    }}
+                    isLoading={isBahagiLoading}
+                />
+            )}
+
             {/* Assignment Completions Modal */}
             {isStatsModalOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10">
+                <div className="fixed inset-0 z-200 flex items-center justify-center p-4 md:p-10">
                     <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setIsStatsModalOpen(false)} />
                     <div className="relative bg-[#0F172A] border border-slate-800 w-full max-w-2xl rounded-[3rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-slate-900/50 to-brand-purple/5">
+                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-linear-to-r from-slate-900/50 to-brand-purple/5">
                             <div>
                                 <h3 className="text-3xl font-black text-white tracking-tight">{statAssignmentTitle}</h3>
                                 <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
@@ -1440,7 +1594,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                         <span>Completion Status</span>
                                     </div>
                                     {selectedAssignmentStats.map((completion) => (
-                                        <div key={completion.id} className="flex items-center justify-between p-6 bg-white/5 border border-white/[0.03] rounded-[2rem] hover:bg-white/[0.08] hover:border-brand-purple/30 transition-all group">
+                                        <div key={completion.id} className="flex items-center justify-between p-6 bg-white/5 border border-white/3 rounded-4xl hover:bg-white/8 hover:border-brand-purple/30 transition-all group">
                                             <div className="flex items-center gap-5">
                                                 <div className="w-14 h-14 rounded-2xl bg-slate-800 flex items-center justify-center text-xl font-black text-brand-purple shadow-xl border border-white/5">
                                                     {completion.name[0]}
@@ -1477,7 +1631,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                         </div>
 
                         <div className="p-8 bg-slate-900/50 border-t border-white/5 text-center backdrop-blur-sm">
-                            <button onClick={() => setIsStatsModalOpen(false)} className="px-10 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-[1.5rem] font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95">Back to Management</button>
+                            <button onClick={() => setIsStatsModalOpen(false)} className="px-10 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95">Back to Management</button>
                         </div>
                     </div>
                 </div>
@@ -1485,7 +1639,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
 
             {/* Logout Confirmation Modal */}
             {showLogoutModal && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-200 flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden text-center">
                         <div className="w-20 h-20 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center text-4xl mb-6 mx-auto shadow-inner shadow-red-500/20">
                             🚪

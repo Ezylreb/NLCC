@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence, useScroll, useTransform, useSpring, useMotionValue } from 'framer-motion';
-import { Auth3DBackground } from './Auth3DBackground';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface AuthPageProps {
     onAuthSuccess: (user: any) => void;
@@ -19,21 +18,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
     const [name, setName] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-
-    // Mouse Parallax Values
-    const mouseX = useMotionValue(0);
-    const mouseY = useMotionValue(0);
-
-    const tiltX = useTransform(mouseY, [-500, 500], [5, -5]);
-    const tiltY = useTransform(mouseX, [-500, 500], [-5, 5]);
-    
-    const handleMouseMove = (e: React.MouseEvent) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        mouseX.set(e.clientX - centerX);
-        mouseY.set(e.clientY - centerY);
-    };
 
     React.useEffect(() => {
         if (mode === 'signup' && !isSignupEnabled) {
@@ -82,12 +66,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
     };
 
     return (
-        <div 
-            onMouseMove={handleMouseMove}
-            className="min-h-screen relative flex items-center justify-center p-4 md:p-12 overflow-hidden bg-slate-950 selection:bg-brand-purple"
+        <div className="min-h-screen relative flex items-center justify-center p-4 md:p-12 overflow-hidden bg-slate-950 selection:bg-brand-purple"
         >
-            {/* 3D Three.js Cursor Background */}
-            <Auth3DBackground />
 
             <motion.button
                 onClick={onBack}
@@ -98,45 +78,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
             </motion.button>
 
             <motion.main 
-                style={{ rotateX: tiltX, rotateY: tiltY, perspective: 1000 }}
-                initial={{ opacity: 0, scale: 0.8, y: 50 }}
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className="w-full max-w-xl z-20"
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="w-full max-w-md z-20"
             >
-                <div className="bg-white/10 backdrop-blur-3xl rounded-[2rem] md:rounded-[4rem] p-5 md:p-16 shadow-[0_50px_100px_rgb(0,0,0,0.5)] border border-white/20 flex flex-col md:flex-row gap-6 md:gap-12 relative overflow-hidden group">
+                <div className="bg-white/10 backdrop-blur-3xl rounded-3xl p-8 md:p-12 shadow-[0_50px_100px_rgb(0,0,0,0.3)] border border-white/20 relative overflow-hidden group">
                     {/* Glowing Decorative Line */}
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-purple/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
                     
-                    {/* Left Brand Side */}
-                    <div className="hidden md:flex flex-col justify-between w-1/4 py-4 border-r border-white/10 pr-8" aria-hidden="true">
-                        <div className="w-16 h-16 bg-white/5 rounded-2xl backdrop-blur-md flex items-center justify-center p-3 shadow-inner border border-white/5">
-                            <Image src="/logo/logo.png" alt="NLLC Logo" width={64} height={64} className="rounded-xl" />
-                        </div>
-                        <div className="space-y-4">
-                            <motion.div animate={{ width: ['20%', '80%', '20%'] }} transition={{ duration: 5, repeat: Infinity }} className="h-0.5 bg-brand-sky/30 rounded-full" />
-                            <div className="w-full h-px bg-white/5" />
-                        </div>
-                        <div className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] leading-relaxed">
-                            NLLC<br/>Secure<br/>Login
-                        </div>
-                    </div>
-
-                    <div className="flex-1">
-                        <header className="mb-5 md:mb-10 text-left">
-                            <div className="text-brand-purple text-[8px] md:text-[10px] font-black tracking-[0.3em] md:tracking-[0.5em] uppercase mb-1 md:mb-2 opacity-80">Security Protocol</div>
-                            <h1 className="text-2xl md:text-5xl font-black text-white tracking-widest uppercase leading-tight md:leading-none mb-2 md:mb-4">
+                    <div>
+                        <header className="mb-8 text-center">
+                            <div className="text-brand-purple text-[10px] font-black tracking-[0.3em] uppercase mb-2 opacity-80">Welcome</div>
+                            <h1 className="text-3xl md:text-4xl font-black text-white tracking-wide uppercase leading-tight mb-3">
                                 {mode === 'admin' ? 'Admin Login' : mode === 'teacher' ? 'Teacher Login' : mode === 'login' ? 'Welcome Back' : 'Create Account'}
                             </h1>
-                            <p className="text-xs md:text-base text-white/60 font-bold tracking-tight">
+                            <p className="text-sm md:text-base text-white/60 font-semibold">
                                 {mode === 'login' ? "Log in to join the adventure." : "Enter your details to start."}
                             </p>
                         </header>
 
-                        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                             {error && (
-                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
-                                    <p className="text-red-400 font-bold text-xs text-center">{error}</p>
+                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                    <p className="text-red-400 font-bold text-sm text-center">{error}</p>
                                 </motion.div>
                             )}
                             
@@ -145,10 +110,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
                                     <input
                                         id="student-name"
                                         type="text"
-                                        placeholder="Full Name (e.g. Juan dela Cruz)"
+                                        placeholder="Full Name"
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
-                                        className="w-full px-4 py-3 md:px-6 md:py-5 rounded-xl md:rounded-[2rem] bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-bold text-white transition-all text-sm md:text-lg placeholder:text-white/20"
+                                        className="w-full px-4 py-3 md:px-5 md:py-4 rounded-lg bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-semibold text-white transition-all text-sm md:text-base placeholder:text-white/40"
                                         required
                                     />
                                 </div>
@@ -158,10 +123,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
                                 <input
                                     id="identifier"
                                     type="text"
-                                    placeholder={mode === 'admin' || mode === 'teacher' ? "staff@nllc.edu" : "Email or 12-digit LRN"}
+                                    placeholder={mode === 'admin' || mode === 'teacher' ? "Email" : "Email"}
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full px-4 py-3 md:px-6 md:py-5 rounded-xl md:rounded-[2rem] bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-bold text-white transition-all text-sm md:text-lg shadow-inner placeholder:text-white/20"
+                                    className="w-full px-4 py-3 md:px-5 md:py-4 rounded-lg bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-semibold text-white transition-all text-sm md:text-base placeholder:text-white/40"
                                     required
                                 />
                             </div>
@@ -170,10 +135,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
                                 <input
                                     id="password"
                                     type="password"
-                                    placeholder="••••••••••••"
+                                    placeholder="Password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 md:px-6 md:py-5 rounded-xl md:rounded-[2rem] bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-bold text-white transition-all text-sm md:text-lg shadow-inner placeholder:text-white/20"
+                                    className="w-full px-4 py-3 md:px-5 md:py-4 rounded-lg bg-white/5 border border-white/10 focus:border-brand-purple focus:bg-white/10 outline-none font-semibold text-white transition-all text-sm md:text-base placeholder:text-white/40"
                                     required
                                 />
                             </div>
@@ -182,44 +147,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess, onBack, initi
                                 type="submit"
                                 disabled={isLoading}
                                 className={`
-                                    relative mt-2 md:mt-4 py-4 md:py-6 rounded-xl md:rounded-[2rem] font-black text-[9px] md:text-xs uppercase tracking-[0.3em] md:tracking-[0.4em] transition-all overflow-hidden
-                                    ${mode === 'admin' ? 'bg-slate-500 text-white' : 'bg-brand-purple text-white shadow-glow-purple'}
-                                    hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-50
+                                    relative mt-4 py-3 md:py-4 rounded-lg font-bold text-xs uppercase tracking-widest transition-all overflow-hidden
+                                    ${mode === 'admin' ? 'bg-slate-500 hover:bg-slate-600 text-white' : 'bg-brand-purple hover:bg-brand-purple/90 text-white shadow-lg shadow-brand-purple/30'}
+                                    active:scale-95 disabled:scale-100 disabled:opacity-50
                                 `}
                             >
                                 <div className="relative z-10 flex items-center justify-center gap-3">
                                     {isLoading && <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-                                    {isLoading ? 'Verifying...' : (mode === 'admin' ? 'Override Root' : mode === 'teacher' ? 'Instructor Portal' : mode === 'login' ? 'Authorize' : 'Initialize')}
+                                    {isLoading ? 'Verifying...' : (mode === 'admin' ? 'Admin Login' : mode === 'teacher' ? 'Teacher Login' : mode === 'login' ? 'Login' : 'Create Account')}
                                 </div>
                             </button>
                         </form>
 
-                        <div className="mt-12 pt-10 border-t border-white/5 flex flex-wrap justify-center gap-x-10 gap-y-4">
+                        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap justify-center gap-6">
+                            {mode !== 'admin' && mode !== 'teacher' && (
+                                <>
+                                    {mode === 'login' && isSignupEnabled && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => { setMode('signup'); setError(null); }} 
+                                            className="text-xs font-bold uppercase tracking-widest text-white/50 hover:text-brand-purple transition-all">
+                                            Create Account →
+                                        </button>
+                                    )}
+                                    {mode === 'signup' && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => { setMode('login'); setError(null); }} 
+                                            className="text-xs font-bold uppercase tracking-widest text-white/50 hover:text-brand-purple transition-all">
+                                            ← Back to Login
+                                        </button>
+                                    )}
+                                </>
+                            )}
                             {mode !== 'admin' && (
-                                <button type="button" onClick={() => setMode('admin')} className="text-[9px] font-black uppercase tracking-[0.5em] text-white/30 hover:text-brand-purple transition-all">
-                                    Admin Access
+                                <button 
+                                    type="button" 
+                                    onClick={() => { setMode('admin'); setError(null); }} 
+                                    className="text-xs font-bold uppercase tracking-widest text-white/50 hover:text-slate-400 transition-all">
+                                    Admin →
                                 </button>
                             )}
                             {mode !== 'teacher' && (
-                                <button type="button" onClick={() => setMode('teacher')} className="text-[9px] font-black uppercase tracking-[0.5em] text-white/30 hover:text-brand-purple transition-all">
-                                    Instructor Portal
-                                </button>
-                            )}
-                            {(mode === 'admin' || mode === 'teacher' || mode === 'signup') && (
-                                <button type="button" onClick={() => setMode('login')} className="w-full text-xs font-black text-brand-purple uppercase tracking-[0.2em] hover:scale-105 transition-transform">
-                                    Return to Authentication
+                                <button 
+                                    type="button" 
+                                    onClick={() => { setMode('teacher'); setError(null); }} 
+                                    className="text-xs font-bold uppercase tracking-widest text-white/50 hover:text-slate-300 transition-all">
+                                    Teacher →
                                 </button>
                             )}
                         </div>
                     </div>
                 </div>
-
             </motion.main>
-
-            <style jsx>{`
-                .shadow-glow-purple { box-shadow: 0 0 30px rgba(139,92,246,0.3); }
-                .drop-shadow-glow-sky { filter: drop-shadow(0 0 20px rgba(56,189,248,0.5)); }
-            `}</style>
         </div>
     );
 };
