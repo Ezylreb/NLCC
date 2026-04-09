@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { TeacherBahagi } from './TeacherBahagi';
 import { TeacherLessonEditor } from './TeacherLessonEditor';
 import { BahagiCard } from './BahagiCard';
+import { ManageClassStudents } from './TeacherComponents/ManageClassStudents';
 
 interface TeacherDashboardProps {
     onLogout: () => void;
@@ -12,11 +13,12 @@ interface TeacherDashboardProps {
 }
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, user }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'students' | 'content' | 'assignments' | 'bahagis'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'students' | 'content' | 'assignments' | 'bahagis' | 'manage-class'>('overview');
     const [isLoading, setIsLoading] = useState(true);
     const [stats, setStats] = useState<any[]>([]);
     const [allStudentExplorersList, setAllStudentExplorersList] = useState<any[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
+    const [selectedClass, setSelectedClass] = useState<any | null>(null);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [lessons, setLessons] = useState<any[]>([]);
     const [weeklyChart, setWeeklyChart] = useState<{label:string,value:number}[]>([]);
@@ -1004,7 +1006,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                     {activeTab === 'classes' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-right-4 duration-700">
                              {classes.map((cls, i) => (
-                                 <button key={i} onClick={() => setActiveTab('students')} className={`bg-slate-900/50 border-t-4 ${cls.color} border-x border-b border-slate-800/50 rounded-4xl p-8 flex flex-col group hover:bg-slate-900/80 transition-all text-left block w-full`}>
+                                 <div key={i} className={`bg-slate-900/50 border-t-4 ${cls.color} border-x border-b border-slate-800/50 rounded-4xl p-8 flex flex-col group hover:bg-slate-900/80 transition-all text-left block w-full`}>
                                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 w-full block">Classroom ID: {i+1024}</span>
                                      <h3 className="text-xl font-black text-white mb-6 group-hover:text-brand-purple transition-colors w-full">{cls.name}</h3>
                                      
@@ -1027,8 +1029,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                          <div className="h-2 bg-slate-800 rounded-full overflow-hidden w-full relative">
                                              <div className="absolute top-0 left-0 h-full bg-brand-purple rounded-full" style={{ width: `${cls.progress}%` }}></div>
                                          </div>
+                                         <button 
+                                             onClick={() => {
+                                                 setSelectedClass(cls);
+                                                 setActiveTab('manage-class');
+                                             }}
+                                             className="w-full mt-4 bg-brand-sky hover:bg-brand-sky/80 text-white font-bold py-2 px-4 rounded-lg text-xs uppercase tracking-widest transition-colors"
+                                         >
+                                             👥 Manage Students
+                                         </button>
                                      </div>
-                                 </button>
+                                 </div>
                              ))}
                         </div>
                     )}
@@ -1167,6 +1178,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ onLogout, us
                                  </table>
                              </div>
                          </div>
+                    )}
+
+                    {activeTab === 'manage-class' && selectedClass && (
+                        <div className="animate-in fade-in duration-700">
+                            <button 
+                                onClick={() => setActiveTab('classes')}
+                                className="mb-6 text-brand-sky hover:text-brand-sky/80 flex items-center gap-2 font-bold text-sm transition-colors"
+                            >
+                                ← Back to Classes
+                            </button>
+                            <ManageClassStudents
+                                classId={selectedClass.id}
+                                className={selectedClass.name}
+                                teacherId={user?.id || ''}
+                            />
+                        </div>
                     )}
                      
                     {activeTab === 'assignments' && (

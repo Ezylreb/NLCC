@@ -7,6 +7,7 @@ import { CreateAssessmentForm } from './CreateAssessmentForm';
 import { EditBahagiForm } from './EditBahagiForm';
 import { EditYunitForm } from './EditYunitForm';
 import { EditAssessmentForm } from './EditAssessmentForm';
+import { ManageClassStudents } from './ManageClassStudents';
 
 interface ClassDetailPageProps {
     classId: string;
@@ -67,6 +68,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const [isEditingBahagi, setIsEditingBahagi] = useState(false);
     const [isEditingYunit, setIsEditingYunit] = useState(false);
     const [isEditingAssessment, setIsEditingAssessment] = useState(false);
+    const [showStudentsView, setShowStudentsView] = useState(false);
 
     // Fetch yunits for a bahagi
     const fetchYunitsForBahagi = async (bahagiId: number) => {
@@ -170,24 +172,24 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentSubmit = async (data: any) => {
         setIsCreatingAssessment(true);
         try {
-            console.log('📤 Submitting assessment data:', data);
-            
             const res = await fetch('/api/teacher/manage-assessment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bahagiId: data.bahagiId,
+                    lessonId: data.lessonId,
                     title: data.title,
+                    type: data.type,
                     instructions: data.instructions,
-                    questions: data.questions
+                    questions: data.questions,
+                    options: data.options,
+                    correctAnswer: data.correctAnswer,
+                    points: data.points
                 })
             });
 
-            console.log('📨 API Response Status:', res.status);
-
             if (res.ok) {
                 const result = await res.json();
-                console.log('✅ Assessment created:', result);
                 alert('✅ Assessment created successfully!');
                 setShowAssessmentForm(false);
                 // Refresh assessments
@@ -289,20 +291,28 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentEditSubmit = async (data: any) => {
         setIsEditingAssessment(true);
         try {
-            const res = await fetch('/api/teacher/update-assessment', {
+            const res = await fetch('/api/teacher/manage-assessment', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
+                body: JSON.stringify({
+                    id: data.id,
+                    bahagiId: data.bahagiId,
+                    title: data.title,
+                    type: data.type,
+                    instructions: data.instructions,
+                    questions: data.questions
+                })
             });
 
             if (res.ok) {
+                const result = await res.json();
                 alert('✅ Assessment updated successfully!');
                 setShowEditAssessmentForm(false);
                 // Refresh assessments
-                fetchAssessmentsForBahagi(editingAssessment.bahagi_id);
+                fetchAssessmentsForBahagi(data.bahagiId);
             } else {
                 const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${error.error || 'Failed to update assessment'}`);
             }
         } catch (err) {
             console.error('Error updating assessment:', err);
@@ -406,21 +416,43 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
                 <button
-                    onClick={onCreateBahagi}
-                    className="bg-brand-purple hover:bg-brand-purple/80 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
+                    onClick={() => setShowStudentsView(!showStudentsView)}
+                    className={`${showStudentsView ? 'bg-brand-sky hover:bg-brand-sky/80' : 'bg-slate-800 hover:bg-slate-700'} text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border ${showStudentsView ? 'border-brand-sky/30' : 'border-slate-700'}`}
                 >
-                    <span>📚</span> Add Bahagi
+                    <span>👥</span> Manage Students
                 </button>
-                <button
-                    disabled
-                    className="bg-brand-sky/30 text-brand-sky px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 flex items-center gap-2"
-                    title="Coming soon"
-                >
-                    <span>⭐</span> Add Rewards
-                </button>
+                {!showStudentsView && (
+                    <>
+                        <button
+                            onClick={onCreateBahagi}
+                            className="bg-brand-purple hover:bg-brand-purple/80 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
+                        >
+                            <span>📚</span> Add Bahagi
+                        </button>
+                        <button
+                            disabled
+                            className="bg-brand-sky/30 text-brand-sky px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 flex items-center gap-2"
+                            title="Coming soon"
+                        >
+                            <span>⭐</span> Add Rewards
+                        </button>
+                    </>
+                )}
             </div>
 
+            {/* Students Management Section */}
+            {showStudentsView && (
+                <div className="animate-in fade-in duration-500">
+                    <ManageClassStudents
+                        classId={parseInt(classId)}
+                        className={className}
+                        teacherId={teacherId || ''}
+                    />
+                </div>
+            )}
+
             {/* Bahagi Section */}
+            {!showStudentsView && (
             <div className="flex flex-col gap-6">
                 <div className="flex items-center justify-between">
                     <h3 className="text-2xl font-black text-white">📚 Bahagi (Lesson Sections)</h3>
@@ -610,6 +642,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                     </div>
                 )}
             </div>
+            )}
 
             {/* Yunit Form Modal */}
             <CreateYunitForm

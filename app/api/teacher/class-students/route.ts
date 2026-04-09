@@ -1,0 +1,151 @@
+'use server';
+
+import { query } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+/**
+ * GET /api/teacher/class-students?classId=123&teacherId=uuid
+ * List all students enrolled in a class
+ * Only the class teacher can view this
+ * 
+ * POST /api/teacher/class-students
+ * Enroll a student in a class
+ * Body: { classId, studentId, teacherId }
+ */
+
+export async function GET(req: NextRequest) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const classId = searchParams.get('classId');
+        const teacherId = searchParams.get('teacherId');
+
+        if (!classId || !teacherId) {
+            return NextResponse.json(
+                { error: 'classId and teacherId parameters required' },
+                { status: 400 }
+            );
+        }
+
+        // Verify teacher owns this class
+        const classCheck = await query(
+            `SELECT id, teacher_id, title FROM classes WHERE id = $1 AND teacher_id = $2`,
+            [classId, teacherId]
+        );
+
+        if (!classCheck.rows.length) {
+            return NextResponse.json(
+                { error: 'Class not found or you do not own this class' },
+                { status: 403 }
+            );
+        }
+
+        // Get enrolled students
+        const students = await query(
+            `SELECT 
+                u.id,
+                u.first_name as "firstName",
+                u.last_name as "lastName",
+                u.email,
+                ce.enrolled_at as "enrolledAt",
+                COUNT(*) OVER () as "totalCount"
+            FROM users u
+            JOIN class_enrollments ce ON u.id = ce.student_id
+            WHERE ce.class_id = $1
+            ORDER BY u.first_name, u.last_name`,
+            [classId]
+        );
+
+        return NextResponse.json({
+            classId: parseInt(classId as string),
+            className: classCheck.rows[0].title,
+            totalEnrolled: students.rows.length,
+            students: students.rows
+        });
+    } catch (error) {
+        console.error('Get class students error:', error);
+        return NextResponse.json(
+            { error: 'Failed to fetch enrolled students' },
+            { status: 500 }
+        );
+    }
+}
+
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+        const { classId, studentId, teacherId } = body;
+
+        if (!classId || !studentId || !teacherId) {
+            return NextResponse.json(
+                { error: 'classId, studentId, and teacherId required' },
+                { status: 400 }
+            );
+        }
+
+        // Verify teacher owns this class
+        const classCheck = await query(
+            `SELECT id, teacher_id FROM classes WHERE id = $1 AND teacher_id = $2`,
+            [classId, teacherId]
+        );
+
+        if (!classCheck.rows.length) {
+            return NextResponse.json(
+                { error: 'You do not own this class' },
+                { status: 403 }
+            );
+        }
+
+        // Verify student exists and is actually a student
+        const studentCheck = await query(
+            `SELECT id, role FROM users WHERE id = $1`,
+            [studentId]
+        );
+
+        if (!studentCheck.rows.length || studentCheck.rows[0].role !== 'student') {
+            return NextResponse.json(
+                { error: 'Invalid student' },
+                { status: 400 }
+            );
+        }
+
+        // Check if already enrolled
+        const existingEnrollment = await query(
+            `SELECT id FROM class_enrollments WHERE class_id = $1 AND student_id = $2`,
+            [classId, studentId]
+        );
+
+        if (existingEnrollment.rows.length) {
+            return NextResponse.json(
+                { error: 'Student is already enrolled in this class' },
+                { status: 409 }
+            );
+        }
+
+        // Enroll the student
+        const result = await query(
+            `INSERT INTO class_enrollments (class_id, student_id, enrolled_by_teacher_id, enrolled_at)
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+             RETURNING id, enrolled_at`,
+            [classId, studentId, teacherId]
+        );
+
+        return NextResponse.json(
+            {
+                message: 'Student enrolled successfully',
+                enrollment: {
+                    id: result.rows[0].id,
+                    classId: parseInt(classId),
+                    studentId,
+                    enrolledAt: result.rows[0].enrolled_at
+                }
+            },
+            { status: 201 }
+        );
+    } catch (error) {
+        console.error('Enroll student error:', error);
+        return NextResponse.json(
+            { error: 'Failed to enroll student' },
+            { status: 500 }
+        );
+    }
+}

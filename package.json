@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:assessment": "node scripts/migrate-assessment-schema.mjs",
+    "check:assessment": "node check_assessment_table.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

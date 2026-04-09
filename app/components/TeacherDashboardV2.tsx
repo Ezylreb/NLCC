@@ -503,6 +503,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                         <ClassDetailPage
                             classId={selectedClassId}
                             className={selectedClassName}
+                            teacherId={user?.id}
                             onBack={handleBackFromClassDetail}
                             onCreateBahagi={handleCreateBahagi}
                             onRefreshBahagi={handleRefreshBahagi}
