@@ -25,7 +25,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         email: '',
         lrn: '',
         password: '',
-        className: '',
+        teacherId: '',
+        classId: '',
     });
     const [newTeacher, setNewTeacher] = useState({
         firstName: '',
@@ -48,6 +49,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<'all' | 'USER' | 'TEACHER' | 'ADMIN'>('all');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [teachers, setTeachers] = useState<any[]>([]);
+    const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
+    const [classes, setClasses] = useState<any[]>([]);
+    const [isLoadingClasses, setIsLoadingClasses] = useState(false);
 
     const handleCreateStudent = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -56,6 +61,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         if (!newStudent.firstName.trim() || !newStudent.lastName.trim() || !newStudent.email.trim() || !newStudent.password.trim() || !newStudent.lrn.trim()) {
             setError('All fields are required. Please fill out the form completely.');
+            setIsLoading(false);
+            return;
+        }
+
+        if (!newStudent.teacherId.trim()) {
+            setError('Teacher selection is required.');
+            setIsLoading(false);
+            return;
+        }
+
+        if (!newStudent.classId.trim()) {
+            setError('Class selection is required.');
             setIsLoading(false);
             return;
         }
@@ -76,14 +93,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             const response = await fetch('/api/admin/create-student', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newStudent),
+                body: JSON.stringify({
+                    firstName: newStudent.firstName,
+                    lastName: newStudent.lastName,
+                    email: newStudent.email,
+                    password: newStudent.password,
+                    lrn: newStudent.lrn,
+                    teacherId: newStudent.teacherId,
+                    classId: newStudent.classId,
+                }),
             });
 
             const data = await response.json();
 
             if (response.ok) {
                 setShowCreateStudent(false);
-                setNewStudent({ firstName: '', lastName: '', email: '', lrn: '', password: '', className: '' });
+                setNewStudent({ firstName: '', lastName: '', email: '', lrn: '', password: '', teacherId: '', classId: '' });
+                setClasses([]);
                 alert('✅ Student account created successfully!');
                 fetchDashboardData();
             } else {
@@ -155,6 +181,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             return;
         }
 
+        if (selectedUser?.role === 'USER') {
+            if (!selectedUser.teacher_id) {
+                setError('Teacher selection is required for students.');
+                setIsLoading(false);
+                return;
+            }
+            if (!selectedUser.class_id) {
+                setError('Class selection is required for students.');
+                setIsLoading(false);
+                return;
+            }
+        }
+
         try {
             const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
                 method: 'PATCH',
@@ -165,7 +204,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                     email: selectedUser.email,
                     lrn: selectedUser.lrn,
                     role: selectedUser.role,
-                    className: selectedUser.className
+                    className: selectedUser.class_name,
+                    teacher_id: selectedUser.teacher_id || null,
+                    class_id: selectedUser.class_id || null,
                 }),
             });
 
@@ -300,6 +341,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             console.error('Failed to fetch activities:', err);
         } finally {
             setIsActivitiesLoading(false);
+        }
+    };
+
+    const fetchTeachers = async () => {
+        setIsLoadingTeachers(true);
+        try {
+            const response = await fetch('/api/admin/teachers');
+            const data = await response.json();
+            if (response.ok) {
+                setTeachers(data.teachers);
+            } else {
+                console.error('Failed to fetch teachers:', data.error);
+            }
+        } catch (err) {
+            console.error('Failed to fetch teachers:', err);
+        } finally {
+            setIsLoadingTeachers(false);
+        }
+    };
+
+    const fetchClasses = async (teacherId: string) => {
+        if (!teacherId) {
+            setClasses([]);
+            return;
+        }
+        setIsLoadingClasses(true);
+        try {
+            const response = await fetch(`/api/admin/classes?teacherId=${teacherId}`);
+            const data = await response.json();
+            if (response.ok) {
+                setClasses(data.classes);
+            } else {
+                console.error('Failed to fetch classes:', data.error);
+                setClasses([]);
+            }
+        } catch (err) {
+            console.error('Failed to fetch classes:', err);
+            setClasses([]);
+        } finally {
+            setIsLoadingClasses(false);
         }
     };
 
@@ -520,7 +601,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                         {activeTab === 'users' && (
                             <div className="flex gap-4">
                             <button 
-                                onClick={() => setShowCreateStudent(true)}
+                                onClick={() => {
+                                    setShowCreateStudent(true);
+                                    fetchTeachers();
+                                }}
                                 className="bg-brand-purple text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg shadow-purple-500/20 hover:scale-105 transition-transform"
                             >
                                 + Create Student
@@ -612,15 +696,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                     </div>
 
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assign Class</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">👨‍🏫 Assign Teacher (Required)</label>
                                         <select 
-                                            value={newStudent.className}
-                                            onChange={(e) => setNewStudent({...newStudent, className: e.target.value})}
-                                            className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
+                                            value={newStudent.teacherId}
+                                            onChange={(e) => {
+                                                const teacherId = e.target.value;
+                                                setNewStudent({...newStudent, teacherId, classId: ''});
+                                                if (teacherId) {
+                                                    fetchClasses(teacherId);
+                                                } else {
+                                                    setClasses([]);
+                                                }
+                                            }}
+                                            disabled={isLoadingTeachers}
+                                            className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
                                         >
-                                            <option value="">No Class Assigned</option>
-                                            <option value="Kinder 1">Kinder 1</option>
-                                            <option value="Kinder 2">Kinder 2</option>
+                                            <option value="">Select a teacher...</option>
+                                            {teachers.length > 0 ? (
+                                                teachers.map((teacher) => (
+                                                    <option key={teacher.id} value={teacher.id}>
+                                                        {teacher.fullName}
+                                                    </option>
+                                                ))
+                                            ) : !isLoadingTeachers ? (
+                                                <option disabled>No teachers available</option>
+                                            ) : null}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">📚 Assign Class (Required)</label>
+                                        <select 
+                                            value={newStudent.classId}
+                                            onChange={(e) => setNewStudent({...newStudent, classId: e.target.value})}
+                                            disabled={!newStudent.teacherId || isLoadingClasses}
+                                            className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
+                                        >
+                                            <option value="">{isLoadingClasses ? 'Loading classes...' : newStudent.teacherId ? 'Select a class...' : 'Select a teacher first'}</option>
+                                            {classes.length > 0 ? (
+                                                classes.map((cls) => (
+                                                    <option key={cls.id} value={cls.id}>
+                                                        {cls.name}
+                                                    </option>
+                                                ))
+                                            ) : newStudent.teacherId && !isLoadingClasses ? (
+                                                <option disabled>No classes available</option>
+                                            ) : null}
                                         </select>
                                     </div>
 
@@ -710,18 +831,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                         />
                                     </div>
 
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Class</label>
-                                        <select 
-                                            value={selectedUser.className || ''}
-                                            onChange={(e) => setSelectedUser({...selectedUser, className: e.target.value})}
-                                            className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
-                                        >
-                                            <option value="">No Class Assigned</option>
-                                            <option value="Kinder 1">Kinder 1</option>
-                                            <option value="Kinder 2">Kinder 2</option>
-                                        </select>
-                                    </div>
+                                    {selectedUser.role !== 'TEACHER' && (
+                                        <>
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">👨‍🏫 Assigned Teacher (Required)</label>
+                                                <select 
+                                                    value={selectedUser.teacher_id || ''}
+                                                    onChange={(e) => {
+                                                        const teacherId = e.target.value;
+                                                        setSelectedUser({...selectedUser, teacher_id: teacherId || null, class_id: null});
+                                                        if (teacherId) {
+                                                            fetchClasses(teacherId);
+                                                        } else {
+                                                            setClasses([]);
+                                                        }
+                                                    }}
+                                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
+                                                >
+                                                    <option value="">Select a teacher...</option>
+                                                    {teachers.map((teacher) => (
+                                                        <option key={teacher.id} value={teacher.id}>
+                                                            {teacher.fullName}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">📚 Assigned Class (Required)</label>
+                                                <select 
+                                                    value={selectedUser.class_id || ''}
+                                                    onChange={(e) => setSelectedUser({...selectedUser, class_id: e.target.value || null})}
+                                                    disabled={!selectedUser.teacher_id || isLoadingClasses}
+                                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
+                                                >
+                                                    <option value="">{isLoadingClasses ? 'Loading classes...' : selectedUser.teacher_id ? 'Select a class...' : 'Select a teacher first'}</option>
+                                                    {classes.map((cls) => (
+                                                        <option key={cls.id} value={cls.id}>
+                                                            {cls.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    )}
 
                                     <div className="mt-4 flex flex-col gap-3">
                                         <div className="flex gap-3">
@@ -1008,6 +1161,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                                             onClick={() => {
                                                                 setSelectedUser(user);
                                                                 setShowManageModal(true);
+                                                                if (user.role !== 'TEACHER') {
+                                                                    fetchTeachers();
+                                                                    if (user.teacher_id) {
+                                                                        fetchClasses(user.teacher_id);
+                                                                    }
+                                                                }
                                                             }}
                                                             className="bg-slate-900 hover:bg-brand-purple hover:text-white border border-slate-800 hover:border-brand-purple text-slate-400 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
                                                         >

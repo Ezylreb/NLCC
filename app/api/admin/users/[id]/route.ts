@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const res = await query('SELECT id, first_name, last_name, email, lrn, role, class_name, created_at FROM users WHERE id = $1', [id]);
+    const res = await query('SELECT id, first_name, last_name, email, lrn, role, class_name, class_id, teacher_id, created_at FROM users WHERE id = $1', [id]);
     
     if (res.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -28,13 +28,13 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { firstName, lastName, email, lrn, role, className } = body;
+    const { firstName, lastName, email, lrn, role, className, teacher_id, class_id } = body;
 
     if (!firstName || !lastName || !email) {
       return NextResponse.json({ error: 'First name, last name, and email are required' }, { status: 400 });
     }
 
-    // Role-based LRN requirement
+    // Role-based requirements for students
     if (role === 'USER') {
       if (!lrn) {
         return NextResponse.json({ error: 'LRN is required for student accounts' }, { status: 400 });
@@ -44,6 +44,14 @@ export async function PATCH(
       }
       if (lrn.length < 12) {
         return NextResponse.json({ error: 'LRN must be exactly 12 digits' }, { status: 400 });
+      }
+      // Teacher is required for students
+      if (!teacher_id) {
+        return NextResponse.json({ error: 'Teacher is required for student accounts' }, { status: 400 });
+      }
+      // Class is required for students
+      if (!class_id) {
+        return NextResponse.json({ error: 'Class is required for student accounts' }, { status: 400 });
       }
     }
 
@@ -61,9 +69,39 @@ export async function PATCH(
       }
     }
 
+    // Validate teacher exists if provided
+    if (teacher_id) {
+      const teacherCheck = await query('SELECT id FROM users WHERE id = $1 AND role = $2', [teacher_id, 'TEACHER']);
+      if (teacherCheck.rows.length === 0) {
+        return NextResponse.json({ error: 'Selected teacher does not exist' }, { status: 400 });
+      }
+    }
+
+    // Validate class exists and belongs to teacher if provided
+    if (class_id && teacher_id) {
+      const classCheck = await query(
+        'SELECT id, teacher_id FROM classes WHERE id = $1 AND is_archived = FALSE',
+        [class_id]
+      );
+      if (classCheck.rows.length === 0) {
+        return NextResponse.json({ error: 'Selected class does not exist' }, { status: 400 });
+      }
+      const classData = classCheck.rows[0];
+      if (classData.teacher_id !== teacher_id) {
+        return NextResponse.json({ error: 'Selected class does not belong to the selected teacher' }, { status: 400 });
+      }
+    }
+
+    // Get class name if class_id provided
+    let classNameToSave = className;
+    if (class_id) {
+      const classNameRes = await query('SELECT name FROM classes WHERE id = $1', [class_id]);
+      classNameToSave = classNameRes.rows[0]?.name || null;
+    }
+
     await query(
-      'UPDATE users SET first_name = $1, last_name = $2, email = $3, lrn = $4, class_name = $5, updated_at = NOW() WHERE id = $6',
-      [firstName, lastName, email, lrn || null, className || null, id]
+      'UPDATE users SET first_name = $1, last_name = $2, email = $3, lrn = $4, class_name = $5, teacher_id = $6, class_id = $7, updated_at = NOW() WHERE id = $8',
+      [firstName, lastName, email, lrn || null, classNameToSave || null, teacher_id || null, class_id || null, id]
     );
 
     // Log activity

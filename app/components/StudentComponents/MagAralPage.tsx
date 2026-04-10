@@ -1,18 +1,27 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClassView } from './ClassView';
 import { BahagiView } from './BahagiView';
 import { YunitView } from './YunitView';
 import { AssessmentScreen } from './AssessmentScreen';
 import { RewardModal } from './RewardModal';
+import { TeacherLessonsView } from './TeacherLessonsView';
 
-type ViewType = 'classes' | 'bahagis' | 'yunits' | 'assessment';
+type ViewType = 'lessons' | 'classes' | 'bahagis' | 'yunits' | 'assessment';
 
 interface MagAralPageProps {
   studentId: string;
   studentName: string;
   onNavigate?: (view: string) => void;
+}
+
+interface TeacherInfo {
+  teacherId: string | null;
+  teacherName: string | null;
+  classId: string | null;
+  className: string | null;
+  isAssigned: boolean;
 }
 
 export const MagAralPage: React.FC<MagAralPageProps> = ({
@@ -21,6 +30,33 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   onNavigate
 }) => {
   const [currentView, setCurrentView] = useState<ViewType>('classes');
+  const [teacherInfo, setTeacherInfo] = useState<TeacherInfo | null>(null);
+  const [isLoadingTeacher, setIsLoadingTeacher] = useState(true);
+
+  // Fetch student's teacher info on component mount
+  useEffect(() => {
+    const fetchTeacherInfo = async () => {
+      try {
+        const res = await fetch(`/api/student/teacher-info?studentId=${studentId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTeacherInfo(data);
+          // If student has a teacher assigned, show the teacher lessons view
+          if (data.isAssigned) {
+            setCurrentView('lessons');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch teacher info:', err);
+      } finally {
+        setIsLoadingTeacher(false);
+      }
+    };
+
+    if (studentId) {
+      fetchTeacherInfo();
+    }
+  }, [studentId]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(null);
   const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(null);
@@ -31,6 +67,11 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
 
   const handleSelectClass = (classId: string) => {
     setSelectedClassId(classId);
+    setCurrentView('bahagis');
+  };
+
+  const handleSelectLesson = (bahagiId: string) => {
+    setSelectedBahagiId(bahagiId);
     setCurrentView('bahagis');
   };
 
@@ -58,9 +99,16 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   };
 
   const goBack = () => {
-    if (currentView === 'bahagis') {
-      setCurrentView('classes');
-      setSelectedClassId(null);
+    if (currentView === 'lessons') {
+      setCurrentView('lessons');
+    } else if (currentView === 'bahagis') {
+      if (teacherInfo?.isAssigned) {
+        setCurrentView('lessons');
+        setSelectedClassId(null);
+      } else {
+        setCurrentView('classes');
+        setSelectedClassId(null);
+      }
     } else if (currentView === 'yunits') {
       setCurrentView('bahagis');
       setSelectedBahagiId(null);
@@ -70,8 +118,34 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     }
   };
 
+  // Show loading state while fetching teacher info
+  if (isLoadingTeacher) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin text-4xl mb-4">📚</div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Teacher Lessons View - shown when student has a teacher assigned */}
+      {currentView === 'lessons' && teacherInfo?.isAssigned && teacherInfo?.teacherId && (
+        <TeacherLessonsView
+          studentId={studentId}
+          studentName={studentName}
+          teacherId={teacherInfo.teacherId}
+          teacherName={teacherInfo.teacherName || 'Your Teacher'}
+          className={teacherInfo.className || 'Your Class'}
+          onSelectLesson={handleSelectLesson}
+          onBack={() => onNavigate?.('dashboard')}
+        />
+      )}
+
+      {/* Class View - fallback for students without teacher assignment */}
       {currentView === 'classes' && (
         <ClassView
           studentId={studentId}
@@ -81,10 +155,10 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
         />
       )}
 
-      {currentView === 'bahagis' && selectedClassId && (
+      {currentView === 'bahagis' && (selectedClassId || selectedBahagiId) && (
         <BahagiView
           studentId={studentId}
-          classId={selectedClassId}
+          classId={(selectedBahagiId as string) || selectedClassId || ''}
           onSelectBahagi={handleSelectBahagi}
           onBack={goBack}
         />

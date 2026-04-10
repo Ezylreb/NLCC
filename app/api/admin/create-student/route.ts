@@ -3,10 +3,19 @@ import { query } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    const { firstName, lastName, email, password, lrn, className } = await request.json();
+    const { firstName, lastName, email, password, lrn, teacherId, classId } = await request.json();
 
+    // Validate all required fields
     if (!firstName || !lastName || !email || !password || !lrn) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
+    }
+
+    if (!teacherId) {
+      return NextResponse.json({ error: 'Teacher selection is required' }, { status: 400 });
+    }
+
+    if (!classId) {
+      return NextResponse.json({ error: 'Class selection is required' }, { status: 400 });
     }
 
     if (lrn.length > 12) {
@@ -23,11 +32,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User with this email or LRN already exists' }, { status: 400 });
     }
 
-    // Create the student user
-    const insertRes = await query(
-      'INSERT INTO users (first_name, last_name, email, password, lrn, role, class_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING id',
-      [firstName, lastName, email, password, lrn, 'USER', className || null]
+    // Validate teacher exists and has TEACHER role
+    const teacherCheck = await query('SELECT id FROM users WHERE id = $1 AND role = $2', [teacherId, 'TEACHER']);
+    if (teacherCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Selected teacher does not exist' }, { status: 400 });
+    }
+
+    // Validate class exists and belongs to the selected teacher
+    const classCheck = await query(
+      'SELECT id, teacher_id FROM classes WHERE id = $1 AND is_archived = FALSE',
+      [classId]
     );
+    if (classCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Selected class does not exist' }, { status: 400 });
+    }
+
+    // Ensure class belongs to the selected teacher
+    const classData = classCheck.rows[0];
+    if (classData.teacher_id !== teacherId) {
+      return NextResponse.json({ error: 'Selected class does not belong to the selected teacher' }, { status: 400 });
+    }
+
+    // Get class name for logging purposes
+    const classNameRes = await query('SELECT name FROM classes WHERE id = $1', [classId]);
+    const className = classNameRes.rows[0]?.name || 'Unknown';
+
+    // Create the student user with required teacher and class assignment
+    // Try to include teacher_id and class_id, but have fallback if columns don't exist yet
+    let insertRes;
+    try {
+      insertRes = await query(
+        'INSERT INTO users (first_name, last_name, email, password, lrn, role, teacher_id, class_id, class_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id',
+        [firstName, lastName, email, password, lrn, 'USER', teacherId, classId, className]
+      );
+    } catch (dbError: any) {
+      // If columns don't exist, try without them
+      if (dbError.message.includes('teacher_id') || dbError.message.includes('class_id')) {
+        console.warn('Columns teacher_id or class_id may not exist yet. Try running migrations.');
+        return NextResponse.json({ 
+          error: 'Database setup incomplete. Please run migrations: scripts/migrate-student-teacher-relationship.sql and scripts/migrate-student-class-relationship.sql',
+          details: dbError.message 
+        }, { status: 500 });
+      }
+      throw dbError;
+    }
+    
     const userId = insertRes.rows[0].id;
 
     // Create default preferences
@@ -46,7 +95,7 @@ export async function POST(request: Request) {
     try {
       await query(
         "INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)",
-        [userId, 'Student Registered', 'system', `Admin created student: ${firstName} ${lastName} (LRN: ${lrn})`]
+        [userId, 'Student Registered', 'system', `Admin created student: ${firstName} ${lastName} (LRN: ${lrn}) | Teacher & Class: ${className}`]
       );
     } catch (err) {
       console.warn('Could not log activity:', err);
@@ -55,6 +104,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, userId });
   } catch (error: any) {
     console.error('Admin Create Student Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      error: error.message?.includes('teacher_id') || error.message?.includes('class_id') 
+        ? 'Database columns not found. Please run migrations first.'
+        : 'Internal Server Error', 
+      details: error.message 
+    }, { status: 500 });
   }
 }
