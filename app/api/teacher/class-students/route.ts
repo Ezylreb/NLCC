@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
         // Verify teacher owns this class
         const classCheck = await query(
-            `SELECT id, teacher_id, title FROM classes WHERE id = $1 AND teacher_id = $2`,
+            `SELECT id, teacher_id, name FROM classes WHERE id = $1 AND teacher_id = $2`,
             [classId, teacherId]
         );
 
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
             success: true,
             data: {
                 classId: classId,
-                className: classCheck.rows[0].title,
+                className: classCheck.rows[0].name,
                 totalEnrolled: students.rows.length,
                 students: students.rows
             }

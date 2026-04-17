@@ -88,10 +88,13 @@ class BahagiAPI extends APIClient {
   }
 
   /**
-   * Fetch all bahagis (optionally filtered by teacher)
+   * Fetch all bahagis (optionally filtered by teacher and class)
    */
-  async fetchAll(teacherId?: string): Promise<APIResponse> {
-    const query = teacherId ? `?teacher_id=${teacherId}` : '';
+  async fetchAll(teacherId?: string, className?: string): Promise<APIResponse> {
+    const params = new URLSearchParams();
+    if (teacherId) params.append('teacherId', teacherId);
+    if (className) params.append('className', className);
+    const query = params.toString() ? `?${params.toString()}` : '';
     return this.get(`/bahagis${query}`);
   }
 

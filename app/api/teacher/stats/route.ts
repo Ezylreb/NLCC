@@ -47,11 +47,10 @@ export async function GET(request: Request) {
               c.teacher_id,
               c.is_archived,
               c.created_at,
-              (SELECT COUNT(*) FROM users WHERE role = 'USER' AND class_name = c.name)::INT as student_count,
-              (SELECT COUNT(*) FROM lessons WHERE class_name = c.name AND teacher_id::uuid = c.teacher_id)::INT as lesson_count
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id)::INT as student_count,
+              (SELECT COUNT(*) FROM bahagi WHERE class_name = c.name)::INT as lesson_count
           FROM classes c
           WHERE c.teacher_id = $1 AND c.is_archived = FALSE
-          GROUP BY c.id, c.name, c.teacher_id, c.is_archived, c.created_at
           ORDER BY c.created_at DESC
         `, [teacherId]);
 

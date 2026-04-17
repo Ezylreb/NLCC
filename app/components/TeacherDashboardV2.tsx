@@ -115,39 +115,29 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         if (selectedClass) {
             setSelectedClassId(classId);
             setSelectedClassName(selectedClass.name);
-            // Load Bahagi and Lessons for this class
+            // Load Bahagi for this class
             try {
-                const bahagiUrl = new URL('/api/teacher/class-bahagi', window.location.origin);
-                bahagiUrl.searchParams.append('classId', classId);
-                bahagiUrl.searchParams.append('className', selectedClass.name);
+                console.log('[handleOpenClass] Fetching bahagi for:', {
+                    teacherId: user?.id,
+                    className: selectedClass.name
+                });
                 
-                const lessonsUrl = new URL('/api/teacher/class-lessons', window.location.origin);
-                lessonsUrl.searchParams.append('classId', classId);
-                lessonsUrl.searchParams.append('className', selectedClass.name);
+                // Fetch bahagi filtered by teacher and className
+                const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClass.name);
 
-                // Fetch both in parallel using apiClient
-                const [bahagiResult, lessonsResult] = await Promise.all([
-                    apiClient.bahagi.fetchAll(),
-                    apiClient.yunit.fetchByBahagi(Number(classId))
-                ]);
+                console.log('[handleOpenClass] Bahagi result:', bahagiResult);
 
                 // Handle bahagi response
                 if (bahagiResult?.success) {
                     console.log(`Loaded ${bahagiResult.data?.length || 0} bahagi for class ${selectedClass.name}`);
                     setClassBahagi(bahagiResult.data || []);
                 } else {
-                    console.warn('Failed to fetch bahagi');
+                    console.warn('Failed to fetch bahagi:', bahagiResult?.error);
                     setClassBahagi([]);
                 }
-
-                // Handle lessons response
-                if (lessonsResult?.success) {
-                    console.log(`Loaded ${lessonsResult.data?.length || 0} lessons for class ${selectedClass.name}`);
-                    setClassLessons(lessonsResult.data || []);
-                } else {
-                    console.warn('Failed to fetch lessons');
-                    setClassLessons([]);
-                }
+                
+                // Clear lessons (we'll show bahagi with nested yunits instead)
+                setClassLessons([]);
             } catch (err) {
                 console.error('Error fetching class data:', err);
                 setClassBahagi([]);
@@ -171,9 +161,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
     // Handle refreshing bahagi list after edit
     const handleRefreshBahagi = async () => {
-        if (!selectedClassId) return;
+        if (!selectedClassId || !selectedClassName) return;
         try {
-            const bahagiResult = await apiClient.bahagi.fetchAll();
+            const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
             
             if (bahagiResult?.success) {
                 setClassBahagi(bahagiResult.data || []);
