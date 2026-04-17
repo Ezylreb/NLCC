@@ -439,6 +439,31 @@ class UserAPI extends APIClient {
   }
 
   /**
+   * Update own profile (first name, last name, email)
+   */
+  async updateOwnProfile(userId: string, data: {
+    firstName: string;
+    lastName: string;
+    email?: string;
+  }): Promise<APIResponse> {
+    // Use absolute path to bypass baseUrl (/api/rest)
+    const response = await fetch('/api/user/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...data, userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(`API Error: ${errorData.error || response.statusText}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
    * Get user lesson progress
    */
   async getLessonProgress(userId: string, lessonId: string): Promise<APIResponse> {

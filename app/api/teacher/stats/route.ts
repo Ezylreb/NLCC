@@ -100,7 +100,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Try to fetch real students from database
+        // Try to fetch students assigned to this teacher from database
         const studentsRes = await query(`
           SELECT 
               u.id, 
@@ -108,13 +108,14 @@ export async function GET(request: Request) {
               u.last_name, 
               u.email,
               u.role,
+              u.teacher_id,
               0 as progress,
               NOW() as last_active
           FROM users u
-          WHERE u.role = 'USER'
+          WHERE u.role = 'USER' AND u.teacher_id = $1
           ORDER BY u.created_at DESC
           LIMIT 50
-        `);
+        `, [teacherId]);
 
         if (studentsRes.rows && studentsRes.rows.length > 0) {
             // Process students

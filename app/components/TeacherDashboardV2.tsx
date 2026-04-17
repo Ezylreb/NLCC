@@ -18,7 +18,14 @@ interface TeacherDashboardV2Props {
 }
 
 export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout, user }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'profile'>('overview');
+    // Restore active tab from sessionStorage or default to 'overview'
+    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'profile'>(() => {
+        if (typeof window !== 'undefined') {
+            const savedTab = sessionStorage.getItem('teacher_active_tab');
+            return (savedTab as 'overview' | 'classes' | 'profile') || 'overview';
+        }
+        return 'overview';
+    });
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
     // Data states
@@ -87,6 +94,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     useEffect(() => {
         fetchData();
     }, [user?.id]);
+
+    // Save active tab to sessionStorage whenever it changes
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem('teacher_active_tab', activeTab);
+        }
+    }, [activeTab]);
 
     // Handle class creation
     const handleCreateClass = async (className: string) => {
@@ -193,6 +207,47 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle creating bahagi (show modal)
     const handleCreateBahagi = () => {
         setShowBahagiForm(true);
+    };
+
+    // Handle profile update
+    const handleUpdateProfile = async (data: { firstName: string; lastName: string; email: string }) => {
+        if (!user?.id) {
+            alert('❌ User ID not found');
+            return;
+        }
+
+        try {
+            const response = await apiClient.user.updateOwnProfile(user.id, {
+                firstName: data.firstName,
+                lastName: data.lastName,
+                email: data.email
+            });
+
+            if (response.success && response.data) {
+                alert('✅ Profile updated successfully!');
+                
+                // Update local user state to reflect changes in the UI
+                const savedUser = localStorage.getItem('nllc_user');
+                if (savedUser) {
+                    const userObj = JSON.parse(savedUser);
+                    userObj.firstName = data.firstName;
+                    userObj.lastName = data.lastName;
+                    userObj.email = data.email;
+                    localStorage.setItem('nllc_user', JSON.stringify(userObj));
+                }
+                
+                // Save current tab to persist after reload
+                sessionStorage.setItem('teacher_active_tab', 'profile');
+                
+                // Force page reload to update all user references
+                window.location.reload();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to update profile'}`);
+            }
+        } catch (err) {
+            console.error('Error updating profile:', err);
+            alert('❌ Failed to update profile. Check browser console for details.');
+        }
     };
 
     // Handle refreshing bahagi list after edit
@@ -508,7 +563,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                             {activeTab === 'profile' && (
                                 <TeacherProfilePage
                                     user={user}
-                                    onUpdate={() => {}}
+                                    onUpdate={handleUpdateProfile}
                                 />
                             )}
                         </>
