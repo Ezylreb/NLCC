@@ -674,8 +674,9 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import html2canvas from 'html2canvas';
 
 interface AvatarPart {
     id: string;
@@ -710,6 +711,49 @@ type AvatarItem = AvatarPart & {
 export const StudentAvatarCustomization = () => {
     const [activeCategory, setActiveCategory] =
         useState<keyof AvatarCustomization>('katawan');
+
+    const avatarRef = useRef<HTMLDivElement>(null);
+
+    const [isSaved, setIsSaved] = useState(false);
+
+    const handleDownloadAvatar = async () => {
+        if (!avatarRef.current) return;
+
+        const canvas = await html2canvas(avatarRef.current, {
+            backgroundColor: null,
+            scale: 4,
+            useCORS: true,
+
+            onclone: (doc) => {
+                const el = doc.querySelector('[data-avatar]');
+                if (el) {
+                    const htmlEl = el as HTMLElement;
+
+                    htmlEl.style.background = 'transparent';
+                    htmlEl.style.backgroundColor = 'transparent';
+                    htmlEl.style.boxShadow = 'none';
+                    htmlEl.style.border = 'none';
+                }
+            }
+        });
+
+        const finalCanvas = document.createElement('canvas');
+        // const size = 1024;
+
+        finalCanvas.width = 2000;
+        finalCanvas.height = 2028;
+
+        const ctx = finalCanvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, 2000, 2828);
+        ctx.drawImage(canvas, 0, 0, 2000, 2828);
+
+        const link = document.createElement('a');
+        link.download = 'avatar-transparent-1024.png';
+        link.href = finalCanvas.toDataURL('image/png');
+        link.click();
+    };
 
     const [customization, setCustomization] = useState<AvatarCustomization>({
         katawan: {
@@ -758,11 +802,10 @@ export const StudentAvatarCustomization = () => {
             id: '0',
             name: 'None',
             type: 'accessory',
-            src: '/Character/Avatar/accesories/eg1.png'
+            src: ''
         }
     });
 
-    // LAYER ORDER (IMPORTANT)
     const renderOrder: (keyof AvatarCustomization)[] = [
         'katawan',
         'pants',
@@ -795,10 +838,7 @@ export const StudentAvatarCustomization = () => {
     const eyesOptions: AvatarPart[] = [
         { id: '1', name: 'Default', type: 'eyes', src: '/Character/Avatar/eyes/eB1.png' },
         { id: '2', name: 'Boy Black 1', type: 'eyes', src: '/Character/Avatar/eyes/eBBck1.png' },
-        { id: '3', name: 'Girl Black 1', type: 'eyes', src: '/Character/Avatar/eyes/eGBck1.png' },
-        { id: '4', name: 'Brown1', type: 'eyes', src: '/Character/Avatar/eyes/eGBr2.png' },
-        { id: '5', name: 'Brown1', type: 'eyes', src: '/Character/Avatar/eyes/eGBr1.png' },
-        { id: '6', name: 'Brown1', type: 'eyes', src: '/Character/Avatar/eyes/eGBr1.png' },
+        { id: '3', name: 'Girl Black 1', type: 'eyes', src: '/Character/Avatar/eyes/eGBck1.png' }
     ];
 
     const mouthOptions: AvatarPart[] = [
@@ -807,8 +847,7 @@ export const StudentAvatarCustomization = () => {
 
     const damitOptions: AvatarPart[] = [
         { id: '1', name: 'Outfit 1', type: 'damit', src: '/Character/Avatar/damit/d1.png' },
-        { id: '2', name: 'Outfit 3', type: 'damit', src: '/Character/Avatar/damit/d3.png' },
-        { id: '3', name: 'Outfit 4', type: 'damit', src: '/Character/Avatar/damit/d4.png' }
+        { id: '2', name: 'Outfit 2', type: 'damit', src: '/Character/Avatar/damit/d3.png' }
     ];
 
     const pantsOptions: AvatarPart[] = [
@@ -818,32 +857,13 @@ export const StudentAvatarCustomization = () => {
 
     const shoesOptions: AvatarPart[] = [
         { id: '1', name: 'BoyShoes', type: 'shoes', src: '/Character/Avatar/shoes/sB1.png' },
-         { id: '2', name: 'GirlShoes', type: 'shoes', src: '/Character/Avatar/shoes/sG1.png' }
+        { id: '2', name: 'GirlShoes', type: 'shoes', src: '/Character/Avatar/shoes/sG1.png' }
     ];
 
-    const hatOptions: AvatarItem[] = [
-        {
-            id: 'eyeglass1',
-            name: 'None',
-            type: 'accessory',
-            src: '',
-            //hides: ['hair']
-        },
-        {
-            id: 'eyeglass2',
-            name: 'Beanie',
-            type: 'accessory',
-            src: '/Character/Avatar/accesories/eg1.png',
-            //hides: ['hair']
-        },
-        {
-            id: 'eyeglass3',
-            name: 'None',
-            type: 'accessory',
-            src: '/Character/Avatar/accesories/eg2.png',
-            // hides: ['hair', 'eyes', 'mouth']
-        }
-        
+    const accessoryOptions: AvatarItem[] = [
+        { id: '0', name: 'None', type: 'accessory', src: '' },
+        { id: '1', name: 'Beanie', type: 'accessory', src: '/Character/Avatar/accesories/eg1.png' },
+        { id: '2', name: 'Glasses', type: 'accessory', src: '/Character/Avatar/accesories/eg2.png' }
     ];
 
     const categoryOptions: Record<string, AvatarPart[]> = {
@@ -854,7 +874,7 @@ export const StudentAvatarCustomization = () => {
         damit: damitOptions,
         pants: pantsOptions,
         shoes: shoesOptions,
-        accessory: hatOptions
+        accessory: accessoryOptions
     };
 
     const handleSelectPart = (part: AvatarPart) => {
@@ -864,87 +884,77 @@ export const StudentAvatarCustomization = () => {
         }));
     };
 
-    // HANDLE HIDDEN LAYERS
-    const hiddenLayers = new Set<keyof AvatarCustomization>();
-
-    Object.values(customization).forEach((part) => {
-        const rule = (part as AvatarItem).hides;
-        if (rule) {
-            rule.forEach((layer) => hiddenLayers.add(layer));
-        }
-    });
-
     return (
         <div className="min-h-full p-8">
-            {/* HEADER */}
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-            >
-                <h1 className="text-4xl font-black text-white mb-2">
-                    ✨ Avatar Customization
-                </h1>
-                <p className="text-slate-400 mb-8">
-                    I-personalisa ang iyong avatar
-                </p>
-            </motion.div>
+            <h1 className="text-4xl font-black text-white mb-6">
+                ✨ Avatar Customization
+            </h1>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-                {/* PREVIEW CARD */}
-                <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                >
-                    <div className="bg-gradient-to-b from-brand-purple/20 to-brand-sky/10 border border-brand-purple/40 rounded-2xl p-8 sticky top-8">
-                        <h2 className="text-white font-bold mb-6 text-center">
-                            Inyong Avatar
-                        </h2>
+                {/* PREVIEW */}
+                <div className="p-6 rounded-xl">
+                    <h2 className="text-white mb-4 text-center">
+                        Preview
+                    </h2>
 
-                        <div className="bg-slate-900/50 rounded-xl p-6 relative w-80 h-80 mx-auto">
+                    <div
+                        ref={avatarRef}
+                        data-avatar
+                        style={{
+                            backgroundColor: 'transparent', // ✅ NO tailwind here
+                            width: '256px',
+                            height: '256px',
+                            position: 'relative'
+                        }}
+                    >
+                        {renderOrder.map((key) => {
+                            const part = customization[key];
+                            if (!part.src) return null;
 
-                            {renderOrder.map((key) => {
-                                if (hiddenLayers.has(key)) return null;
-
-                                const part = customization[key];
-                                if (!part?.src) return null;
-
-                                return (
-                                    <img
-                                        key={key}
-                                        src={part.src}
-                                        className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
-                                        style={{ zIndex: renderOrder.indexOf(key) }}
-                                        alt=""
-                                    />
-                                );
-                            })}
-                        </div>
-
-                        {/* SAVE BUTTON */}
-                        <button className="w-full mt-6 px-4 py-3 bg-brand-purple hover:shadow-lg hover:shadow-purple-500/40 text-white rounded-lg font-bold transition-all">
-                            💾 I-save ang Avatar
-                        </button>
+                            return (
+                                <img
+                                    key={key}
+                                    src={part.src}
+                                    crossOrigin="anonymous"
+                                    className="absolute top-0 left-0 w-full h-full object-contain"
+                                    alt=""
+                                />
+                            );
+                        })}
                     </div>
-                </motion.div>
+
+                    {/* SAVE */}
+                    <button
+                        onClick={() => setIsSaved(true)}
+                        className="w-full mt-6 px-4 py-3 bg-purple-600 text-white rounded-lg"
+                    >
+                        💾 Save Avatar
+                    </button>
+
+                    {/* DOWNLOAD */}
+                    {isSaved && (
+                        <button
+                            onClick={handleDownloadAvatar}
+                            className="w-full mt-3 px-4 py-3 bg-green-600 text-white rounded-lg"
+                        >
+                            ⬇️ Download Avatar
+                        </button>
+                    )}
+                </div>
 
                 {/* OPTIONS */}
-                <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="lg:col-span-2"
-                >
-                    {/* CATEGORY BUTTONS */}
-                    <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+                <div className="lg:col-span-2">
+                    <div className="flex flex-wrap gap-2 mb-6">
                         {Object.keys(categoryOptions).map((cat) => (
                             <button
                                 key={cat}
                                 onClick={() =>
                                     setActiveCategory(cat as keyof AvatarCustomization)
                                 }
-                                className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-all ${activeCategory === cat
-                                    ? 'bg-brand-purple text-white shadow-lg shadow-purple-500/40'
-                                    : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                                className={`px-3 py-2 rounded ${activeCategory === cat
+                                    ? 'bg-purple-600'
+                                    : 'bg-gray-700'
                                     }`}
                             >
                                 {cat}
@@ -952,39 +962,32 @@ export const StudentAvatarCustomization = () => {
                         ))}
                     </div>
 
-                    {/* OPTIONS GRID */}
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={activeCategory}
                             className="grid grid-cols-2 md:grid-cols-3 gap-4"
                         >
-                            {categoryOptions[activeCategory].map((option, idx) => (
-                                <motion.button
+                            {categoryOptions[activeCategory].map((option) => (
+                                <button
                                     key={option.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: idx * 0.05 }}
                                     onClick={() => handleSelectPart(option)}
-                                    className={`p-6 rounded-xl border-2 transition-all ${customization[activeCategory].id === option.id
-                                        ? 'bg-brand-purple/30 border-brand-purple shadow-lg shadow-purple-500/30'
-                                        : 'bg-white/5 border-white/20 hover:border-brand-purple/50 hover:bg-white/10'
-                                        }`}
+                                    className="p-4 bg-gray-800 rounded"
                                 >
                                     {option.src && (
                                         <img
                                             src={option.src}
-                                            className="w-16 h-16 mx-auto mb-2"
+                                            className="w-16 h-16 mx-auto"
                                             alt={option.name}
                                         />
                                     )}
-                                    <p className="text-sm font-semibold text-white text-center">
+                                    <p className="text-white text-sm text-center mt-2">
                                         {option.name}
                                     </p>
-                                </motion.button>
+                                </button>
                             ))}
                         </motion.div>
                     </AnimatePresence>
-                </motion.div>
+                </div>
             </div>
         </div>
     );
