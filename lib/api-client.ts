@@ -659,21 +659,40 @@ class ClassService extends APIClient {
    * Fetch single class
    */
   async fetchById(classId: number | string): Promise<APIResponse> {
-    return this.get(`/classes/${classId}`);
+    const tid = this.getTeacherId();
+    return this.get(`/classes/${classId}?teacherId=${tid}`);
   }
 
   /**
    * Update class
    */
   async update(classId: number | string, data: any): Promise<APIResponse> {
-    return this.patch(`/classes/${classId}`, data);
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { ...data, teacherId: tid });
   }
 
   /**
-   * Delete class
+   * Archive class (soft delete)
+   */
+  async archiveClass(classId: number | string): Promise<APIResponse> {
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { is_archived: true, teacherId: tid });
+  }
+
+  /**
+   * Restore archived class
+   */
+  async restoreClass(classId: number | string): Promise<APIResponse> {
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { is_archived: false, teacherId: tid });
+  }
+
+  /**
+   * Delete class (hard delete)
    */
   async deleteClass(classId: number | string): Promise<APIResponse> {
-    return this.delete(`/classes/${classId}`);
+    const tid = this.getTeacherId();
+    return this.delete(`/classes/${classId}?teacherId=${tid}`);
   }
 
   /**

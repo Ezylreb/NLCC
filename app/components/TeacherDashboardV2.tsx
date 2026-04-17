@@ -154,6 +154,42 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         setClassLessons([]);
     };
 
+    // Handle archiving a class
+    const handleArchiveClass = async (classId: string) => {
+        try {
+            const response = await apiClient.class.archiveClass(classId);
+            
+            if (response.success) {
+                alert('✅ Class archived successfully!');
+                // Refresh dashboard data to update class lists
+                await fetchData();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to archive class'}`);
+            }
+        } catch (err) {
+            console.error('Error archiving class:', err);
+            alert('❌ Failed to archive class. Check browser console for details.');
+        }
+    };
+
+    // Handle restoring an archived class
+    const handleRestoreClass = async (classId: string) => {
+        try {
+            const response = await apiClient.class.restoreClass(classId);
+            
+            if (response.success) {
+                alert('✅ Class restored successfully!');
+                // Refresh dashboard data to update class lists
+                await fetchData();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to restore class'}`);
+            }
+        } catch (err) {
+            console.error('Error restoring class:', err);
+            alert('❌ Failed to restore class. Check browser console for details.');
+        }
+    };
+
     // Handle creating bahagi (show modal)
     const handleCreateBahagi = () => {
         setShowBahagiForm(true);
@@ -460,7 +496,8 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                                     classes={classes}
                                     onOpenClass={handleOpenClass}
                                     onCreateClass={handleCreateClass}
-                                    onArchiveClass={() => {}}
+                                    onArchiveClass={handleArchiveClass}
+                                    onRestoreClass={handleRestoreClass}
                                 />
                             )}
 

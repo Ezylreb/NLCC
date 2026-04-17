@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     ];
 
     try {
-        // Fetch teacher's created classes from database
+        // Fetch teacher's created classes from database (both active and archived)
         console.log(`Fetching classes for teacher: ${teacherId}`);
         
         const classesRes = await query(`
@@ -50,8 +50,8 @@ export async function GET(request: Request) {
               (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id)::INT as student_count,
               (SELECT COUNT(*) FROM bahagi WHERE class_name = c.name)::INT as lesson_count
           FROM classes c
-          WHERE c.teacher_id = $1 AND c.is_archived = FALSE
-          ORDER BY c.created_at DESC
+          WHERE c.teacher_id = $1
+          ORDER BY c.is_archived ASC, c.created_at DESC
         `, [teacherId]);
 
         console.log(`Query result for teacher ${teacherId}:`, classesRes.rows?.length || 0, 'classes');
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
             nextLesson: 'Lesson Plan Active',
             color: 'border-brand-purple'
           }));
-          console.log(`✅ Found ${classes.length} classes for teacher`);
+          console.log(`✅ Found ${classes.length} classes for teacher (${classes.filter((c: any) => !c.is_archived).length} active, ${classes.filter((c: any) => c.is_archived).length} archived)`);
         } else {
           console.log('No classes found for this teacher, using default');
           classes = [{
