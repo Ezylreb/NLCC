@@ -46,18 +46,18 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
-    studentId,
-    enrolledCount: result.rows.length,
-    classes: result.rows.map((row: any) => ({
-      id: row.id,
-      title: row.name,
-      description: null,
-      teacher: row.teacher_name,
-      teacherEmail: row.teacher_email,
-      teacherId: row.teacher_id,
-      bahagiCount: parseInt(row.bahagi_count)
-    }))
-  });
+      studentId,
+      enrolledCount: result.rows.length,
+      classes: result.rows.map((row: any) => ({
+        id: row.id,
+        title: row.name,
+        description: null,
+        teacher: row.teacher_name,
+        teacherEmail: row.teacher_email,
+        teacherId: row.teacher_id,
+        bahagiCount: parseInt(row.bahagi_count)
+      }))
+    });
   } catch (error: any) {
     console.error('Error fetching enrolled classes:', error);
     return NextResponse.json(
