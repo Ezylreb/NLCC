@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { EnhancedBahagiCardV2 } from './EnhancedBahagiCardV2';
 import { CreateYunitForm } from './CreateYunitForm';
 import { CreateAssessmentForm } from './CreateAssessmentForm';
 import { EditBahagiForm } from './EditBahagiForm';
 import { EditYunitForm } from './EditYunitForm';
-import { EditAssessmentForm } from './EditAssessmentForm';
+import { EditAssessmentV2Form } from './EditAssessmentV2Form';
 import { ManageClassStudents } from './ManageClassStudents';
 
 interface ClassDetailPageProps {
@@ -74,12 +75,11 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const fetchYunitsForBahagi = async (bahagiId: number) => {
         setIsLoadingYunits(true);
         try {
-            const res = await fetch(`/api/teacher/manage-yunit?bahagiId=${bahagiId}`);
-            if (res.ok) {
-                const data = await res.json();
+            const response = await apiClient.yunit.fetchByBahagi(bahagiId);
+            if (response.data?.yunits) {
                 setBahagiYunits(prev => ({
                     ...prev,
-                    [bahagiId]: data.yunits || []
+                    [bahagiId]: response.data.yunits || []
                 }));
             }
         } catch (err) {
@@ -93,12 +93,11 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const fetchAssessmentsForBahagi = async (bahagiId: number) => {
         setIsLoadingAssessments(true);
         try {
-            const res = await fetch(`/api/teacher/manage-assessment?bahagiId=${bahagiId}`);
-            if (res.ok) {
-                const data = await res.json();
+            const response = await apiClient.assessment.fetch({ bahagi_id: bahagiId });
+            if (response.data?.assessments) {
                 setBahagiAssessments(prev => ({
                     ...prev,
-                    [bahagiId]: data.assessments || []
+                    [bahagiId]: response.data.assessments || []
                 }));
             }
         } catch (err) {
@@ -133,29 +132,23 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleYunitSubmit = async (data: any) => {
         setIsCreatingYunit(true);
         try {
-            const res = await fetch('/api/teacher/manage-yunit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    bahagiId: data.bahagiId,
-                    title: data.title,
-                    description: data.description,
-                    discussion: data.discussion,
-                    mediaUrl: data.mediaUrl
-                })
+            const result = await apiClient.yunit.create({
+                bahagi_id: data.bahagiId,
+                title: data.title,
+                description: data.description,
+                discussion: data.discussion,
+                media_url: data.mediaUrl
             });
 
-            if (res.ok) {
-                const result = await res.json();
+            if (result.success) {
                 alert('✅ Yunit created successfully!');
                 setShowYunitForm(false);
                 // Refresh yunits
                 fetchYunitsForBahagi(data.bahagiId);
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${result.error || 'Failed to create yunit'}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error creating yunit:', err);
             alert('❌ Failed to create yunit');
         } finally {
@@ -172,31 +165,22 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentSubmit = async (data: any) => {
         setIsCreatingAssessment(true);
         try {
-            const res = await fetch('/api/teacher/manage-assessment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    bahagiId: data.bahagiId,
-                    lessonId: data.lessonId,
-                    title: data.title,
-                    type: data.type,
-                    instructions: data.instructions,
-                    questions: data.questions,
-                    options: data.options,
-                    correctAnswer: data.correctAnswer,
-                    points: data.points
-                })
+            const response = await apiClient.assessment.create({
+                yunit_id: data.lessonId || 0,
+                bahagi_id: data.bahagiId || 0,
+                title: data.title,
+                description: data.instructions,
+                questions: data.questions,
+                total_questions: data.questions?.length || 0
             });
 
-            if (res.ok) {
-                const result = await res.json();
+            if (response.success) {
                 alert('✅ Assessment created successfully!');
                 setShowAssessmentForm(false);
                 // Refresh assessments
                 fetchAssessmentsForBahagi(data.bahagiId);
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating assessment:', err);
@@ -220,17 +204,12 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         try {
             console.log('📤 Sending update request with data:', data);
             
-            const res = await fetch('/api/teacher/update-bahagi', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+            const response = await apiClient.bahagi.update(data.id, data);
 
-            console.log('📨 API Response Status:', res.status);
+            console.log('📨 API Response:', response);
 
-            if (res.ok) {
-                const responseData = await res.json();
-                console.log('✅ API Response:', responseData);
+            if (response.success) {
+                console.log('✅ API Response:', response.data);
                 alert('✅ Bahagi updated successfully!');
                 setShowEditBahagiForm(false);
                 // Refresh the bahagi list after successful edit
@@ -238,9 +217,8 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                     await onRefreshBahagi();
                 }
             } else {
-                const error = await res.json();
-                console.error('❌ API Error:', error);
-                alert(`❌ Error: ${error.error || 'Failed to update bahagi'}`);
+                console.error('❌ API Error:', response.error);
+                alert(`❌ Error: ${response.error || 'Failed to update bahagi'}`);
             }
         } catch (err) {
             console.error('Error updating bahagi:', err);
@@ -259,20 +237,15 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleYunitEditSubmit = async (data: any) => {
         setIsEditingYunit(true);
         try {
-            const res = await fetch('/api/teacher/update-yunit', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+            const response = await apiClient.yunit.update(data.id, data);
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Yunit updated successfully!');
                 setShowEditYunitForm(false);
                 // Refresh yunits
                 fetchYunitsForBahagi(editingYunit.bahagi_id);
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error updating yunit:', err);
@@ -291,28 +264,20 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentEditSubmit = async (data: any) => {
         setIsEditingAssessment(true);
         try {
-            const res = await fetch('/api/teacher/manage-assessment', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: data.id,
-                    bahagiId: data.bahagiId,
-                    title: data.title,
-                    type: data.type,
-                    instructions: data.instructions,
-                    questions: data.questions
-                })
+            const response = await apiClient.assessment.update(data.id, {
+                title: data.title,
+                description: data.instructions,
+                questions: data.questions,
+                total_questions: data.questions?.length || 0
             });
 
-            if (res.ok) {
-                const result = await res.json();
+            if (response.success) {
                 alert('✅ Assessment updated successfully!');
                 setShowEditAssessmentForm(false);
                 // Refresh assessments
                 fetchAssessmentsForBahagi(data.bahagiId);
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error || 'Failed to update assessment'}`);
+                alert(`❌ Error: ${response.error || 'Failed to update assessment'}`);
             }
         } catch (err) {
             console.error('Error updating assessment:', err);
@@ -322,50 +287,34 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         }
     };
 
-    // Handle archiving bahagi
     const handleArchiveBahagi = async (bahagiId: number) => {
         try {
-            const res = await fetch('/api/teacher/archive-bahagi', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: bahagiId,
-                    isArchived: true
-                })
-            });
-
-            if (res.ok) {
+            const result = await apiClient.bahagi.archive(bahagiId);
+            if (result.success) {
                 alert('✅ Bahagi archived successfully!');
                 onCreateBahagi();
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${result.error || 'Failed to archive'}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error archiving bahagi:', err);
             alert('❌ Failed to archive bahagi');
         }
     };
 
-    // Handle deleting bahagi
     const handleDeleteBahagi = async (bahagiId: number) => {
         if (!window.confirm('⚠️ Are you sure? This will permanently delete the Bahagi and all related Yunits and Assessments.')) {
             return;
         }
-
         try {
-            const res = await fetch(`/api/teacher/delete-bahagi?id=${bahagiId}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
+            const result = await apiClient.bahagi.deleteBahagi(bahagiId);
+            if (result.success) {
                 alert('✅ Bahagi deleted permanently!');
                 onCreateBahagi();
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${result.error || 'Failed to delete'}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error deleting bahagi:', err);
             alert('❌ Failed to delete bahagi');
         }
@@ -374,25 +323,48 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     // Handle toggling publish status
     const handleTogglePublish = async (bahagiId: number, currentStatus: boolean) => {
         try {
-            const res = await fetch('/api/teacher/update-bahagi', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: bahagiId,
-                    isPublished: !currentStatus
-                })
-            });
-
-            if (res.ok) {
-                alert(`✅ Bahagi ${!currentStatus ? 'published' : 'unpublished'}!`);
+            const result = await apiClient.bahagi.publish(bahagiId);
+            if (result.success) {
+                alert(`✅ Bahagi published!`);
                 onCreateBahagi();
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${result.error || 'Failed to update'}`);
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error toggling publish:', err);
             alert('❌ Failed to update publish status');
+        }
+    };
+
+    // Helper to delete yunit
+    const handleDeleteYunitInline = async (yunitId: number, bahagiId: number) => {
+        try {
+            const result = await apiClient.yunit.deleteYunit(yunitId);
+            if (result.success) {
+                alert('✅ Yunit deleted!');
+                fetchYunitsForBahagi(bahagiId);
+            } else {
+                alert(`❌ Error: ${result.error || 'Failed to delete'}`);
+            }
+        } catch (err: any) {
+            console.error('Error deleting yunit:', err);
+            alert('❌ Failed to delete yunit');
+        }
+    };
+
+    // Helper to delete assessment
+    const handleDeleteAssessmentInline = async (assessmentId: number, bahagiId: number) => {
+        try {
+            const result = await apiClient.assessment.deleteAssessment(assessmentId);
+            if (result.success) {
+                alert('✅ Assessment deleted!');
+                fetchAssessmentsForBahagi(bahagiId);
+            } else {
+                alert(`❌ Error: ${result.error || 'Failed to delete'}`);
+            }
+        } catch (err: any) {
+            console.error('Error deleting assessment:', err);
+            alert('❌ Failed to delete assessment');
         }
     };
 
@@ -530,13 +502,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     className="px-2 py-1 text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition-all"
                                                                     onClick={async () => {
                                                                         if (confirm('Delete this Yunit?')) {
-                                                                            const res = await fetch(`/api/teacher/delete-yunit?id=${yunit.id}`, {
-                                                                                method: 'DELETE'
-                                                                            });
-                                                                            if (res.ok) {
-                                                                                alert('✅ Yunit deleted!');
-                                                                                fetchYunitsForBahagi(b.id);
-                                                                            }
+                                                                            await handleDeleteYunitInline(yunit.id, b.id);
                                                                         }
                                                                     }}
                                                                     title="Delete Yunit"
@@ -592,13 +558,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     className="px-2 py-1 text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition-all"
                                                                     onClick={async () => {
                                                                         if (confirm('Delete this Assessment?')) {
-                                                                            const res = await fetch(`/api/teacher/delete-assessment?id=${assessment.id}`, {
-                                                                                method: 'DELETE'
-                                                                            });
-                                                                            if (res.ok) {
-                                                                                alert('✅ Assessment deleted!');
-                                                                                fetchAssessmentsForBahagi(b.id);
-                                                                            }
+                                                                            await handleDeleteAssessmentInline(assessment.id, b.id);
                                                                         }
                                                                     }}
                                                                     title="Delete Assessment"
@@ -687,13 +647,18 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             )}
 
             {/* Edit Assessment Form Modal */}
-            {editingAssessment && (
-                <EditAssessmentForm
-                    isOpen={showEditAssessmentForm}
-                    onClose={() => setShowEditAssessmentForm(false)}
-                    onSubmit={handleAssessmentEditSubmit}
-                    assessment={editingAssessment}
-                    isLoading={isEditingAssessment}
+            {editingAssessment && showEditAssessmentForm && (
+                <EditAssessmentV2Form
+                    assessmentId={editingAssessment.id || ''}
+                    onClose={() => {
+                        setShowEditAssessmentForm(false);
+                        setEditingAssessment(null);
+                    }}
+                    onSuccess={() => {
+                        setShowEditAssessmentForm(false);
+                        // Refresh if needed
+                    }}
+                    userId={teacherId || ''}
                 />
             )}
         </div>

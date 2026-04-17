@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { AssessmentAnswerSubmission } from './AssessmentAnswerSubmission';
 
 interface StudentYunitViewProps {
@@ -27,13 +28,9 @@ export const StudentYunitView: React.FC<StudentYunitViewProps> = ({
   useEffect(() => {
     const fetchYunits = async () => {
       try {
-        const res = await fetch(
-          `/api/teacher/manage-yunit?bahagiId=${bahagiId}`,
-          { method: 'GET' }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setYunits(data.yunits || []);
+        const response = await apiClient.yunit.fetchByBahagi(parseInt(bahagiId));
+        if (response.success && response.data) {
+          setYunits(response.data.yunits || response.data);
         }
       } catch (err) {
         console.error('Error fetching yunits:', err);
@@ -51,13 +48,9 @@ export const StudentYunitView: React.FC<StudentYunitViewProps> = ({
 
     const fetchAssessments = async () => {
       try {
-        const res = await fetch(
-          `/api/teacher/manage-assessment?yunitId=${selectedYunit.id}`,
-          { method: 'GET' }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setAssessments(data.assessments || []);
+        const response = await apiClient.assessment.fetch({ yunit_id: selectedYunit.id });
+        if (response.success && response.data) {
+          setAssessments(response.data.assessments || response.data);
         }
       } catch (err) {
         console.error('Error fetching assessments:', err);

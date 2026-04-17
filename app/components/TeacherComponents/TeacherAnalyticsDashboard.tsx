@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { apiClient } from '@/lib/api-client';
 
 interface TeacherAnalyticsDashboardProps {
   classId: string;
@@ -44,34 +45,28 @@ export const TeacherAnalyticsDashboard: React.FC<TeacherAnalyticsDashboardProps>
     const loadAnalytics = async () => {
       setIsLoading(true);
       try {
-        const params = new URLSearchParams({
-          classId,
-          timeRange,
-          ...(bahagiId && { bahagiId })
-        });
-
-        const [studentRes, assignmentRes, statsRes] = await Promise.all([
-          fetch(`/api/teacher/analytics/student-performance?${params}`),
-          fetch(`/api/teacher/analytics/assignment-analytics?${params}`),
-          fetch(`/api/teacher/analytics/class-stats?${params}`)
+        const [studentResponse, assignmentResponse, statsResponse] = await Promise.all([
+          apiClient.analytics.getStudentPerformance(teacherId),
+          apiClient.analytics.getAssignmentAnalytics(bahagiId || classId),
+          apiClient.analytics.getClassStats(classId)
         ]);
 
-        if (studentRes.ok && assignmentRes.ok && statsRes.ok) {
-          const studentData = await studentRes.json();
-          const assignmentData = await assignmentRes.json();
-          const statsData = await statsRes.json();
+        if (studentResponse.success && assignmentResponse.success && statsResponse.success) {
+          const studentData = studentResponse.data?.students || [];
+          const assignmentData = assignmentResponse.data?.assessments || [];
+          const statsData = statsResponse.data?.stats;
 
-          setStudentPerformance(studentData.students || []);
-          setAssessmentAnalytics(assignmentData.assessments || []);
-          setClassStats(statsData.stats);
+          setStudentPerformance(studentData);
+          setAssessmentAnalytics(assignmentData);
+          setClassStats(statsData);
 
           // Calculate score distribution
           const distribution = [
-            { range: '0-20%', count: studentData.students?.filter((s: any) => s.averageScore < 20).length || 0 },
-            { range: '20-40%', count: studentData.students?.filter((s: any) => s.averageScore >= 20 && s.averageScore < 40).length || 0 },
-            { range: '40-60%', count: studentData.students?.filter((s: any) => s.averageScore >= 40 && s.averageScore < 60).length || 0 },
-            { range: '60-80%', count: studentData.students?.filter((s: any) => s.averageScore >= 60 && s.averageScore < 80).length || 0 },
-            { range: '80-100%', count: studentData.students?.filter((s: any) => s.averageScore >= 80).length || 0 }
+            { range: '0-20%', count: studentData?.filter((s: any) => s.averageScore < 20).length || 0 },
+            { range: '20-40%', count: studentData?.filter((s: any) => s.averageScore >= 20 && s.averageScore < 40).length || 0 },
+            { range: '40-60%', count: studentData?.filter((s: any) => s.averageScore >= 40 && s.averageScore < 60).length || 0 },
+            { range: '60-80%', count: studentData?.filter((s: any) => s.averageScore >= 60 && s.averageScore < 80).length || 0 },
+            { range: '80-100%', count: studentData?.filter((s: any) => s.averageScore >= 80).length || 0 }
           ];
           setScoreDistribution(distribution);
         }

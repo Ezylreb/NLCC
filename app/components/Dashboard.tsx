@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 import { Parent3DBackground } from './Parent3DBackground';
 
 interface DashboardProps {
@@ -22,12 +23,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack, userId }) => {
                 return;
             }
             try {
-                const response = await fetch(`/api/user/stats?userId=${userId}`);
-                const data = await response.json();
-                if (response.ok) {
-                    setStats(data.stats);
-                    setProgress(data.progress || []);
-                    setAchievements(data.achievements || []);
+                const response = await apiClient.user.getStats(userId);
+                if (response.success) {
+                    setStats(response.data?.stats || []);
+                    setProgress(response.data?.progress || []);
+                    setAchievements(response.data?.achievements || []);
                 }
             } catch (err) {
                 console.error('Failed to fetch user stats:', err);

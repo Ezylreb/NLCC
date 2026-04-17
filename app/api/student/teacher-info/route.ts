@@ -8,7 +8,11 @@ import { query } from '@/lib/db';
  */
 export async function GET(request: NextRequest) {
   try {
-    const studentId = request.nextUrl.searchParams.get('studentId');
+    // Support both header and query parameter for studentId
+    let studentId = request.headers.get('x-student-id');
+    if (!studentId) {
+      studentId = request.nextUrl.searchParams.get('studentId');
+    }
 
     if (!studentId) {
       return NextResponse.json(

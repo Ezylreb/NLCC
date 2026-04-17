@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { apiClient } from '@/lib/api-client';
 
 interface StudentGradebookProps {
   classId: string;
@@ -50,18 +51,14 @@ export const StudentGradebook: React.FC<StudentGradebookProps> = ({
     const loadGrades = async () => {
       setIsLoading(true);
       try {
-        const [gradesRes, statsRes] = await Promise.all([
-          fetch(
-            `/api/teacher/gradebook/student-grades?classId=${classId}&studentId=${studentId}`
-          ),
-          fetch(
-            `/api/teacher/gradebook/student-stats?classId=${classId}&studentId=${studentId}`
-          )
+        const [gradesResult, statsResult] = await Promise.all([
+          apiClient.student.getDetails(studentId),
+          apiClient.analytics.getStudentPerformance(studentId)
         ]);
 
-        if (gradesRes.ok && statsRes.ok) {
-          const gradesData = await gradesRes.json();
-          const statsData = await statsRes.json();
+        if (gradesResult.success && statsResult.success) {
+          const gradesData = gradesResult.data;
+          const statsData = statsResult.data;
 
           setGrades(gradesData.grades || []);
           setStats(statsData.stats);

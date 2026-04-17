@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 
 interface SettingsPageProps {
     onBack: () => void;
@@ -8,7 +9,7 @@ interface SettingsPageProps {
     user?: { firstName: string; lastName: string; email: string; class_name?: string } | null;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, onLogout, user: initialUser }) => {
+const SettingsPageComponent = ({ onBack, onLogout, user: initialUser }: SettingsPageProps) => {
     const [activeTab, setActiveTab] = useState<'account' | 'preferences'>('account');
 
     // Toast state
@@ -41,25 +42,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, onLogout, us
     const fetchUserData = async (email: string) => {
         setIsLoading(true);
         try {
-            const response = await fetch(`/api/user?email=${encodeURIComponent(email)}`);
-            if (response.ok) {
-                const data = await response.json();
+            const response = await apiClient.user.fetchByEmail(email);
+            if (response.success && response.data) {
                 setAccount({
-                    firstName: data.firstName || '',
-                    lastName: data.lastName || '',
-                    email: data.email || '',
-                    lrn: data.lrn || '',
-                    className: data.class_name || ''
+                    firstName: response.data.firstName || '',
+                    lastName: response.data.lastName || '',
+                    email: response.data.email || '',
+                    lrn: response.data.lrn || '',
+                    className: response.data.class_name || ''
                 });
-                if (data.preferences) {
+                if (response.data.preferences) {
                     setPreferences({
-                        darkMode: !!data.preferences.darkMode,
-                        soundEffects: !!data.preferences.soundEffects
+                        darkMode: !!response.data.preferences.darkMode,
+                        soundEffects: !!response.data.preferences.soundEffects
                     });
-                    if (data.preferences.darkMode) document.documentElement.classList.add('dark');
+                    if (response.data.preferences.darkMode) document.documentElement.classList.add('dark');
                     else document.documentElement.classList.remove('dark');
                 }
-
             } else {
                 console.log('User not found in DB, using defaults');
             }
@@ -79,20 +78,20 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, onLogout, us
         if (e) e.preventDefault();
         setIsLoading(true);
         try {
-            const response = await fetch('/api/user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...account,
-                    preferences,
-                }),
+            // Extract user ID from email or account data
+            const userId = account.email;
+            const result = await apiClient.user.updateProfile(userId, {
+                name: `${account.firstName} ${account.lastName}`,
+                email: account.email,
+                preferences: preferences
             });
-            if (response.ok) {
+            
+            if (result.success) {
                 showToast('All settings saved to database!');
             } else {
-                showToast('Failed to save settings');
+                showToast(result.error || 'Error connecting to server');
             }
-        } catch (error) {
+        } catch (err) {
             showToast('Error connecting to server');
         } finally {
             setIsLoading(false);
@@ -306,3 +305,5 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, onLogout, us
         </div>
     );
 };
+
+export const SettingsPage = React.memo(SettingsPageComponent);

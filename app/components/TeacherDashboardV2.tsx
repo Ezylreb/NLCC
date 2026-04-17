@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { TeacherSidebar } from './TeacherComponents/TeacherSidebar';
 import { TeacherOverviewPage } from './TeacherComponents/TeacherOverviewPage';
 import { TeacherClassesPage } from './TeacherComponents/TeacherClassesPage';
@@ -52,27 +53,17 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         }
         setIsSyncing(true);
         try {
-            // Fetch teacher stats with proper error handling
-            const statsRes = await fetch(`/api/teacher/stats?teacherId=${user.id}&v=${Date.now()}`);
+            // Fetch teacher stats
+            const statsResponse = await apiClient.teacherStats.getStats(user.id);
             
-            if (statsRes.ok) {
-                try {
-                    const data = await statsRes.json();
-                    setStats(data.stats || []);
-                    setStudents(data.students || []);
-                    setClasses(data.classes || []);
-                    setWeeklyChart(data.weeklyChart || []);
-                    setMonthlyChart(data.monthlyChart || []);
-                } catch (jsonError) {
-                    console.error('Failed to parse stats response:', jsonError);
-                    setStats([]);
-                    setStudents([]);
-                    setClasses([]);
-                    setWeeklyChart([]);
-                    setMonthlyChart([]);
-                }
+            if (statsResponse.success && statsResponse.data) {
+                setStats(statsResponse.data.stats || []);
+                setStudents(statsResponse.data.students || []);
+                setClasses(statsResponse.data.classes || []);
+                setWeeklyChart(statsResponse.data.weeklyChart || []);
+                setMonthlyChart(statsResponse.data.monthlyChart || []);
             } else {
-                console.warn('Stats API returned status:', statsRes.status);
+                console.warn('Stats API error:', statsResponse.error);
                 setStats([]);
                 setStudents([]);
                 setClasses([]);
@@ -100,26 +91,21 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle class creation
     const handleCreateClass = async (className: string) => {
         try {
-            const res = await fetch('/api/teacher/create-class', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: className,
-                    teacherId: user?.id
-                })
+            const response = await apiClient.class.create({
+                name: className,
+                teacher_id: user?.id || ''
             });
             
-            if (res.ok) {
-                const data = await res.json();
-                setClasses([data.class, ...classes]);
-                alert('✅ Class created successfully!');
+            if (response.success && response.data) {
+                const newClass = response.data.class || response.data;
+                setClasses([newClass, ...classes]);
+                alert('✅ Class created successfully! Students will be automatically enrolled.');
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error || 'Failed to create class'}`);
+                alert(`❌ Error: ${response.error || 'Failed to create class'}`);
             }
         } catch (err) {
             console.error('Error creating class:', err);
-            alert('❌ Failed to create class');
+            alert('❌ Failed to create class. Check browser console for details.');
         }
     };
 
@@ -139,27 +125,25 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 lessonsUrl.searchParams.append('classId', classId);
                 lessonsUrl.searchParams.append('className', selectedClass.name);
 
-                // Fetch both in parallel
-                const [bahagiRes, lessonsRes] = await Promise.all([
-                    fetch(bahagiUrl.toString()),
-                    fetch(lessonsUrl.toString())
+                // Fetch both in parallel using apiClient
+                const [bahagiResult, lessonsResult] = await Promise.all([
+                    apiClient.bahagi.fetchAll(),
+                    apiClient.yunit.fetchByBahagi(Number(classId))
                 ]);
 
                 // Handle bahagi response
-                if (bahagiRes.ok) {
-                    const bahagiData = await bahagiRes.json();
-                    console.log(`Loaded ${bahagiData.bahagi?.length || 0} bahagi for class ${selectedClass.name}`);
-                    setClassBahagi(bahagiData.bahagi || []);
+                if (bahagiResult?.success) {
+                    console.log(`Loaded ${bahagiResult.data?.length || 0} bahagi for class ${selectedClass.name}`);
+                    setClassBahagi(bahagiResult.data || []);
                 } else {
                     console.warn('Failed to fetch bahagi');
                     setClassBahagi([]);
                 }
 
                 // Handle lessons response
-                if (lessonsRes.ok) {
-                    const lessonsData = await lessonsRes.json();
-                    console.log(`Loaded ${lessonsData.lessons?.length || 0} lessons for class ${selectedClass.name}`);
-                    setClassLessons(lessonsData.lessons || []);
+                if (lessonsResult?.success) {
+                    console.log(`Loaded ${lessonsResult.data?.length || 0} lessons for class ${selectedClass.name}`);
+                    setClassLessons(lessonsResult.data || []);
                 } else {
                     console.warn('Failed to fetch lessons');
                     setClassLessons([]);
@@ -189,17 +173,10 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleRefreshBahagi = async () => {
         if (!selectedClassId) return;
         try {
-            const selectedClass = classes.find(c => c.id === selectedClassId);
-            if (!selectedClass) return;
-
-            const bahagiUrl = new URL('/api/teacher/class-bahagi', window.location.origin);
-            bahagiUrl.searchParams.append('classId', selectedClassId);
-            bahagiUrl.searchParams.append('className', selectedClass.name);
-
-            const bahagiRes = await fetch(bahagiUrl.toString());
-            if (bahagiRes.ok) {
-                const bahagiData = await bahagiRes.json();
-                setClassBahagi(bahagiData.bahagi || []);
+            const bahagiResult = await apiClient.bahagi.fetchAll();
+            
+            if (bahagiResult?.success) {
+                setClassBahagi(bahagiResult.data || []);
                 console.log('✅ Bahagi list refreshed');
             }
         } catch (err) {
@@ -210,24 +187,19 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle bahagi form submission
     const handleBahagiSubmit = async (data: any) => {
         try {
-            const res = await fetch('/api/teacher/create-bahagi', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    teacherId: user?.id
-                })
+            const response = await apiClient.bahagi.create({
+                ...data,
+                teacher_id: user?.id || ''
             });
 
-            if (res.ok) {
-                const newBahagi = await res.json();
+            if (response.success) {
+                const newBahagi = response.data || {};
                 alert('✅ Bahagi created successfully!');
                 setShowBahagiForm(false);
                 // Add the new bahagi to classBahagi
-                setClassBahagi([newBahagi.bahagi, ...classBahagi]);
+                setClassBahagi([newBahagi.bahagi || newBahagi, ...classBahagi]);
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating bahagi:', err);
@@ -243,24 +215,18 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle lesson form submission
     const handleLessonSubmit = async (data: any) => {
         try {
-            const res = await fetch('/api/teacher/create-lesson', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    teacherId: user?.id,
-                    className: selectedClassName
-                })
+            const response = await apiClient.lesson.addItem('0', {
+                ...data,
+                teacher_id: user?.id,
+                class_name: selectedClassName
             });
 
-            if (res.ok) {
-                const newLesson = await res.json();
+            if (response.success) {
                 alert('✅ Lesson created successfully!');
                 setShowLessonForm(false);
                 // TODO: Refresh Bahagi view
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating lesson:', err);
@@ -283,23 +249,18 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle yunit form submission
     const handleYunitSubmit = async (data: any) => {
         try {
-            const res = await fetch('/api/teacher/create-yunit', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    teacherId: user?.id
-                })
+            const response = await apiClient.yunit.create({
+                ...data,
+                teacher_id: user?.id
             });
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Yunit created successfully!');
                 setShowYunitForm(false);
                 // Refresh lessons
                 // TODO: Refresh class lessons
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating yunit:', err);
@@ -310,23 +271,20 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle assessment form submission
     const handleAssessmentSubmit = async (data: any) => {
         try {
-            const res = await fetch('/api/teacher/create-assessment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    teacherId: user?.id
-                })
+            const response = await apiClient.assessment.create({
+                ...data,
+                yunit_id: 0,
+                bahagi_id: 0,
+                teacher_id: user?.id
             });
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Assessment created successfully!');
                 setShowAssessmentForm(false);
                 // Refresh lessons
                 // TODO: Refresh class lessons
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating assessment:', err);
@@ -337,21 +295,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle deleting lesson
     const handleDeleteLesson = async (lessonId: string) => {
         try {
-            const res = await fetch('/api/teacher/delete-lesson', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lessonId,
-                    teacherId: user?.id
-                })
-            });
+            const response = await apiClient.lesson.deleteLesson(lessonId);
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Lesson deleted successfully!');
                 // TODO: Refresh Bahagi view
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting lesson:', err);
@@ -374,22 +324,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle deleting yunit
     const handleDeleteYunit = async (lessonId: string, yunitId: string) => {
         try {
-            const res = await fetch('/api/teacher/delete-yunit', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lessonId,
-                    yunitId,
-                    teacherId: user?.id
-                })
-            });
+            const response = await apiClient.yunit.deleteYunit(parseInt(yunitId));
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Yunit deleted successfully!');
                 // TODO: Refresh Bahagi view
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting yunit:', err);
@@ -406,22 +347,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle deleting assessment
     const handleDeleteAssessment = async (lessonId: string, assessmentId: string) => {
         try {
-            const res = await fetch('/api/teacher/delete-assessment', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lessonId,
-                    assessmentId,
-                    teacherId: user?.id
-                })
-            });
+            const response = await apiClient.assessment.deleteAssessment(parseInt(assessmentId));
 
-            if (res.ok) {
+            if (response.success) {
                 alert('✅ Assessment deleted successfully!');
                 // TODO: Refresh Bahagi view
             } else {
-                const error = await res.json();
-                alert(`❌ Error: ${error.error}`);
+                alert(`❌ Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting assessment:', err);

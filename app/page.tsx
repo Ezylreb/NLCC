@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import { apiClient } from '@/lib/api-client';
 import { LandingPage } from './components/LandingPage';
-import { AuthPage } from './components/AuthPage';
+import { LoginPage } from './components/LoginPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { TeacherDashboardV2 } from './components/TeacherDashboardV2';
 import { StudentDashboard } from './components/StudentDashboard';
@@ -21,17 +22,15 @@ interface User {
 }
 
 export default function Home() {
-  const [view, setView] = useState<'landing' | 'auth' | 'app' | 'lesson' | 'game'>('landing');
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [view, setView] = useState<'landing' | 'auth' | 'app' | 'lesson' | 'game'>('auth');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isTeacher, setIsTeacher] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
 
   const [isMaintenance, setIsMaintenance] = useState(false);
-  const [isSignupEnabled, setIsSignupEnabled] = useState(true);
   const [isSessionLoaded, setIsSessionLoaded] = useState(false);
+
+  const isAdmin = user?.role === 'admin';
 
   React.useEffect(() => {
     // Restore session from localStorage
@@ -41,8 +40,6 @@ export default function Home() {
         const userData = JSON.parse(savedUser);
         setUser(userData);
         setIsLoggedIn(true);
-        if (userData.role === 'ADMIN') setIsAdmin(true);
-        if (userData.role === 'TEACHER') setIsTeacher(true);
         setView('app');
       } catch (err) {
         console.error('Failed to restore session:', err);
@@ -54,11 +51,9 @@ export default function Home() {
     // Fetch settings
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/admin/settings');
-        if (res.ok) {
-          const data = await res.json();
-          setIsMaintenance(data.maintenance_mode);
-          setIsSignupEnabled(data.signup_enabled !== false);
+        const response = await apiClient.admin.getSettings();
+        if (response.success && response.data) {
+          setIsMaintenance(response.data.maintenance_mode);
         }
       } catch (err) {
         console.error('Failed to fetch settings:', err);
@@ -72,10 +67,8 @@ export default function Home() {
   const handleLogout = () => {
     localStorage.removeItem('nllc_user');
     setIsLoggedIn(false);
-    setIsAdmin(false);
-    setIsTeacher(false);
     setUser(null);
-    setView('landing');
+    setView('auth');
     setActiveLessonId(null);
   };
 
@@ -84,13 +77,9 @@ export default function Home() {
       <LandingPage
         onStart={() => {
           if (isLoggedIn) setView('app');
-          else {
-            setAuthMode('login');
-            setView('auth');
-          }
+          else setView('auth');
         }}
         onLogin={() => {
-          setAuthMode('login');
           setView('auth');
         }}
       />
@@ -114,85 +103,83 @@ export default function Home() {
       );
     }
     return (
-      <AuthPage
-        initialMode={authMode}
-        isSignupEnabled={isSignupEnabled} 
+      <LoginPage
         onAuthSuccess={(userData) => {
-          setIsLoggedIn(true);
           if (userData && typeof userData === 'object') {
             const userObj = userData as { firstName: string; lastName: string; email: string; role?: string; id?: string };
             setUser(userObj);
+            setIsLoggedIn(true);
             localStorage.setItem('nllc_user', JSON.stringify(userObj));
-            if (userObj.role === 'ADMIN') setIsAdmin(true);
-            if (userObj.role === 'TEACHER') setIsTeacher(true);
-          } else if (userData === true) {
-            setIsAdmin(true);
-            localStorage.setItem('nllc_user', JSON.stringify({ firstName: 'Admin', lastName: 'User', role: 'ADMIN' }));
+            // Trigger immediate redirect to app view
+            setView('app');
           }
-          setView('app');
         }}
-        onBack={() => setView('landing')}
+        onBack={() => {
+          setView('landing');
+        }}
       />
     );
   }
 
-  // Admin Dashboard
-  if (isAdmin) {
-    return <AdminDashboard onLogout={handleLogout} />;
+  if (view === 'app') {
+    // Role-based auto-redirect
+    if (!user) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+          <div className="text-white text-center">
+            <p className="text-xl font-bold mb-4">Loading...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Auto-redirect based on role from database
+    switch (user.role?.toUpperCase()) {
+      case 'ADMIN':
+        return (
+          <AdminDashboard
+            onLogout={handleLogout}
+          />
+        );
+      
+      case 'TEACHER':
+        return (
+          <TeacherDashboardV2
+            onLogout={handleLogout}
+            user={user}
+          />
+        );
+      
+      case 'STUDENT':
+      default:
+        if (activeLessonId) {
+          return (
+            <GamePages
+              onBack={() => setActiveLessonId(null)}
+            />
+          );
+        }
+        return (
+          <StudentDashboard
+            onLogout={handleLogout}
+            onStartLesson={(lessonId) => {
+              setActiveLessonId(lessonId);
+            }}
+            user={user}
+          />
+        );
+    }
   }
 
-  // Teacher Dashboard
-  if (isTeacher) {
-    return <TeacherDashboardV2 user={user} onLogout={handleLogout} />;
-  }
-
-  // Game/Assessment Page
-  if (view === 'game') {
-    return <GamePages onBack={() => setView('app')} />;
-  }
-
-  // Lesson Detail Page
-  if (view === 'lesson' && activeLessonId) {
+  if (view === 'lesson') {
     return (
       <LessonDetailPage
-        lessonId={activeLessonId}
-        onBack={() => {
-          setView('app');
-          setActiveLessonId(null);
-        }}
-        onStartGame={() => {
-          setView('game');
-        }}
+        lessonId={activeLessonId || ''}
+        onBack={() => setView('app')}
+        onStartGame={() => setView('game')}
       />
     );
   }
 
-  // Student Dashboard
-  if (isLoggedIn && !isAdmin && !isTeacher) {
-    return (
-      <StudentDashboard
-        user={user}
-        onLogout={handleLogout}
-        onStartLesson={(lessonId: string) => {
-          setActiveLessonId(lessonId);
-          setView('lesson');
-        }}
-      />
-    );
-  }
-
-  // Default: go to landing
-  return <LandingPage
-    onStart={() => {
-      if (isLoggedIn) setView('app');
-      else {
-        setAuthMode('login');
-        setView('auth');
-      }
-    }}
-    onLogin={() => {
-      setAuthMode('login');
-      setView('auth');
-    }}
-  />;
+  return <div className="min-h-screen bg-slate-950" />;
 }

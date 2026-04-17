@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, Loader } from 'lucide-react';
 import Image from 'next/image';
+import { apiClient } from '@/lib/api-client';
 
 interface BahagiIconSelectorProps {
     bahagiId: number;
@@ -75,41 +76,26 @@ export const BahagiIconSelector: React.FC<BahagiIconSelectorProps> = ({
 
         setLoading(true);
         try {
-            const body: any = {
-                bahagiId,
-                iconType: selectedType,
-                iconPath: selectedType === 'default' ? selectedIcon : customFile?.name || selectedIcon
-            };
+            let iconUrl = '';
 
             if (selectedType === 'custom' && customFile) {
-                const formData = new FormData();
-                formData.append('file', customFile);
-                formData.append('uploadedBy', userId);
-                formData.append('fileType', 'image');
-
-                const uploadRes = await fetch('/api/teacher/upload-media', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!uploadRes.ok) throw new Error('Upload failed');
-                const uploadData = await uploadRes.json();
-                body.iconPath = uploadData.url;
+                // Upload custom image
+                const uploadResult = await apiClient.upload.uploadFile(customFile, 'image');
+                if (!uploadResult.success) throw new Error('Upload failed');
+                iconUrl = uploadResult.data?.url || uploadResult.data?.path || uploadResult.data?.file_url;
             } else if (selectedType === 'default') {
+                // Use predefined icon path
                 const icon = predefinedIcons.find(i => i.name === selectedIcon);
-                body.iconPath = icon?.path || selectedIcon;
+                iconUrl = icon?.path || selectedIcon;
             }
 
-            const res = await fetch('/api/teacher/bahagi-icon', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+            // Update bahagi with new icon
+            const updateResult = await apiClient.bahagi.update(bahagiId, {
+                image_url: iconUrl
             });
 
-            if (!res.ok) throw new Error('Failed to update Bahagi icon');
-
-            const data = await res.json();
-            onSuccess?.(data.iconPath, data.iconType);
+            if (!updateResult.success) throw new Error(updateResult.error || 'Failed to update Bahagi icon');
+            onSuccess?.(iconUrl, selectedType);
             onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save icon');

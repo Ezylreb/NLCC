@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface AvatarDisplayProps {
   studentId: string;
@@ -46,10 +47,9 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
   useEffect(() => {
     const fetchAvatar = async () => {
       try {
-        const res = await fetch(`/api/student/avatar?studentId=${studentId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvatar(data);
+        const response = await apiClient.avatar.getAvatar(studentId);
+        if (response.success && response.data) {
+          setAvatar(response.data);
         }
       } catch (error) {
         console.error('Failed to fetch avatar:', error);

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface Assignment {
     id: string;
@@ -32,17 +33,17 @@ export const AssignmentsPage: React.FC<AssignmentsPageProps> = ({ onBack, user }
     React.useEffect(() => {
         const fetchData = async () => {
             try {
-                const url = user?.id ? `/api/teacher/assignments?userId=${user.id}` : '/api/teacher/assignments';
-                const [assignRes, linksRes] = await Promise.all([
-                    fetch(url),
-                    fetch('/api/teacher/lesson-links')
+                const [assignResponse, linksResponse] = await Promise.all([
+                    apiClient.resource.fetchAssignments(),
+                    apiClient.resource.fetchLinks()
                 ]);
                 
-                const assignData = await assignRes.json();
-                const linksData = await linksRes.json();
-                
-                if (assignData.assignments) setAssignments(assignData.assignments);
-                if (linksData.links) setLessonLinks(linksData.links);
+                if (assignResponse.success) {
+                    setAssignments(assignResponse.data?.assignments || []);
+                }
+                if (linksResponse.success) {
+                    setLessonLinks(linksResponse.data?.links || []);
+                }
             } catch (err) {
                 console.error('Failed to fetch assignments or links:', err);
             } finally {
@@ -55,17 +56,11 @@ export const AssignmentsPage: React.FC<AssignmentsPageProps> = ({ onBack, user }
     const handleProofUpload = async (file: File) => {
         setIsUploading(true);
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (res.ok) {
-                setProofUrl(data.url);
+            const result = await apiClient.upload.uploadFile(file);
+            if (result.success) {
+                setProofUrl(result.data?.url || result.data?.path || result.data?.file_url);
             } else {
-                alert(`Upload failed: ${data.error}`);
+                alert(`Upload failed: ${result.error}`);
             }
         } catch (err) {
             console.error('Upload Error:', err);
@@ -286,16 +281,12 @@ export const AssignmentsPage: React.FC<AssignmentsPageProps> = ({ onBack, user }
                                                 if (!user?.id) return;
                                                 setIsSubmitting(true);
                                                 try {
-                                                    const res = await fetch('/api/user/submit-assignment', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({
-                                                            userId: user.id,
-                                                            assignmentId: selectedAssignment.id,
-                                                            proofUrl: proofUrl
-                                                        })
+                                                    const result = await apiClient.resource.createLink({
+                                                        user_id: user.id,
+                                                        assignment_id: selectedAssignment.id,
+                                                        proof_url: proofUrl
                                                     });
-                                                    if (res.ok) {
+                                                    if (result.success) {
                                                         setAssignments(prev => prev.map(a => a.id === selectedAssignment.id ? { ...a, status: 'completed' } : a));
                                                         setSelectedAssignment(null);
                                                         setProofUrl(null);

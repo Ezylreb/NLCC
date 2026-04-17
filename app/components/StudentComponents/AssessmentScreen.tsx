@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface Question {
   id?: string;
@@ -52,14 +53,14 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     const fetchAssessment = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`/api/student/assessments?studentId=${studentId}&yunitId=${yunitId}`);
+        const response = await apiClient.assessment.fetch({ yunit_id: Number(yunitId) });
         
-        if (!res.ok) throw new Error('Failed to fetch assessment');
-        
-        const data = await res.json();
-        if (data.assessments?.length > 0) {
-          setAssessment(data.assessments[0]);
-          setAnswers(new Array(data.assessments[0].questions?.length || 0).fill(null));
+        if (response.data?.assessments?.length > 0) {
+          const assessmentData = response.data.assessments[0];
+          setAssessment(assessmentData);
+          setAnswers(new Array(assessmentData.questions?.length || 0).fill(null));
+        } else if (response.error) {
+          throw new Error(response.error);
         }
       } catch (err: any) {
         setError(err.message);
@@ -132,7 +133,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     if (question.type === 'multiple-choice') {
       return answer === question.correctAnswer;
     } else if (question.type === 'matching') {
-      return question.pairs?.every((pair: any, idx: number) => answer?.[idx] === pair.correctMatch);
+      return question.pairs?.every((pair: any, idx: number) => answer?.[idx] === pair.correctMatch) ?? false;
     } else if (question.type === 'scramble' || question.type === 'scramble-word') {
       return answer?.toLowerCase() === question.correctAnswer?.toLowerCase();
     }
@@ -158,23 +159,19 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
         checkAnswer(assessment.questions[idx], answer)
       ).length;
 
-      const res = await fetch('/api/student/assessments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          yunitId,
-          bahagiId,
-          assessmentId: assessment.id,
-          answers,
-          totalQuestions
-        })
+      const result = await apiClient.assessment.submit(Number(assessment.id), {
+        student_id: studentId,
+        answers,
+        yunit_id: Number(yunitId),
+        bahagi_id: Number(bahagiId),
+        total_questions: assessment.questions.length
       });
 
-      if (!res.ok) throw new Error('Failed to submit assessment');
-
-      const result = await res.json();
-      onComplete(result);
+      if (result.success) {
+        onComplete(result);
+      } else {
+        throw new Error(result.error || 'Failed to submit assessment');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

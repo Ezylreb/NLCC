@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface EditBahagiFormProps {
   isOpen: boolean;
@@ -72,25 +73,16 @@ export const EditBahagiForm: React.FC<EditBahagiFormProps> = ({
     if (iconFile) {
       setUploading(true);
       try {
-        const formData = new FormData();
-        formData.append('file', iconFile);
-        formData.append('type', 'icon');
-
         console.log('📤 Uploading icon file...');
 
-        const uploadRes = await fetch('/api/upload-media', {
-          method: 'POST',
-          body: formData
-        });
+        const uploadResult = await apiClient.upload.uploadFile(iconFile, 'icon');
 
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          console.log('✅ Icon uploaded:', uploadData);
-          submitData.iconPath = uploadData.url || uploadData.path || uploadData.file_url;
+        if (uploadResult.success) {
+          const uploadedUrl = uploadResult.data?.url || uploadResult.data?.path || uploadResult.data?.file_url;
+          console.log('✅ Icon uploaded:', uploadResult);
+          submitData.iconPath = uploadedUrl;
         } else {
-          const errorText = await uploadRes.text();
-          console.error('Upload failed:', uploadRes.status, errorText);
-          throw new Error(`Upload failed: ${uploadRes.status}`);
+          throw new Error(uploadResult.error || 'Upload failed');
         }
       } catch (err) {
         console.error('Icon upload error:', err);

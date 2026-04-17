@@ -74,18 +74,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
       }
 
-      // Role-based portal restrictions
-      if (requestedMode === 'login' && (user.role === 'ADMIN' || user.role === 'TEACHER')) {
-        return NextResponse.json({ error: 'Please use the appropriate portal for staff logins.' }, { status: 403 });
-      }
-      
-      if (requestedMode === 'admin' && user.role !== 'ADMIN') {
-        return NextResponse.json({ error: 'This portal is restricted to administrators.' }, { status: 403 });
-      }
-
-      if (requestedMode === 'teacher' && user.role !== 'TEACHER') {
-        return NextResponse.json({ error: 'This portal is restricted to teachers.' }, { status: 403 });
-      }
+      // Allow all users to login - role-based redirect happens on frontend
+      // No portal restrictions - the system automatically redirects based on user's role in database
 
       // Try to log the login activity (if table exists)
       try {

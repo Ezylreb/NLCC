@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface BahagiData {
   title: string;
@@ -38,32 +39,16 @@ export const TeacherBahagi: React.FC<TeacherBahagiProps> = ({
     setIsUploading(true);
     
     try {
-      const formDataObj = new FormData();
-      formDataObj.append('file', file);
+      const response = await apiClient.upload.uploadFile(file, 'image');
 
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formDataObj
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setFormData(prev => ({ ...prev, image: data.url }));
+      if (response.success && response.data?.url) {
+        setFormData(prev => ({ ...prev, image: response.data.url }));
         setErrors(prev => ({ ...prev, image: '' }));
       } else {
-        // Handle setup errors
-        if (data.setupUrl) {
-          setErrors(prev => ({ 
-            ...prev, 
-            image: `${data.details} Click to setup: ${data.setupUrl}` 
-          }));
-        } else {
-          setErrors(prev => ({ 
-            ...prev, 
-            image: data.details || data.error || 'Failed to upload image' 
-          }));
-        }
+        setErrors(prev => ({ 
+          ...prev, 
+          image: response.error || 'Failed to upload image' 
+        }));
       }
     } catch (err: any) {
       setErrors(prev => ({ 

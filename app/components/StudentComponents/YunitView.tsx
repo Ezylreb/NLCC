@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface Yunit {
   id: string | number;
@@ -35,14 +36,13 @@ export const YunitView: React.FC<YunitViewProps> = ({
     const fetchYunits = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(
-          `/api/student/yunits?studentId=${studentId}&bahagiId=${bahagiId}`
-        );
+        const response = await apiClient.yunit.fetchByBahagi(Number(bahagiId));
         
-        if (!res.ok) throw new Error('Failed to fetch lessons');
-        
-        const data = await res.json();
-        setYunits(data.yunits || []);
+        if (response.data?.yunits) {
+          setYunits(response.data.yunits);
+        } else if (response.error) {
+          throw new Error(response.error);
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {

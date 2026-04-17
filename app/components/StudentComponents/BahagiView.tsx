@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface Bahagi {
   id: string | number;
@@ -35,14 +36,13 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
     const fetchBahagis = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(
-          `/api/student/bahagis?studentId=${studentId}&classId=${classId}`
-        );
+        const response = await apiClient.bahagi.fetchAll();
         
-        if (!res.ok) throw new Error('Failed to fetch bahagis');
-        
-        const data = await res.json();
-        setBahagis(data.bahagis || []);
+        if (response.data?.bahagis) {
+          setBahagis(response.data.bahagis);
+        } else if (response.error) {
+          throw new Error(response.error);
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {

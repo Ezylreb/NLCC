@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AssessmentDisplay } from './AssessmentDisplay';
+import { apiClient } from '@/lib/api-client';
 
 interface AssessmentAnswerSubmissionProps {
   assessment: any;
@@ -38,16 +39,14 @@ export const AssessmentAnswerSubmission: React.FC<AssessmentAnswerSubmissionProp
   useEffect(() => {
     const loadPreviousAttempt = async () => {
       try {
-        const res = await fetch(
-          `/api/teacher/get-yunit-answer?yunitId=${yunitId}&assessmentId=${assessment.id}&studentId=${studentId}`
+        const result = await apiClient.assessment.getAttempts(
+          assessment.id, 
+          studentId
         );
-        if (res.ok) {
-          const data = await res.json();
-          if (data.attempts) {
-            setAllAttempts(data.attempts);
-            setAttemptCount(data.attempts.length + 1);
-            setPreviousResult(data.attempts[data.attempts.length - 1]);
-          }
+        if (result.success && result.data?.attempts) {
+          setAllAttempts(result.data.attempts);
+          setAttemptCount(result.data.attempts.length + 1);
+          setPreviousResult(result.data.attempts[result.data.attempts.length - 1]);
         }
       } catch (err) {
         console.error('Error loading previous attempt:', err);
@@ -64,54 +63,38 @@ export const AssessmentAnswerSubmission: React.FC<AssessmentAnswerSubmissionProp
 
     try {
       // Call validation API
-      const validationRes = await fetch('/api/teacher/validate-answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assessment,
-          studentAnswer: answer,
-          assessmentType: assessment.type
-        })
-      });
+      const validationResult = await apiClient.assessment.submit(
+        assessment.id,
+        {
+          student_id: studentId,
+          answers: [answer],
+          yunit_id: Number(yunitId),
+          bahagi_id: assessment.bahagi_id,
+          total_questions: 1
+        }
+      );
 
-      if (!validationRes.ok) {
+      if (!validationResult.success) {
         alert('❌ Error validating answer');
+        setIsSubmitting(false);
         return;
       }
 
-      const validationData = await validationRes.json();
+      const validationData = validationResult.data;
 
-      // Save attempt to database
-      const saveRes = await fetch('/api/teacher/save-yunit-answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          yunitId,
-          assessmentId: assessment.id,
-          studentId,
-          studentAnswer: answer,
-          isCorrect: validationData.isCorrect,
-          pointsEarned: validationData.pointsEarned,
-          assessmentType: assessment.type,
-          attemptNumber: attemptCount
-        })
-      });
-
-      if (!saveRes.ok) {
-        console.error('Error saving attempt');
-      }
-
+      // Create submission result
       const submissionResult: SubmissionResult = {
         isCorrect: validationData.isCorrect,
-        pointsEarned: validationData.pointsEarned,
+        pointsEarned: validationData.pointsEarned || 0,
         feedback: validationData.isCorrect
-          ? `✅ Correct! You earned ${validationData.pointsEarned}/${assessment.points} points.`
-          : `❌ Incorrect. The correct answer is: ${validationData.correctAnswer || 'See below'}`,
+          ? `✅ Correct! You earned ${validationData.pointsEarned || 0}/${assessment.points || 10} points.`
+          : `❌ Incorrect. The correct answer is: ${validationData.correctAnswer || 'See instructor'}`,
         attemptNumber: attemptCount
       };
 
       setResult(submissionResult);
       setAllAttempts([...allAttempts, submissionResult]);
+      setAttemptCount(attemptCount + 1);
 
       if (onComplete) {
         onComplete(submissionResult);

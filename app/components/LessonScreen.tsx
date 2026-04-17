@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, ReactNode } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { LESSON_DATA } from '../lib/lessonData';
 
 
@@ -16,7 +17,7 @@ interface LessonScreenProps {
     user: any;
 }
 
-export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, user }) => {
+const LessonScreenComponent = ({ lessonId, onBack, user }: LessonScreenProps) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [lessonFinished, setLessonFinished] = useState(false);
     const [showGame, setShowGame] = useState(false);
@@ -31,11 +32,10 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
     useEffect(() => {
         const fetchLesson = async () => {
             try {
-                const response = await fetch(`/api/lessons/${lessonId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    setLesson(data);
-                    setItems(data.items);
+                const response = await apiClient.lesson.fetchById(lessonId);
+                if (response.success && response.data) {
+                    setLesson(response.data);
+                    setItems(response.data.items || []);
                 } else {
                     // Fallback to local data
                     const lessonKey = lessonId in LESSON_DATA ? lessonId as keyof typeof LESSON_DATA : 'alpabeto';
@@ -61,16 +61,10 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
     const saveProgress = async (index: number, isCompleted: boolean) => {
         if (!user?.id) return;
         try {
-            await fetch('/api/user/lesson-progress', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: user.id,
-                    lessonId: lessonId,
-                    lastItemIndex: index,
-                    completed: isCompleted,
-                    score: items.length > 0 ? Math.floor(((index + 1) / items.length) * 100) : 0
-                })
+            await apiClient.user.updateLessonProgress(user.id, lessonId, {
+                lastItemIndex: index,
+                completed: isCompleted,
+                score: items.length > 0 ? Math.floor(((index + 1) / items.length) * 100) : 0
             });
         } catch (err) {
             console.error('Failed to save progress:', err);
@@ -284,3 +278,5 @@ export const LessonScreen: React.FC<LessonScreenProps> = ({ lessonId, onBack, us
         </div>
     );
 };
+
+export const LessonScreen = React.memo(LessonScreenComponent);

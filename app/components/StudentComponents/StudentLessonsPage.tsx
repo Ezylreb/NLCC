@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 
 interface Lesson {
   id: string;
@@ -40,19 +41,21 @@ export const StudentLessonsPage: React.FC<StudentLessonsPageProps> = ({
   const fetchLessons = async () => {
     try {
       setIsLoading(true);
-      const url = new URL('/api/student/get-lessons', window.location.origin);
-      url.searchParams.append('studentId', studentId);
-      if (classId) url.searchParams.append('classId', classId);
-
-      const res = await fetch(url.toString());
-      if (res.ok) {
-        const data = await res.json();
-        setLessons(data.lessons || []);
+      
+      // Fetch student enrolled classes and their lessons
+      const result = await apiClient.student.getEnrolledClasses(studentId);
+      
+      if (result.success && result.data) {
+        // Extract lessons from enrolled classes
+        const allLessons = result.data.flatMap((cls: any) => cls.lessons || []);
+        setLessons(allLessons || []);
       } else {
-        console.error('Failed to fetch lessons');
+        console.error('Failed to fetch lessons:', result.error);
+        setLessons([]);
       }
     } catch (err) {
       console.error('Error fetching lessons:', err);
+      setLessons([]);
     } finally {
       setIsLoading(false);
     }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { motion } from 'framer-motion';
 
 interface Class {
@@ -31,12 +32,11 @@ export const ClassView: React.FC<ClassViewProps> = ({
     const fetchClasses = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`/api/student/enrolled-classes?studentId=${studentId}`);
+        const res = await apiClient.student.getEnrolledClasses(studentId);
         
-        if (!res.ok) throw new Error('Failed to fetch classes');
+        if (!res.success) throw new Error(res.error || 'Failed to fetch classes');
         
-        const data = await res.json();
-        setClasses(data.classes || []);
+        setClasses(res.data?.classes || res.data || []);
       } catch (err: any) {
         setError(err.message);
       } finally {

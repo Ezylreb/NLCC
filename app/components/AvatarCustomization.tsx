@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface AvatarCustomizationProps {
   studentId: string;
@@ -23,10 +24,9 @@ export const AvatarCustomization: React.FC<AvatarCustomizationProps> = ({ studen
   useEffect(() => {
     const fetchAvatar = async () => {
       try {
-        const res = await fetch(`/api/student/avatar?studentId=${studentId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvatar(data);
+        const response = await apiClient.avatar.getAvatar(studentId);
+        if (response.success && response.data) {
+          setAvatar(response.data);
         }
       } catch (error) {
         console.error('Failed to fetch avatar:', error);
@@ -40,17 +40,12 @@ export const AvatarCustomization: React.FC<AvatarCustomizationProps> = ({ studen
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/student/avatar', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          ...avatar
-        })
-      });
-
-      if (res.ok) {
+      const result = await apiClient.avatar.updateAvatar(studentId, avatar);
+      
+      if (result.success) {
         alert('✅ Avatar saved!');
+      } else {
+        throw new Error(result.error || 'Failed to save avatar');
       }
     } catch (error) {
       alert('❌ Failed to save avatar');

@@ -4,6 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { MagAralPage } from './StudentComponents/MagAralPage';
+import { StudentLeaderboard } from './StudentComponents/StudentLeaderboard';
+import { StudentMissions } from './StudentComponents/StudentMissions';
+import { StudentShop } from './StudentComponents/StudentShop';
+import { StudentAvatarCustomization } from './StudentComponents/StudentAvatarCustomization';
 
 interface StudentDashboardProps {
     onLogout: () => void;
@@ -106,30 +110,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     )}
 
                     {activeTab === 'leaders' && (
-                        <motion.div key="leaders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-                            <h1 className="text-4xl font-black text-white mb-8">Listahan ng Lider</h1>
-                            <div className="text-slate-400">Coming soon...</div>
+                        <motion.div key="leaders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
+                            <StudentLeaderboard />
                         </motion.div>
                     )}
 
                     {activeTab === 'missions' && (
-                        <motion.div key="missions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-                            <h1 className="text-4xl font-black text-white mb-8">Mga Misyon</h1>
-                            <div className="text-slate-400">Coming soon...</div>
+                        <motion.div key="missions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
+                            <StudentMissions />
                         </motion.div>
                     )}
 
                     {activeTab === 'store' && (
-                        <motion.div key="store" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-                            <h1 className="text-4xl font-black text-white mb-8">Tindahan</h1>
-                            <div className="text-slate-400">Coming soon...</div>
+                        <motion.div key="store" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
+                            <StudentShop />
                         </motion.div>
                     )}
 
                     {activeTab === 'avatar' && (
-                        <motion.div key="avatar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-                            <h1 className="text-4xl font-black text-white mb-8">✨ Avatar Customization</h1>
-                            <div className="text-slate-400">Coming soon...</div>
+                        <motion.div key="avatar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
+                            <StudentAvatarCustomization studentId={user?.id} />
                         </motion.div>
                     )}
 

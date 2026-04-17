@@ -6,6 +6,7 @@ import {
     X, Trash2, Plus, Upload, Music, Image as ImageIcon, 
     ChevronDown, ChevronUp, Save, Loader
 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface MediaFile {
     id?: string;
@@ -67,12 +68,13 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
     useEffect(() => {
         const loadAssessment = async () => {
             try {
-                const res = await fetch(`/api/teacher/edit-assessment?assessmentId=${assessmentId}`);
-                if (!res.ok) throw new Error('Failed to load assessment');
-                
-                const data = await res.json();
-                setAssessment(data.assessment);
-                setQuestions(data.questions || []);
+                const response = await apiClient.assessment.fetchById(Number(assessmentId));
+                if (response.success && response.data) {
+                    setAssessment(response.data);
+                    setQuestions(response.data.questions || []);
+                } else {
+                    throw new Error(response.error || 'Failed to load assessment');
+                }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to load assessment');
             } finally {
@@ -110,31 +112,25 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
         oIndex?: number
     ) => {
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('uploadedBy', userId);
-            formData.append('fileType', fileType);
+            const result = await apiClient.upload.uploadFile(file, fileType);
 
-            const res = await fetch('/api/teacher/upload-media', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!res.ok) throw new Error('Upload failed');
-            const data = await res.json();
-
-            if (oIndex !== undefined) {
-                // Update option media
-                handleOptionChange(qIndex, oIndex, 
-                    fileType === 'image' ? 'image_url' : 'audio_url', 
-                    data.url
-                );
+            if (result.success) {
+                const uploadedUrl = result.data?.url || result.data?.path || result.data?.file_url;
+                if (oIndex !== undefined) {
+                    // Update option media
+                    handleOptionChange(qIndex, oIndex, 
+                        fileType === 'image' ? 'image_url' : 'audio_url', 
+                        uploadedUrl
+                    );
+                } else {
+                    // Update question media
+                    handleQuestionChange(qIndex, 
+                        fileType === 'image' ? 'image_url' : 'audio_url', 
+                        uploadedUrl
+                    );
+                }
             } else {
-                // Update question media
-                handleQuestionChange(qIndex, 
-                    fileType === 'image' ? 'image_url' : 'audio_url', 
-                    data.url
-                );
+                throw new Error(result.error || 'Upload failed');
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Upload failed');
@@ -193,20 +189,14 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
         if (!assessment) return;
         setSaving(true);
         try {
-            const res = await fetch('/api/teacher/edit-assessment', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    assessmentId,
-                    title: assessment.title,
-                    type: assessment.type,
-                    instructions: assessment.instructions,
-                    reward: assessment.reward,
-                    questions
-                })
+            const response = await apiClient.assessment.update(Number(assessmentId), {
+                title: assessment.title,
+                description: assessment.instructions,
+                total_questions: questions.length,
+                questions
             });
 
-            if (!res.ok) throw new Error('Save failed');
+            if (!response.success) throw new Error(response.error || 'Save failed');
             onSuccess?.();
             onClose();
         } catch (err) {

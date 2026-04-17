@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { Trash2, Loader2 } from 'lucide-react';
 
 interface Student {
@@ -42,16 +43,13 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsLoadingAvailable(true);
             setError('');
-            const res = await fetch(
-                `/api/teacher/available-students?classId=${classId}&teacherId=${teacherId}`
-            );
+            const response = await apiClient.class.getStudents(classId);
 
-            if (!res.ok) {
-                throw new Error(`Failed to fetch students: ${res.statusText}`);
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to fetch students');
             }
 
-            const data = await res.json();
-            setAvailableStudents(data.students || []);
+            setAvailableStudents(response.data?.students || []);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load students');
         } finally {
@@ -62,16 +60,13 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
     const fetchEnrolledStudents = async () => {
         try {
             setIsLoadingEnrolled(true);
-            const res = await fetch(
-                `/api/teacher/class-students?classId=${classId}&teacherId=${teacherId}`
-            );
+            const response = await apiClient.class.getStudents(classId);
 
-            if (!res.ok) {
-                throw new Error('Failed to fetch enrolled students');
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to fetch enrolled students');
             }
 
-            const data = await res.json();
-            setEnrolledStudents(data.students || []);
+            setEnrolledStudents(response.data?.students || []);
         } catch (err) {
             console.error('Error fetching enrolled students:', err);
         } finally {
@@ -84,15 +79,10 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsEnrolling(studentId);
             setError('');
-            const res = await fetch(`/api/teacher/class-students`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId, studentId, teacherId })
-            });
+            const response = await apiClient.class.addStudent(classId, studentId);
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Enrollment failed');
+            if (!response.success) {
+                throw new Error(response.error || 'Enrollment failed');
             }
 
             setSuccessMessage(`${studentName} has been added to ${className}!`);
@@ -119,14 +109,10 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsRemoving(studentId);
             setError('');
-            const res = await fetch(
-                `/api/teacher/unenroll-student?classId=${classId}&studentId=${studentId}&teacherId=${teacherId}`,
-                { method: 'DELETE' }
-            );
+            const response = await apiClient.class.removeStudent(classId, studentId);
 
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Removal failed');
+            if (!response.success) {
+                throw new Error(response.error || 'Removal failed');
             }
 
             setSuccessMessage(`${studentName} has been removed from ${className}`);

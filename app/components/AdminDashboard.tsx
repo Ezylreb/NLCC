@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import { apiClient } from '@/lib/api-client';
 
 interface AdminDashboardProps {
     onLogout: () => void;
@@ -14,6 +15,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const [isChangingSettings, setIsChangingSettings] = useState(false);
     const [stats, setStats] = useState<any[]>([]);
     const [recentUsers, setRecentUsers] = useState<any[]>([]);
+    const [userPage, setUserPage] = useState(1);
+    const [userTotalPages, setUserTotalPages] = useState(1);
+    const [isUsersLoading, setIsUsersLoading] = useState(false);
     const [recentActivities, setRecentActivities] = useState<any[]>([]);
     const [activityPage, setActivityPage] = useState(1);
     const [activityTotalPages, setActivityTotalPages] = useState(1);
@@ -90,30 +94,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
 
         try {
-            const response = await fetch('/api/admin/create-student', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: newStudent.firstName,
-                    lastName: newStudent.lastName,
-                    email: newStudent.email,
-                    password: newStudent.password,
-                    lrn: newStudent.lrn,
-                    teacherId: newStudent.teacherId,
-                    classId: newStudent.classId,
-                }),
+            const response = await apiClient.admin.createStudent({
+                name: `${newStudent.firstName} ${newStudent.lastName}`,
+                email: newStudent.email,
+                password: newStudent.password,
+                lrn: newStudent.lrn,
+                teacher_id: newStudent.teacherId,
+                class_id: newStudent.classId,
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
+            if (response.success) {
                 setShowCreateStudent(false);
                 setNewStudent({ firstName: '', lastName: '', email: '', lrn: '', password: '', teacherId: '', classId: '' });
                 setClasses([]);
                 alert('✅ Student account created successfully!');
-                fetchDashboardData();
+                // Switch to users tab and refresh
+                setActiveTab('users');
+                setUserPage(1);
+                setSearchQuery('');
+                setRoleFilter('USER');
+                setTimeout(() => fetchUsers(1), 500);
             } else {
-                setError(data.error || 'Failed to create student account.');
+                setError(response.error || 'Failed to create student account.');
             }
         } catch (err) {
             console.error('Error creating student:', err);
@@ -147,21 +149,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
 
         try {
-            const response = await fetch('/api/admin/create-teacher', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newTeacher),
+            const response = await apiClient.admin.createTeacher({
+                name: `${newTeacher.firstName} ${newTeacher.lastName}`,
+                email: newTeacher.email,
+                password: newTeacher.password,
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
+            if (response.success) {
                 setShowCreateTeacher(false);
                 setNewTeacher({ firstName: '', lastName: '', email: '', password: '', className: '' });
                 alert('✅ Teacher account created successfully!');
-                fetchDashboardData();
+                // Switch to users tab and refresh
+                setActiveTab('users');
+                setUserPage(1);
+                setSearchQuery('');
+                setRoleFilter('TEACHER');
+                setTimeout(() => fetchUsers(1), 500);
             } else {
-                setError(data.error || 'Failed to create teacher account.');
+                setError(response.error || 'Failed to create teacher account.');
             }
         } catch (err) {
             console.error('Error creating teacher:', err);
@@ -195,29 +200,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
 
         try {
-            const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: selectedUser.firstName,
-                    lastName: selectedUser.lastName,
-                    email: selectedUser.email,
-                    lrn: selectedUser.lrn,
-                    role: selectedUser.role,
-                    className: selectedUser.class_name,
-                    teacher_id: selectedUser.teacher_id || null,
-                    class_id: selectedUser.class_id || null,
-                }),
+            const response = await apiClient.admin.updateUser(selectedUser.id, {
+                name: `${selectedUser.firstName} ${selectedUser.lastName}`,
+                email: selectedUser.email,
+                lrn: selectedUser.lrn,
+                role: selectedUser.role,
+                class_name: selectedUser.class_name,
+                teacher_id: selectedUser.teacher_id || null,
+                class_id: selectedUser.class_id || null,
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
+            if (response.success) {
                 setShowManageModal(false);
                 alert('User updated successfully!');
                 fetchDashboardData();
             } else {
-                setError(data.error || 'Failed to update user');
+                setError(response.error || 'Failed to update user');
             }
         } catch (err) {
             setError('Connection error. Please try again.');
@@ -233,17 +231,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         setIsDeleting(true);
 
         try {
-            const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
-                method: 'DELETE',
-            });
+            const response = await apiClient.admin.deleteUser(selectedUser.id);
 
-            if (response.ok) {
+            if (response.success) {
                 setShowManageModal(false);
                 alert('User deleted successfully');
                 fetchDashboardData();
             } else {
-                const data = await response.json();
-                setError(data.error || 'Failed to delete user');
+                setError(response.error || 'Failed to delete user');
             }
         } catch (err) {
             setError('Connection error. Please try again.');
@@ -255,27 +250,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const fetchDashboardData = async () => {
         setIsDataLoading(true); // Added to ensure loading state is shown
         try {
-            const [statsRes, settingsRes] = await Promise.all([
-                fetch('/api/admin/stats'),
-                fetch('/api/admin/settings')
+            const [statsResponse, settingsResponse] = await Promise.all([
+                apiClient.admin.getStats(),
+                apiClient.admin.getSettings()
             ]);
             
-            if (statsRes.ok) {
-                const statsData = await statsRes.json().catch(() => null);
-                if (statsData) {
-                    setStats(statsData.stats || []);
-                    setRecentUsers(statsData.users || []);
-                    setChartData(statsData.chartData || []);
-                    if (statsData.activities) setRecentActivities(statsData.activities); // Ensure activities are updated
-                }
+            if (statsResponse.success && statsResponse.data) {
+                setStats(statsResponse.data.stats || []);
+                setRecentUsers(statsResponse.data.users || []);
+                setChartData(statsResponse.data.chartData || []);
+                if (statsResponse.data.activities) setRecentActivities(statsResponse.data.activities);
             }
 
-            if (settingsRes.ok) {
-                const settingsData = await settingsRes.json().catch(() => null);
-                if (settingsData) {
-                    setSettings(settingsData);
-                    setTempSettings(settingsData);
-                }
+            if (settingsResponse.success && settingsResponse.data) {
+                setSettings(settingsResponse.data);
+                setTempSettings(settingsResponse.data);
             }
         } catch (err) {
             console.error('Failed to fetch admin data:', err);
@@ -287,14 +276,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const handleSaveSettings = async () => {
         setIsChangingSettings(true);
         try {
-            // Update each changed setting
-            const updates = Object.entries(tempSettings).map(([key, value]) => {
+            // Update changed settings via apiClient
+            const updates = Object.entries(tempSettings).map(async ([key, value]) => {
                 if (settings[key] !== value) {
-                    return fetch('/api/admin/settings', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ key, value })
-                    });
+                    return apiClient.admin.updateSettings({ key, value });
                 }
                 return null;
             }).filter(u => u !== null);
@@ -314,12 +299,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
     const updateSetting = async (key: string, value: boolean) => {
         try {
-            const response = await fetch('/api/admin/settings', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key, value })
-            });
-            if (response.ok) {
+            const response = await apiClient.admin.updateSettings({ key, value });
+            if (response.success) {
                 setSettings({ ...settings, [key]: value });
             }
         } catch (err) {
@@ -327,15 +308,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
     };
 
+    const fetchUsers = async (page: number = 1) => {
+        setIsUsersLoading(true);
+        try {
+            const response = await apiClient.admin.getUsers(page, 50, roleFilter === 'all' ? undefined : roleFilter, searchQuery || undefined);
+            if (response.success) {
+                // API returns users directly, not wrapped in data field
+                setRecentUsers(response.users || []);
+                setUserPage(response.pagination?.page || page);
+                setUserTotalPages(response.pagination?.totalPages || 1);
+            } else {
+                console.error('Failed to fetch users:', response.error);
+            }
+        } catch (err) {
+            console.error('Failed to fetch users:', err);
+        } finally {
+            setIsUsersLoading(false);
+        }
+    };
+
     const fetchActivities = async (page: number) => {
         setIsActivitiesLoading(true);
         try {
-            const response = await fetch(`/api/admin/activities?page=${page}&limit=5`);
-            const data = await response.json();
-            if (response.ok) {
-                setRecentActivities(data.activities);
-                setActivityTotalPages(data.pagination.totalPages);
-                setActivityPage(data.pagination.currentPage);
+            const response = await apiClient.admin.getActivities(page, 5);
+            if (response.success && response.data) {
+                setRecentActivities(response.data.activities || []);
+                setActivityTotalPages(response.data.pagination?.totalPages || 1);
+                setActivityPage(response.data.pagination?.currentPage || page);
             }
         } catch (err) {
             console.error('Failed to fetch activities:', err);
@@ -347,15 +346,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const fetchTeachers = async () => {
         setIsLoadingTeachers(true);
         try {
-            const response = await fetch('/api/admin/teachers');
-            const data = await response.json();
-            if (response.ok) {
-                setTeachers(data.teachers);
+            const response = await apiClient.admin.getTeachers();
+            if (response.success) {
+                // API returns teachers directly, not wrapped in data field
+                setTeachers(response.teachers || []);
             } else {
-                console.error('Failed to fetch teachers:', data.error);
+                console.error('Failed to fetch teachers:', response.error);
+                setTeachers([]);
             }
         } catch (err) {
             console.error('Failed to fetch teachers:', err);
+            setTeachers([]);
         } finally {
             setIsLoadingTeachers(false);
         }
@@ -368,12 +369,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
         setIsLoadingClasses(true);
         try {
-            const response = await fetch(`/api/admin/classes?teacherId=${teacherId}`);
-            const data = await response.json();
-            if (response.ok) {
-                setClasses(data.classes);
+            const response = await apiClient.admin.getClassesByTeacher(teacherId);
+            if (response.success) {
+                // API returns classes directly, not wrapped in data field
+                setClasses(response.classes || []);
             } else {
-                console.error('Failed to fetch classes:', data.error);
+                console.error('Failed to fetch classes:', response.error);
                 setClasses([]);
             }
         } catch (err) {
@@ -393,6 +394,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             fetchActivities(activityPage);
         }
     }, [activityPage, activeTab]);
+
+    React.useEffect(() => {
+        // When switching to users tab or filters change, fetch users starting from page 1
+        if (activeTab === 'users') {
+            setUserPage(1);
+        }
+    }, [activeTab, roleFilter, searchQuery]);
+
+    React.useEffect(() => {
+        // Fetch users when page changes (and ensure we're on the users tab)
+        if (activeTab === 'users' && userPage >= 1) {
+            fetchUsers(userPage);
+        }
+    }, [userPage, activeTab]);
 
     return (
         <div className="min-h-screen bg-slate-900 flex selection:bg-brand-purple relative overflow-hidden">
@@ -1179,6 +1194,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                     </tbody>
                                 </table>
                             </div>
+                            
+                            {/* Users Pagination */}
+                            {recentUsers.length > 0 && (
+                                <div className="flex items-center justify-between p-4 border-t border-slate-700 bg-slate-900/30">
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                        Page {userPage} of {userTotalPages} • {recentUsers.length} users shown
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            disabled={userPage === 1 || isUsersLoading}
+                                            onClick={() => setUserPage(p => p - 1)}
+                                            className="text-xs font-black text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                        >
+                                            ← PREVIOUS
+                                        </button>
+                                        <div className="flex items-center gap-1.5">
+                                            {[...Array(userTotalPages)].map((_, i) => {
+                                                const p = i + 1;
+                                                // Only show 3 pages if there are many
+                                                if (userTotalPages > 3 && (p < userPage - 1 || p > userPage + 1)) {
+                                                    if (p === 1 || p === userTotalPages) return <span key={p} className="text-[10px] text-slate-600">.</span>;
+                                                    return null;
+                                                }
+                                                return (
+                                                    <button
+                                                        key={p}
+                                                        onClick={() => setUserPage(p)}
+                                                        className={`w-6 h-6 rounded-lg text-[10px] font-black transition-all ${
+                                                            userPage === p 
+                                                            ? 'bg-brand-purple text-white shadow-lg shadow-purple-500/20' 
+                                                            : 'text-slate-500 hover:bg-slate-700 hover:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <button 
+                                            disabled={userPage === userTotalPages || isUsersLoading}
+                                            onClick={() => setUserPage(p => p + 1)}
+                                            className="text-xs font-black text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors flex items-center gap-1"
+                                        >
+                                            NEXT →
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

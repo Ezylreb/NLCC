@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { ClassView } from './ClassView';
 import { BahagiView } from './BahagiView';
 import { YunitView } from './YunitView';
@@ -37,12 +38,11 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   useEffect(() => {
     const fetchTeacherInfo = async () => {
       try {
-        const res = await fetch(`/api/student/teacher-info?studentId=${studentId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setTeacherInfo(data);
+        const res = await apiClient.student.getDetails(studentId);
+        if (res.success) {
+          setTeacherInfo(res.data);
           // If student has a teacher assigned, show the teacher lessons view
-          if (data.isAssigned) {
+          if (res.data?.isAssigned) {
             setCurrentView('lessons');
           }
         }

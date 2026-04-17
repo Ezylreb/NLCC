@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { LessonCard } from './LessonCard';
+import { apiClient } from '@/lib/api-client';
 
 interface TeacherLessonsViewProps {
   studentId: string;
@@ -51,16 +52,13 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
         setIsLoading(true);
         setError(null);
         
-        const res = await fetch(
-          `/api/student/teacher-lessons?studentId=${studentId}&teacherId=${teacherId}`
-        );
+        const result = await apiClient.student.getEnrolledClasses(studentId);
 
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || 'Failed to fetch lessons');
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to fetch lessons');
         }
 
-        const data = await res.json();
+        const data = result.data;
         setLessons(data.lessons || []);
         setCompletedCount(data.completedLessons || 0);
 

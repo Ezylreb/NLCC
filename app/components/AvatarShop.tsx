@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface AvatarItem {
   id: string;
@@ -195,10 +196,9 @@ export const AvatarShop: React.FC<AvatarShopProps> = ({ studentId, balance, onPu
   useEffect(() => {
     const fetchOwnedItems = async () => {
       try {
-        const res = await fetch(`/api/student/avatar-items?studentId=${studentId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setOwnedItems(data.items || []);
+        const response = await apiClient.avatar.getItems(studentId);
+        if (response.success) {
+          setOwnedItems(response.data?.items || []);
         }
       } catch (error) {
         console.error('Failed to fetch owned items:', error);
@@ -225,20 +225,14 @@ export const AvatarShop: React.FC<AvatarShopProps> = ({ studentId, balance, onPu
     }
 
     try {
-      const res = await fetch('/api/student/avatar-items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          itemId: item.id,
-          cost: item.cost
-        })
-      });
+      const result = await apiClient.avatar.purchaseItem(studentId, item.id);
 
-      if (res.ok) {
+      if (result.success) {
         setOwnedItems([...ownedItems, item.id]);
         onPurchase?.(item);
         alert(`🎉 Purchased ${item.name}!`);
+      } else {
+        throw new Error(result.error || 'Purchase failed');
       }
     } catch (error) {
       alert('Failed to purchase item');
