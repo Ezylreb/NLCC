@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
 
         if (!classId || !teacherId) {
             return NextResponse.json(
-                { error: 'classId and teacherId parameters required' },
+                { success: false, error: 'classId and teacherId parameters required' },
                 { status: 400 }
             );
         }
@@ -29,37 +29,42 @@ export async function GET(req: NextRequest) {
 
         if (!classCheck.rows.length) {
             return NextResponse.json(
-                { error: 'You do not own this class' },
+                { success: false, error: 'You do not own this class' },
                 { status: 403 }
             );
         }
 
-        // Get all students that are not yet enrolled in this class
+        // Get all students that are:
+        // 1. Assigned to this teacher (teacher_id matches)
+        // 2. Not yet enrolled in this specific class
         const students = await query(
             `SELECT 
                 u.id,
                 u.first_name as "firstName",
                 u.last_name as "lastName",
-                u.email,
-                COALESCE(u.level, 'kinder1') as "level"
+                u.email
             FROM users u
-            WHERE u.role = 'student'
+            WHERE (u.role = 'student' OR u.role = 'USER')
+            AND u.teacher_id = $2
             AND u.id NOT IN (
                 SELECT student_id FROM class_enrollments WHERE class_id = $1
             )
             ORDER BY u.first_name, u.last_name`,
-            [classId]
+            [classId, teacherId]
         );
 
         return NextResponse.json({
-            classId: parseInt(classId as string),
-            totalAvailable: students.rows.length,
-            students: students.rows
+            success: true,
+            data: {
+                classId: classId,
+                totalAvailable: students.rows.length,
+                students: students.rows
+            }
         });
     } catch (error) {
         console.error('Get available students error:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch available students' },
+            { success: false, error: 'Failed to fetch available students' },
             { status: 500 }
         );
     }

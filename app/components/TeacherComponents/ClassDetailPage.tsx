@@ -416,7 +416,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             {showStudentsView && (
                 <div className="animate-in fade-in duration-500">
                     <ManageClassStudents
-                        classId={parseInt(classId)}
+                        classId={classId}
                         className={className}
                         teacherId={teacherId || ''}
                     />

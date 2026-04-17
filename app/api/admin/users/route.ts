@@ -78,19 +78,21 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      users,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasMore: page < totalPages
+      data: {
+        users,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasMore: page < totalPages
+        }
       }
     });
   } catch (error: any) {
     console.error('Admin Fetch Users Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch users', details: error.message },
+      { success: false, error: 'Failed to fetch users', details: error.message },
       { status: 500 }
     );
   }

@@ -313,12 +313,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         try {
             const response = await apiClient.admin.getUsers(page, 50, roleFilter === 'all' ? undefined : roleFilter, searchQuery || undefined);
             if (response.success) {
-                // API returns users directly, not wrapped in data field
-                setRecentUsers(response.users || []);
-                setUserPage(response.pagination?.page || page);
-                setUserTotalPages(response.pagination?.totalPages || 1);
+                setRecentUsers(response.data?.users || []);
+                setUserPage(response.data?.pagination?.page || page);
+                setUserTotalPages(response.data?.pagination?.totalPages || 1);
             } else {
-                console.error('Failed to fetch users:', response.error);
+                console.error('Failed to fetch users:', response.message);
             }
         } catch (err) {
             console.error('Failed to fetch users:', err);
@@ -348,10 +347,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         try {
             const response = await apiClient.admin.getTeachers();
             if (response.success) {
-                // API returns teachers directly, not wrapped in data field
-                setTeachers(response.teachers || []);
+                setTeachers(response.data?.teachers || []);
             } else {
-                console.error('Failed to fetch teachers:', response.error);
+                console.error('Failed to fetch teachers:', response.message);
                 setTeachers([]);
             }
         } catch (err) {
@@ -371,10 +369,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         try {
             const response = await apiClient.admin.getClassesByTeacher(teacherId);
             if (response.success) {
-                // API returns classes directly, not wrapped in data field
-                setClasses(response.classes || []);
+                setClasses(response.data?.classes || []);
             } else {
-                console.error('Failed to fetch classes:', response.error);
+                console.error('Failed to fetch classes:', response.message);
                 setClasses([]);
             }
         } catch (err) {

@@ -36,17 +36,20 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json({
-      activities,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalCount,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
+      success: true,
+      data: {
+        activities,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalCount,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
+        }
       }
     });
   } catch (error: any) {
     console.error('Activities API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

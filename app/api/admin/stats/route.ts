@@ -152,14 +152,17 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-        stats,
-        activities,
-        lessons,
-        chartData,
-        users
+        success: true,
+        data: {
+          stats,
+          activities,
+          lessons,
+          chartData,
+          users
+        }
     });
   } catch (error: any) {
     console.error('Admin Stats Global Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

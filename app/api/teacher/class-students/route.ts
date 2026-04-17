@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
         if (!classId || !teacherId) {
             return NextResponse.json(
-                { error: 'classId and teacherId parameters required' },
+                { success: false, error: 'classId and teacherId parameters required' },
                 { status: 400 }
             );
         }
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
         if (!classCheck.rows.length) {
             return NextResponse.json(
-                { error: 'Class not found or you do not own this class' },
+                { success: false, error: 'Class not found or you do not own this class' },
                 { status: 403 }
             );
         }
@@ -56,15 +56,18 @@ export async function GET(req: NextRequest) {
         );
 
         return NextResponse.json({
-            classId: parseInt(classId as string),
-            className: classCheck.rows[0].title,
-            totalEnrolled: students.rows.length,
-            students: students.rows
+            success: true,
+            data: {
+                classId: classId,
+                className: classCheck.rows[0].title,
+                totalEnrolled: students.rows.length,
+                students: students.rows
+            }
         });
     } catch (error) {
         console.error('Get class students error:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch enrolled students' },
+            { success: false, error: 'Failed to fetch enrolled students' },
             { status: 500 }
         );
     }
@@ -77,7 +80,7 @@ export async function POST(req: NextRequest) {
 
         if (!classId || !studentId || !teacherId) {
             return NextResponse.json(
-                { error: 'classId, studentId, and teacherId required' },
+                { success: false, error: 'classId, studentId, and teacherId required' },
                 { status: 400 }
             );
         }
@@ -90,7 +93,7 @@ export async function POST(req: NextRequest) {
 
         if (!classCheck.rows.length) {
             return NextResponse.json(
-                { error: 'You do not own this class' },
+                { success: false, error: 'You do not own this class' },
                 { status: 403 }
             );
         }
@@ -101,9 +104,9 @@ export async function POST(req: NextRequest) {
             [studentId]
         );
 
-        if (!studentCheck.rows.length || studentCheck.rows[0].role !== 'student') {
+        if (!studentCheck.rows.length || (studentCheck.rows[0].role !== 'student' && studentCheck.rows[0].role !== 'USER')) {
             return NextResponse.json(
-                { error: 'Invalid student' },
+                { success: false, error: 'Invalid student' },
                 { status: 400 }
             );
         }
@@ -116,7 +119,7 @@ export async function POST(req: NextRequest) {
 
         if (existingEnrollment.rows.length) {
             return NextResponse.json(
-                { error: 'Student is already enrolled in this class' },
+                { success: false, error: 'Student is already enrolled in this class' },
                 { status: 409 }
             );
         }
@@ -131,12 +134,15 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(
             {
+                success: true,
                 message: 'Student enrolled successfully',
-                enrollment: {
-                    id: result.rows[0].id,
-                    classId: parseInt(classId),
-                    studentId,
-                    enrolledAt: result.rows[0].enrolled_at
+                data: {
+                    enrollment: {
+                        id: result.rows[0].id,
+                        classId: classId,
+                        studentId,
+                        enrolledAt: result.rows[0].enrolled_at
+                    }
                 }
             },
             { status: 201 }
@@ -144,7 +150,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error('Enroll student error:', error);
         return NextResponse.json(
-            { error: 'Failed to enroll student' },
+            { success: false, error: 'Failed to enroll student' },
             { status: 500 }
         );
     }

@@ -18,7 +18,7 @@ export async function DELETE(req: NextRequest) {
 
         if (!classId || !studentId || !teacherId) {
             return NextResponse.json(
-                { error: 'classId, studentId, and teacherId parameters required' },
+                { success: false, error: 'classId, studentId, and teacherId parameters required' },
                 { status: 400 }
             );
         }
@@ -31,7 +31,7 @@ export async function DELETE(req: NextRequest) {
 
         if (!classCheck.rows.length) {
             return NextResponse.json(
-                { error: 'You do not own this class' },
+                { success: false, error: 'You do not own this class' },
                 { status: 403 }
             );
         }
@@ -45,7 +45,7 @@ export async function DELETE(req: NextRequest) {
 
         if (!enrollmentCheck.rows.length) {
             return NextResponse.json(
-                { error: 'Student is not enrolled in this class' },
+                { success: false, error: 'Student is not enrolled in this class' },
                 { status: 404 }
             );
         }
@@ -58,14 +58,17 @@ export async function DELETE(req: NextRequest) {
         );
 
         return NextResponse.json({
+            success: true,
             message: 'Student unenrolled successfully',
-            classId: parseInt(classId as string),
-            studentId
+            data: {
+                classId: classId,
+                studentId
+            }
         });
     } catch (error) {
         console.error('Unenroll student error:', error);
         return NextResponse.json(
-            { error: 'Failed to unenroll student' },
+            { success: false, error: 'Failed to unenroll student' },
             { status: 500 }
         );
     }

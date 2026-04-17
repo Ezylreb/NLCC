@@ -27,9 +27,9 @@ export async function GET(request: Request) {
       name: cls.name,
     }));
 
-    return NextResponse.json({ success: true, classes });
+    return NextResponse.json({ success: true, data: { classes } });
   } catch (error: any) {
     console.error('Admin Fetch Classes Error:', error);
-    return NextResponse.json({ error: 'Failed to fetch classes', details: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to fetch classes', details: error.message }, { status: 500 });
   }
 }

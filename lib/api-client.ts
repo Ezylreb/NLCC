@@ -676,22 +676,48 @@ class ClassService extends APIClient {
   /**
    * Get class students
    */
-  async getStudents(classId: number | string): Promise<APIResponse> {
-    return this.get(`/classes/${classId}/students`);
+  async getStudents(classId: number | string, teacherId?: string): Promise<APIResponse> {
+    const tid = teacherId || this.getTeacherId();
+    return this.get(`/class-students?classId=${classId}&teacherId=${tid}`);
+  }
+
+  /**
+   * Get available students (not enrolled in class)
+   */
+  async getAvailableStudents(classId: number | string, teacherId?: string): Promise<APIResponse> {
+    const tid = teacherId || this.getTeacherId();
+    return this.get(`/available-students?classId=${classId}&teacherId=${tid}`);
   }
 
   /**
    * Add student to class
    */
-  async addStudent(classId: number | string, studentId: string): Promise<APIResponse> {
-    return this.post(`/classes/${classId}/students`, { student_id: studentId });
+  async addStudent(classId: number | string, studentId: string, teacherId?: string): Promise<APIResponse> {
+    const tid = teacherId || this.getTeacherId();
+    return this.post(`/class-students`, { classId, studentId, teacherId: tid });
   }
 
   /**
    * Remove student from class
    */
-  async removeStudent(classId: number | string, studentId: string): Promise<APIResponse> {
-    return this.delete(`/classes/${classId}/students/${studentId}`);
+  async removeStudent(classId: number | string, studentId: string, teacherId?: string): Promise<APIResponse> {
+    const tid = teacherId || this.getTeacherId();
+    return this.delete(`/unenroll-student?classId=${classId}&studentId=${studentId}&teacherId=${tid}`);
+  }
+
+  /**
+   * Get teacher ID from localStorage
+   */
+  private getTeacherId(): string {
+    if (typeof window === 'undefined') return '';
+    const savedUser = localStorage.getItem('nllc_user');
+    if (!savedUser) return '';
+    try {
+      const user = JSON.parse(savedUser);
+      return user.id || '';
+    } catch {
+      return '';
+    }
   }
 
   /**

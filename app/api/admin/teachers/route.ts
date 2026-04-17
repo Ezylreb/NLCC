@@ -17,9 +17,9 @@ export async function GET(request: Request) {
       fullName: `${teacher.first_name} ${teacher.last_name}`
     }));
 
-    return NextResponse.json({ success: true, teachers });
+    return NextResponse.json({ success: true, data: { teachers } });
   } catch (error: any) {
     console.error('Admin Fetch Teachers Error:', error);
-    return NextResponse.json({ error: 'Failed to fetch teachers', details: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to fetch teachers', details: error.message }, { status: 500 });
   }
 }

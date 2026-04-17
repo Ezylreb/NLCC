@@ -14,7 +14,7 @@ interface Student {
 }
 
 interface ManageClassStudentsProps {
-    classId: number;
+    classId: number | string;
     className: string;
     teacherId: string;
 }
@@ -43,7 +43,10 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsLoadingAvailable(true);
             setError('');
-            const response = await apiClient.class.getStudents(classId);
+            
+            console.log('🔍 Fetching available students:', { classId, teacherId });
+            const response = await apiClient.class.getAvailableStudents(classId, teacherId);
+            console.log('📦 Available students response:', response);
 
             if (!response.success) {
                 throw new Error(response.error || 'Failed to fetch students');
@@ -51,6 +54,7 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
 
             setAvailableStudents(response.data?.students || []);
         } catch (err) {
+            console.error('❌ Error fetching available students:', err);
             setError(err instanceof Error ? err.message : 'Failed to load students');
         } finally {
             setIsLoadingAvailable(false);
@@ -60,7 +64,7 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
     const fetchEnrolledStudents = async () => {
         try {
             setIsLoadingEnrolled(true);
-            const response = await apiClient.class.getStudents(classId);
+            const response = await apiClient.class.getStudents(classId, teacherId);
 
             if (!response.success) {
                 throw new Error(response.error || 'Failed to fetch enrolled students');
@@ -79,7 +83,7 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsEnrolling(studentId);
             setError('');
-            const response = await apiClient.class.addStudent(classId, studentId);
+            const response = await apiClient.class.addStudent(classId, studentId, teacherId);
 
             if (!response.success) {
                 throw new Error(response.error || 'Enrollment failed');
@@ -109,7 +113,7 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         try {
             setIsRemoving(studentId);
             setError('');
-            const response = await apiClient.class.removeStudent(classId, studentId);
+            const response = await apiClient.class.removeStudent(classId, studentId, teacherId);
 
             if (!response.success) {
                 throw new Error(response.error || 'Removal failed');
