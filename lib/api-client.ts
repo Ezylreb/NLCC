@@ -84,7 +84,7 @@ class APIClient {
  */
 class BahagiAPI extends APIClient {
   constructor() {
-    super('/api/rest');
+    super('/api/teacher');
   }
 
   /**
@@ -95,14 +95,28 @@ class BahagiAPI extends APIClient {
     if (teacherId) params.append('teacherId', teacherId);
     if (className) params.append('className', className);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.get(`/bahagis${query}`);
+    
+    // Use REST endpoint directly
+    const url = `/api/rest/bahagis${query}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch bahagis');
+    }
+    return await response.json();
   }
 
   /**
    * Fetch single bahagi by ID
    */
   async fetchById(bahagiId: number): Promise<APIResponse> {
-    return this.get(`/bahagis/${bahagiId}`);
+    const url = `/api/rest/bahagis/${bahagiId}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch bahagi');
+    }
+    return await response.json();
   }
 
   /**
@@ -110,12 +124,22 @@ class BahagiAPI extends APIClient {
    */
   async create(data: {
     title: string;
-    description: string;
+    yunit?: string;
+    description?: string;
     teacher_id: string;
+    class_name?: string;
+    classId?: string;
+    className?: string;
     subject?: string;
     image_url?: string;
   }): Promise<APIResponse> {
-    return this.post('/bahagis', data);
+    // Use teacher endpoint for creating
+    return this.post('/create-bahagi', {
+      title: data.title,
+      teacherId: data.teacher_id,
+      classId: data.classId || data.class_name,
+      className: data.className || data.class_name
+    });
   }
 
   /**
@@ -132,35 +156,35 @@ class BahagiAPI extends APIClient {
       is_published: boolean;
     }>
   ): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, data);
+    return this.post('/update-bahagi', { id: bahagiId, ...data });
   }
 
   /**
    * Delete bahagi
    */
   async deleteBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.delete(`/bahagis/${bahagiId}`);
+    return this.post('/delete-bahagi', { id: bahagiId });
   }
 
   /**
    * Archive bahagi
    */
   async archive(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_archived: true });
+    return this.post('/archive-bahagi', { id: bahagiId });
   }
 
   /**
    * Restore archived bahagi
    */
   async restore(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_archived: false });
+    return this.post('/archive-bahagi', { id: bahagiId, restore: true });
   }
 
   /**
    * Publish bahagi (make public)
    */
   async publish(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_published: true });
+    return this.post('/update-bahagi', { id: bahagiId, is_published: true });
   }
 }
 

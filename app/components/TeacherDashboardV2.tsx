@@ -268,23 +268,31 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle bahagi form submission
     const handleBahagiSubmit = async (data: any) => {
         try {
-            const response = await apiClient.bahagi.create({
-                ...data,
+            const bahagiData = {
+                title: data.title,
+                classId: selectedClassId || data.classId,
+                className: selectedClassName || data.className,
                 teacher_id: user?.id || ''
-            });
+            };
 
-            if (response.success) {
-                const newBahagi = response.data || {};
+            console.log('[handleBahagiSubmit] Sending data:', bahagiData);
+
+            const response = await apiClient.bahagi.create(bahagiData);
+
+            console.log('[handleBahagiSubmit] Response:', response);
+
+            if (response && response.bahagi) {
                 alert('✅ Bahagi created successfully!');
                 setShowBahagiForm(false);
-                // Add the new bahagi to classBahagi
-                setClassBahagi([newBahagi.bahagi || newBahagi, ...classBahagi]);
+                // Refresh bahagi list to get accurate counts
+                await handleRefreshBahagi();
             } else {
-                alert(`❌ Error: ${response.error}`);
+                console.error('[handleBahagiSubmit] Unexpected response:', response);
+                alert(`❌ Error: Failed to create bahagi`);
             }
-        } catch (err) {
-            console.error('Error creating bahagi:', err);
-            alert('❌ Failed to create bahagi');
+        } catch (err: any) {
+            console.error('[handleBahagiSubmit] Exception:', err);
+            alert(`❌ Failed to create bahagi: ${err.message || 'Unknown error'}`);
         }
     };
 
