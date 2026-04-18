@@ -74,6 +74,13 @@ class APIClient {
     });
   }
 
+  protected put<T>(endpoint: string, body: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   protected delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
@@ -96,9 +103,15 @@ class BahagiAPI extends APIClient {
     if (className) params.append('className', className);
     const query = params.toString() ? `?${params.toString()}` : '';
     
-    // Use REST endpoint directly
+    // Use REST endpoint directly with cache-busting
     const url = `/api/rest/bahagis${query}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to fetch bahagis');
@@ -163,21 +176,21 @@ class BahagiAPI extends APIClient {
    * Delete bahagi
    */
   async deleteBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.post('/delete-bahagi', { id: bahagiId });
+    return this.delete(`/delete-bahagi?id=${bahagiId}`);
   }
 
   /**
    * Archive bahagi
    */
   async archive(bahagiId: number): Promise<APIResponse> {
-    return this.post('/archive-bahagi', { id: bahagiId });
+    return this.put('/archive-bahagi', { id: bahagiId, isArchived: true });
   }
 
   /**
    * Restore archived bahagi
    */
   async restore(bahagiId: number): Promise<APIResponse> {
-    return this.post('/archive-bahagi', { id: bahagiId, restore: true });
+    return this.put('/archive-bahagi', { id: bahagiId, isArchived: false });
   }
 
   /**
@@ -200,7 +213,7 @@ class YunitAPI extends APIClient {
    * Fetch all yunits in a bahagi
    */
   async fetchByBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.get(`/yunits?bahagi_id=${bahagiId}`);
+    return this.get(`/yunits?bahagiId=${bahagiId}`);
   }
 
   /**
@@ -278,9 +291,9 @@ class AssessmentAPI extends APIClient {
     bahagi_id?: number;
   }): Promise<APIResponse> {
     const query = new URLSearchParams();
-    if (filters?.yunit_id) query.append('yunit_id', String(filters.yunit_id));
+    if (filters?.yunit_id) query.append('yunitId', String(filters.yunit_id));
     if (filters?.bahagi_id)
-      query.append('bahagi_id', String(filters.bahagi_id));
+      query.append('bahagiId', String(filters.bahagi_id));
 
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/assessments${queryStr}`);

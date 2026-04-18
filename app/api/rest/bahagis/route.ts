@@ -82,7 +82,13 @@ export async function GET(request: NextRequest) {
 
     console.log(`[GET /api/rest/bahagis] After filtering: ${bahagis.length} bahagi`);
 
-    return NextResponse.json({ success: true, data: bahagis });
+    return NextResponse.json({ success: true, data: bahagis }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (error: any) {
     console.error('[GET /api/rest/bahagis]', error);
     return NextResponse.json(
