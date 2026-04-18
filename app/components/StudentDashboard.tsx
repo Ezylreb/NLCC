@@ -37,7 +37,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     return (
         <div className="fixed inset-0 z-50 flex bg-linear-to-b from-slate-950 to-slate-900 overflow-hidden">
             {/* Sidebar */}
-            <div className="w-48 bg-linear-to-b from-slate-900 to-slate-950 border-r border-white/10 flex flex-col">
+            <div className="w-48 bg-linear-to-b from-slate-900 to-slate-950 border-r border-white/10 flex flex-col relative z-50">
                 <div className="p-6 border-b border-white/10">
                     <div className="text-2xl font-black text-brand-purple">BrightStart</div>
                     <div className="text-xs text-slate-400 mt-2">Student</div>
@@ -87,7 +87,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto relative z-10">
                 <AnimatePresence mode="wait">
                     {activeTab === 'lessons' && (
                         <motion.div
@@ -166,7 +166,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center z-1000"
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
                         onClick={() => setShowLogoutConfirm(false)}
                     >
                         <motion.div

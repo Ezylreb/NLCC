@@ -17,23 +17,31 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    console.log('[POST /api/rest/bahagis] Received body:', JSON.stringify(body, null, 2));
+
     // Validate input
     const validation = BahagiService.validateCreateData(body);
+    console.log('[POST /api/rest/bahagis] Validation result:', validation);
+
     if (!validation.valid) {
+      console.error('[POST /api/rest/bahagis] Validation errors:', validation.errors);
       return NextResponse.json(
-        { error: 'Validation failed', errors: validation.errors },
+        { success: false, error: 'Validation failed', errors: validation.errors },
         { status: 400 }
       );
     }
 
     // Create bahagi
+    console.log('[POST /api/rest/bahagis] Creating bahagi...');
     const bahagi = await BahagiService.create(body);
+    console.log('[POST /api/rest/bahagis] Bahagi created:', bahagi);
 
     return NextResponse.json({ success: true, data: bahagi }, { status: 201 });
   } catch (error: any) {
-    console.error('[POST /api/rest/bahagis]', error);
+    console.error('[POST /api/rest/bahagis] Exception:', error);
+    console.error('[POST /api/rest/bahagis] Stack:', error.stack);
     return NextResponse.json(
-      { error: 'Failed to create bahagi', detail: error.message },
+      { success: false, error: 'Failed to create bahagi', detail: error.message },
       { status: 500 }
     );
   }
@@ -47,6 +55,8 @@ export async function GET(request: NextRequest) {
     const published = searchParams.get('published');
     const archived = searchParams.get('archived');
 
+    console.log('[GET /api/rest/bahagis] Request params:', { teacherId, className, published, archived });
+
     if (!teacherId) {
       return NextResponse.json(
         { error: 'Teacher ID is required' },
@@ -56,6 +66,8 @@ export async function GET(request: NextRequest) {
 
     // List bahagis
     let bahagis = await BahagiService.listByTeacher(teacherId, className || undefined);
+    
+    console.log(`[GET /api/rest/bahagis] Found ${bahagis.length} bahagi for teacher ${teacherId}${className ? ` in class ${className}` : ''}`);
 
     // Filter by status
     if (published !== null) {
@@ -67,6 +79,8 @@ export async function GET(request: NextRequest) {
       const archivedBool = archived === 'true';
       bahagis = bahagis.filter((b: any) => b.is_archived === archivedBool);
     }
+
+    console.log(`[GET /api/rest/bahagis] After filtering: ${bahagis.length} bahagi`);
 
     return NextResponse.json({ success: true, data: bahagis });
   } catch (error: any) {

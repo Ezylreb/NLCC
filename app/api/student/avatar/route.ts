@@ -55,20 +55,33 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'No data to update' }, { status: 400 });
     }
 
-    // Build dynamic UPDATE query
-    const updateFields = Object.keys(avatarData)
-      .map((key, i) => `${key} = $${i + 1}`)
-      .join(', ');
+    // Convert avatar parts to JSONB for storage
+    const updateFields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
 
-    const values = [
-      ...Object.values(avatarData),
-      studentId
-    ];
+    // Expected fields: katawan, hair, eyes, mouth, damit, pants, shoes, accessory
+    const validFields = ['katawan', 'hair', 'eyes', 'mouth', 'damit', 'pants', 'shoes', 'accessory'];
+    
+    Object.keys(avatarData).forEach(key => {
+      if (validFields.includes(key)) {
+        updateFields.push(`${key} = $${paramIndex}`);
+        // Convert to JSON string for JSONB column
+        values.push(JSON.stringify(avatarData[key]));
+        paramIndex++;
+      }
+    });
+
+    if (updateFields.length === 0) {
+      return NextResponse.json({ error: 'No valid avatar parts to update' }, { status: 400 });
+    }
+
+    values.push(studentId);
 
     const updateQuery = `
       UPDATE avatar_customization
-      SET ${updateFields}, updated_at = NOW()
-      WHERE student_id = $${values.length}
+      SET ${updateFields.join(', ')}, updated_at = NOW()
+      WHERE student_id = $${paramIndex}
       RETURNING *
     `;
 
@@ -77,10 +90,20 @@ export async function PATCH(request: NextRequest) {
     if (result.rows.length === 0) {
       // If no rows updated, try to create a new one
       const insertResult = await query(
-        `INSERT INTO avatar_customization (student_id, body, hair, outfit, accessory, emotion)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO avatar_customization (student_id, katawan, hair, eyes, mouth, damit, pants, shoes, accessory)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
-        [studentId, avatarData.body, avatarData.hair, avatarData.outfit, avatarData.accessory, avatarData.emotion]
+        [
+          studentId, 
+          JSON.stringify(avatarData.katawan), 
+          JSON.stringify(avatarData.hair), 
+          JSON.stringify(avatarData.eyes), 
+          JSON.stringify(avatarData.mouth),
+          JSON.stringify(avatarData.damit),
+          JSON.stringify(avatarData.pants),
+          JSON.stringify(avatarData.shoes),
+          JSON.stringify(avatarData.accessory)
+        ]
       );
       return NextResponse.json({ success: true, data: insertResult.rows[0] });
     }

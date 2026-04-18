@@ -48,6 +48,7 @@ export async function GET(request: Request) {
         role, 
         class_name, 
         teacher_id,
+        teacher_role,
         created_at 
       FROM users 
       ${whereClause}
@@ -69,9 +70,10 @@ export async function GET(request: Request) {
       className: u.class_name,
       class_name: u.class_name,
       teacherId: u.teacher_id,
+      teacher_role: u.teacher_role,
       joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown',
       status: 'Active',
-      plan: u.role === 'TEACHER' ? 'Faculty' : 'Standard'
+      plan: u.role === 'TEACHER' ? (u.teacher_role === 'assistant' ? 'Assistant' : 'Adviser') : 'Standard'
     }));
 
     const totalPages = Math.ceil(total / limit);

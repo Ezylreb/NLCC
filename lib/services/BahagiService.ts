@@ -52,29 +52,48 @@ export class BahagiService {
 
     const bahagis = await repositories.bahagi.findAll({ where, orderBy: 'created_at DESC' });
 
-    // Enrich with child counts
+    // Enrich with child counts - wrapped in try/catch to prevent failures
     return Promise.all(
       bahagis.map(async (bahagi) => {
-        const yunits = await repositories.lesson.raw(
-          'SELECT COUNT(*) as count FROM lesson WHERE bahagi_id = $1',
-          [bahagi.id]
-        );
+        let lessonCount = 0;
+        let assessmentCount = 0;
+        let totalXP = 0;
 
-        const assessments = await repositories.assessment.raw(
-          'SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1',
-          [bahagi.id]
-        );
+        try {
+          const yunits = await repositories.lesson.raw(
+            'SELECT COUNT(*) as count FROM lesson WHERE bahagi_id = $1',
+            [bahagi.id]
+          );
+          lessonCount = parseInt((yunits[0] as any)?.count || 0);
+        } catch (err) {
+          console.error(`Error counting lessons for bahagi ${bahagi.id}:`, err);
+        }
 
-        const rewards = await repositories.reward.raw(
-          'SELECT SUM(xp_earned) as total FROM student_rewards WHERE assessment_id IN (SELECT id FROM bahagi_assessment WHERE bahagi_id = $1)',
-          [bahagi.id]
-        );
+        try {
+          const assessments = await repositories.assessment.raw(
+            'SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1',
+            [bahagi.id]
+          );
+          assessmentCount = parseInt((assessments[0] as any)?.count || 0);
+        } catch (err) {
+          console.error(`Error counting assessments for bahagi ${bahagi.id}:`, err);
+        }
+
+        try {
+          const rewards = await repositories.reward.raw(
+            'SELECT SUM(xp_earned) as total FROM student_rewards WHERE assessment_id IN (SELECT id FROM bahagi_assessment WHERE bahagi_id = $1)',
+            [bahagi.id]
+          );
+          totalXP = parseInt((rewards[0] as any)?.total || 0);
+        } catch (err) {
+          console.error(`Error counting rewards for bahagi ${bahagi.id}:`, err);
+        }
 
         return {
           ...bahagi,
-          lessonCount: parseInt((yunits[0] as any)?.count || 0),
-          assessmentCount: parseInt((assessments[0] as any)?.count || 0),
-          totalXP: parseInt((rewards[0] as any)?.total || 0),
+          lessonCount,
+          assessmentCount,
+          totalXP,
         };
       })
     );

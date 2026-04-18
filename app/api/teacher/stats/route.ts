@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     ];
 
     try {
-        // Fetch teacher's created classes from database
+        // Fetch teacher's created classes from database (both active and archived)
         console.log(`Fetching classes for teacher: ${teacherId}`);
         
         const classesRes = await query(`
@@ -47,12 +47,11 @@ export async function GET(request: Request) {
               c.teacher_id,
               c.is_archived,
               c.created_at,
-              (SELECT COUNT(*) FROM users WHERE role = 'USER' AND class_name = c.name)::INT as student_count,
-              (SELECT COUNT(*) FROM lessons WHERE class_name = c.name AND teacher_id::uuid = c.teacher_id)::INT as lesson_count
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id)::INT as student_count,
+              (SELECT COUNT(*) FROM bahagi WHERE class_name = c.name)::INT as lesson_count
           FROM classes c
-          WHERE c.teacher_id = $1 AND c.is_archived = FALSE
-          GROUP BY c.id, c.name, c.teacher_id, c.is_archived, c.created_at
-          ORDER BY c.created_at DESC
+          WHERE c.teacher_id = $1
+          ORDER BY c.is_archived ASC, c.created_at DESC
         `, [teacherId]);
 
         console.log(`Query result for teacher ${teacherId}:`, classesRes.rows?.length || 0, 'classes');
@@ -69,7 +68,7 @@ export async function GET(request: Request) {
             nextLesson: 'Lesson Plan Active',
             color: 'border-brand-purple'
           }));
-          console.log(`✅ Found ${classes.length} classes for teacher`);
+          console.log(`✅ Found ${classes.length} classes for teacher (${classes.filter((c: any) => !c.is_archived).length} active, ${classes.filter((c: any) => c.is_archived).length} archived)`);
         } else {
           console.log('No classes found for this teacher, using default');
           classes = [{
@@ -101,7 +100,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Try to fetch real students from database
+        // Try to fetch students assigned to this teacher from database
         const studentsRes = await query(`
           SELECT 
               u.id, 
@@ -109,13 +108,14 @@ export async function GET(request: Request) {
               u.last_name, 
               u.email,
               u.role,
+              u.teacher_id,
               0 as progress,
               NOW() as last_active
           FROM users u
-          WHERE u.role = 'USER'
+          WHERE u.role = 'USER' AND u.teacher_id = $1
           ORDER BY u.created_at DESC
           LIMIT 50
-        `);
+        `, [teacherId]);
 
         if (studentsRes.rows && studentsRes.rows.length > 0) {
             // Process students

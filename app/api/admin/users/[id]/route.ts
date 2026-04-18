@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const res = await query('SELECT id, first_name, last_name, email, lrn, role, class_name, class_id, teacher_id, created_at FROM users WHERE id = $1', [id]);
+    const res = await query('SELECT id, first_name, last_name, email, lrn, role, class_name, class_id, teacher_id, teacher_role, created_at FROM users WHERE id = $1', [id]);
     
     if (res.rows.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -28,7 +28,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { firstName, lastName, email, lrn, role, className, teacher_id, class_id } = body;
+    const { firstName, lastName, email, lrn, role, className, teacher_id, class_id, teacher_role } = body;
 
     if (!firstName || !lastName || !email) {
       return NextResponse.json({ error: 'First name, last name, and email are required' }, { status: 400 });
@@ -100,8 +100,8 @@ export async function PATCH(
     }
 
     await query(
-      'UPDATE users SET first_name = $1, last_name = $2, email = $3, lrn = $4, class_name = $5, teacher_id = $6, class_id = $7, updated_at = NOW() WHERE id = $8',
-      [firstName, lastName, email, lrn || null, classNameToSave || null, teacher_id || null, class_id || null, id]
+      'UPDATE users SET first_name = $1, last_name = $2, email = $3, lrn = $4, class_name = $5, teacher_id = $6, class_id = $7, teacher_role = $8, updated_at = NOW() WHERE id = $9',
+      [firstName, lastName, email, lrn || null, classNameToSave || null, teacher_id || null, class_id || null, teacher_role || null, id]
     );
 
     // Log activity

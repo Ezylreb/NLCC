@@ -674,9 +674,9 @@
 
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import html2canvas from 'html2canvas';
+import { apiClient } from '@/lib/api-client';
 
 interface AvatarPart {
     id: string;
@@ -711,49 +711,9 @@ type AvatarItem = AvatarPart & {
 export const StudentAvatarCustomization = () => {
     const [activeCategory, setActiveCategory] =
         useState<keyof AvatarCustomization>('katawan');
-
-    const avatarRef = useRef<HTMLDivElement>(null);
-
-    const [isSaved, setIsSaved] = useState(false);
-
-    const handleDownloadAvatar = async () => {
-        if (!avatarRef.current) return;
-
-        const canvas = await html2canvas(avatarRef.current, {
-            backgroundColor: null,
-            scale: 4,
-            useCORS: true,
-
-            onclone: (doc) => {
-                const el = doc.querySelector('[data-avatar]');
-                if (el) {
-                    const htmlEl = el as HTMLElement;
-
-                    htmlEl.style.background = 'transparent';
-                    htmlEl.style.backgroundColor = 'transparent';
-                    htmlEl.style.boxShadow = 'none';
-                    htmlEl.style.border = 'none';
-                }
-            }
-        });
-
-        const finalCanvas = document.createElement('canvas');
-        // const size = 1024;
-
-        finalCanvas.width = 2000;
-        finalCanvas.height = 2028;
-
-        const ctx = finalCanvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.clearRect(0, 0, 2000, 2828);
-        ctx.drawImage(canvas, 0, 0, 2000, 2828);
-
-        const link = document.createElement('a');
-        link.download = 'avatar-transparent-1024.png';
-        link.href = finalCanvas.toDataURL('image/png');
-        link.click();
-    };
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState('');
 
     const [customization, setCustomization] = useState<AvatarCustomization>({
         katawan: {
@@ -802,10 +762,79 @@ export const StudentAvatarCustomization = () => {
             id: '0',
             name: 'None',
             type: 'accessory',
-            src: ''
+            src: '/Character/Avatar/accesories/eg1.png'
         }
     });
 
+    // Load avatar customization on mount
+    useEffect(() => {
+        const loadAvatar = async () => {
+            try {
+                setIsLoading(true);
+                const result = await apiClient.student.getAvatarCustomization();
+                
+                if (result.success && result.data) {
+                    // Parse JSONB fields and update customization
+                    const loadedData: Partial<AvatarCustomization> = {};
+                    
+                    const fields: (keyof AvatarCustomization)[] = [
+                        'katawan', 'hair', 'eyes', 'mouth', 'damit', 'pants', 'shoes', 'accessory'
+                    ];
+                    
+                    fields.forEach(field => {
+                        if (result.data[field]) {
+                            try {
+                                // Parse if it's a string, otherwise use as is
+                                loadedData[field] = typeof result.data[field] === 'string' 
+                                    ? JSON.parse(result.data[field]) 
+                                    : result.data[field];
+                            } catch (e) {
+                                console.error(`Error parsing ${field}:`, e);
+                            }
+                        }
+                    });
+                    
+                    // Merge loaded data with defaults
+                    setCustomization(prev => ({
+                        ...prev,
+                        ...loadedData
+                    }));
+                }
+            } catch (error) {
+                console.error('Error loading avatar:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadAvatar();
+    }, []);
+
+    // Save avatar customization
+    const handleSaveAvatar = async () => {
+        try {
+            setIsSaving(true);
+            setSaveMessage('');
+            
+            const result = await apiClient.student.saveAvatarCustomization(customization);
+            
+            if (result.success) {
+                setSaveMessage('✅ Avatar saved!');
+                setTimeout(() => setSaveMessage(''), 3000);
+            } else {
+                setSaveMessage('❌ Failed to save');
+                setTimeout(() => setSaveMessage(''), 3000);
+            }
+        } catch (error) {
+            console.error('Error saving avatar:', error);
+            setSaveMessage('❌ Error saving');
+            setTimeout(() => setSaveMessage(''), 3000);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // LAYER ORDER (IMPORTANT)
     const renderOrder: (keyof AvatarCustomization)[] = [
         'katawan',
         'pants',
@@ -884,6 +913,32 @@ export const StudentAvatarCustomization = () => {
         }));
     };
 
+    // HANDLE HIDDEN LAYERS
+    const hiddenLayers = new Set<keyof AvatarCustomization>();
+
+    Object.values(customization).forEach((part) => {
+        const rule = (part as AvatarItem).hides;
+        if (rule) {
+            rule.forEach((layer) => hiddenLayers.add(layer));
+        }
+    });
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="min-h-full p-8 flex items-center justify-center">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center"
+                >
+                    <div className="text-6xl mb-4">⏳</div>
+                    <p className="text-white text-xl">Loading avatar...</p>
+                </motion.div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-full p-8">
             <h1 className="text-4xl font-black text-white mb-6">
@@ -924,24 +979,27 @@ export const StudentAvatarCustomization = () => {
                         })}
                     </div>
 
-                    {/* SAVE */}
-                    <button
-                        onClick={() => setIsSaved(true)}
-                        className="w-full mt-6 px-4 py-3 bg-purple-600 text-white rounded-lg"
-                    >
-                        💾 Save Avatar
-                    </button>
-
-                    {/* DOWNLOAD */}
-                    {isSaved && (
-                        <button
-                            onClick={handleDownloadAvatar}
-                            className="w-full mt-3 px-4 py-3 bg-green-600 text-white rounded-lg"
+                        {/* SAVE BUTTON */}
+                        <button 
+                            onClick={handleSaveAvatar}
+                            disabled={isSaving}
+                            className="w-full mt-6 px-4 py-3 bg-brand-purple hover:shadow-lg hover:shadow-purple-500/40 text-white rounded-lg font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            ⬇️ Download Avatar
+                            {isSaving ? '⏳ Saving...' : '💾 I-save ang Avatar'}
                         </button>
-                    )}
-                </div>
+                        
+                        {/* SAVE MESSAGE */}
+                        {saveMessage && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-2 text-center text-sm font-semibold"
+                            >
+                                {saveMessage}
+                            </motion.div>
+                        )}
+                    </div>
+                </motion.div>
 
                 {/* OPTIONS */}
                 <div className="lg:col-span-2">

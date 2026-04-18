@@ -208,6 +208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 class_name: selectedUser.class_name,
                 teacher_id: selectedUser.teacher_id || null,
                 class_id: selectedUser.class_id || null,
+                teacher_role: selectedUser.teacher_role || null,
             });
 
             if (response.success) {
@@ -843,6 +844,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                         />
                                     </div>
 
+                                    {selectedUser.role === 'TEACHER' && (
+                                        <div className="flex flex-col gap-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">👔 Teacher Role</label>
+                                            <select 
+                                                value={selectedUser.teacher_role || 'adviser'}
+                                                onChange={(e) => setSelectedUser({...selectedUser, teacher_role: e.target.value})}
+                                                className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
+                                            >
+                                                <option value="adviser">Adviser (Main Teacher)</option>
+                                                <option value="assistant">Assistant Teacher</option>
+                                            </select>
+                                            <p className="text-xs text-slate-500 ml-1">Each class section can have 1 adviser and optionally 1 assistant</p>
+                                        </div>
+                                    )}
+
                                     {selectedUser.role !== 'TEACHER' && (
                                         <>
                                             <div className="flex flex-col gap-1.5">
@@ -1152,13 +1168,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                                     </td>
                                                     <td className="p-4">
                                                         <div className="flex flex-col gap-1">
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded w-fit ${
-                                                                user.role === 'TEACHER' ? 'bg-brand-sky/10 text-brand-sky border border-brand-sky/20' : 
-                                                                user.role === 'ADMIN' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/20' : 
-                                                                'bg-slate-800 text-slate-500 border border-slate-700'
-                                                            }`}>
-                                                                {user.role}
-                                                            </span>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded w-fit ${
+                                                                    user.role === 'TEACHER' ? 'bg-brand-sky/10 text-brand-sky border border-brand-sky/20' : 
+                                                                    user.role === 'ADMIN' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/20' : 
+                                                                    'bg-slate-800 text-slate-500 border border-slate-700'
+                                                                }`}>
+                                                                    {user.role}
+                                                                </span>
+                                                                {user.role === 'TEACHER' && user.teacher_role && (
+                                                                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-purple-400/10 text-purple-400 border border-purple-400/20">
+                                                                        {user.teacher_role === 'adviser' ? '👔 ADVISER' : '🤝 ASSISTANT'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             {user.className && (
                                                                 <span className="text-[10px] font-black text-brand-purple uppercase tracking-tight">
                                                                     🎓 {user.className}

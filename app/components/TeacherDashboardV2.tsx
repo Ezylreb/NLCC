@@ -18,7 +18,14 @@ interface TeacherDashboardV2Props {
 }
 
 export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout, user }) => {
-    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'profile'>('overview');
+    // Restore active tab from sessionStorage or default to 'overview'
+    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'profile'>(() => {
+        if (typeof window !== 'undefined') {
+            const savedTab = sessionStorage.getItem('teacher_active_tab');
+            return (savedTab as 'overview' | 'classes' | 'profile') || 'overview';
+        }
+        return 'overview';
+    });
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
     // Data states
@@ -88,6 +95,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         fetchData();
     }, [user?.id]);
 
+    // Save active tab to sessionStorage whenever it changes
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem('teacher_active_tab', activeTab);
+        }
+    }, [activeTab]);
+
     // Handle class creation
     const handleCreateClass = async (className: string) => {
         try {
@@ -115,39 +129,29 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         if (selectedClass) {
             setSelectedClassId(classId);
             setSelectedClassName(selectedClass.name);
-            // Load Bahagi and Lessons for this class
+            // Load Bahagi for this class
             try {
-                const bahagiUrl = new URL('/api/teacher/class-bahagi', window.location.origin);
-                bahagiUrl.searchParams.append('classId', classId);
-                bahagiUrl.searchParams.append('className', selectedClass.name);
+                console.log('[handleOpenClass] Fetching bahagi for:', {
+                    teacherId: user?.id,
+                    className: selectedClass.name
+                });
                 
-                const lessonsUrl = new URL('/api/teacher/class-lessons', window.location.origin);
-                lessonsUrl.searchParams.append('classId', classId);
-                lessonsUrl.searchParams.append('className', selectedClass.name);
+                // Fetch bahagi filtered by teacher and className
+                const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClass.name);
 
-                // Fetch both in parallel using apiClient
-                const [bahagiResult, lessonsResult] = await Promise.all([
-                    apiClient.bahagi.fetchAll(),
-                    apiClient.yunit.fetchByBahagi(Number(classId))
-                ]);
+                console.log('[handleOpenClass] Bahagi result:', bahagiResult);
 
                 // Handle bahagi response
                 if (bahagiResult?.success) {
                     console.log(`Loaded ${bahagiResult.data?.length || 0} bahagi for class ${selectedClass.name}`);
                     setClassBahagi(bahagiResult.data || []);
                 } else {
-                    console.warn('Failed to fetch bahagi');
+                    console.warn('Failed to fetch bahagi:', bahagiResult?.error);
                     setClassBahagi([]);
                 }
-
-                // Handle lessons response
-                if (lessonsResult?.success) {
-                    console.log(`Loaded ${lessonsResult.data?.length || 0} lessons for class ${selectedClass.name}`);
-                    setClassLessons(lessonsResult.data || []);
-                } else {
-                    console.warn('Failed to fetch lessons');
-                    setClassLessons([]);
-                }
+                
+                // Clear lessons (we'll show bahagi with nested yunits instead)
+                setClassLessons([]);
             } catch (err) {
                 console.error('Error fetching class data:', err);
                 setClassBahagi([]);
@@ -164,16 +168,93 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         setClassLessons([]);
     };
 
+    // Handle archiving a class
+    const handleArchiveClass = async (classId: string) => {
+        try {
+            const response = await apiClient.class.archiveClass(classId);
+            
+            if (response.success) {
+                alert('✅ Class archived successfully!');
+                // Refresh dashboard data to update class lists
+                await fetchData();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to archive class'}`);
+            }
+        } catch (err) {
+            console.error('Error archiving class:', err);
+            alert('❌ Failed to archive class. Check browser console for details.');
+        }
+    };
+
+    // Handle restoring an archived class
+    const handleRestoreClass = async (classId: string) => {
+        try {
+            const response = await apiClient.class.restoreClass(classId);
+            
+            if (response.success) {
+                alert('✅ Class restored successfully!');
+                // Refresh dashboard data to update class lists
+                await fetchData();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to restore class'}`);
+            }
+        } catch (err) {
+            console.error('Error restoring class:', err);
+            alert('❌ Failed to restore class. Check browser console for details.');
+        }
+    };
+
     // Handle creating bahagi (show modal)
     const handleCreateBahagi = () => {
         setShowBahagiForm(true);
     };
 
+    // Handle profile update
+    const handleUpdateProfile = async (data: { firstName: string; lastName: string; email: string }) => {
+        if (!user?.id) {
+            alert('❌ User ID not found');
+            return;
+        }
+
+        try {
+            const response = await apiClient.user.updateOwnProfile(user.id, {
+                firstName: data.firstName,
+                lastName: data.lastName,
+                email: data.email
+            });
+
+            if (response.success && response.data) {
+                alert('✅ Profile updated successfully!');
+                
+                // Update local user state to reflect changes in the UI
+                const savedUser = localStorage.getItem('nllc_user');
+                if (savedUser) {
+                    const userObj = JSON.parse(savedUser);
+                    userObj.firstName = data.firstName;
+                    userObj.lastName = data.lastName;
+                    userObj.email = data.email;
+                    localStorage.setItem('nllc_user', JSON.stringify(userObj));
+                }
+                
+                // Save current tab to persist after reload
+                sessionStorage.setItem('teacher_active_tab', 'profile');
+                
+                // Force page reload to update all user references
+                window.location.reload();
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to update profile'}`);
+            }
+        } catch (err) {
+            console.error('Error updating profile:', err);
+            alert('❌ Failed to update profile. Check browser console for details.');
+        }
+    };
+
     // Handle refreshing bahagi list after edit
     const handleRefreshBahagi = async () => {
-        if (!selectedClassId) return;
+        if (!selectedClassId || !selectedClassName) return;
         try {
-            const bahagiResult = await apiClient.bahagi.fetchAll();
+            const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
             
             if (bahagiResult?.success) {
                 setClassBahagi(bahagiResult.data || []);
@@ -187,23 +268,31 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle bahagi form submission
     const handleBahagiSubmit = async (data: any) => {
         try {
-            const response = await apiClient.bahagi.create({
-                ...data,
+            const bahagiData = {
+                title: data.title,
+                classId: selectedClassId || data.classId,
+                className: selectedClassName || data.className,
                 teacher_id: user?.id || ''
-            });
+            };
 
-            if (response.success) {
-                const newBahagi = response.data || {};
+            console.log('[handleBahagiSubmit] Sending data:', bahagiData);
+
+            const response = await apiClient.bahagi.create(bahagiData);
+
+            console.log('[handleBahagiSubmit] Response:', response);
+
+            if (response && response.bahagi) {
                 alert('✅ Bahagi created successfully!');
                 setShowBahagiForm(false);
-                // Add the new bahagi to classBahagi
-                setClassBahagi([newBahagi.bahagi || newBahagi, ...classBahagi]);
+                // Refresh bahagi list to get accurate counts
+                await handleRefreshBahagi();
             } else {
-                alert(`❌ Error: ${response.error}`);
+                console.error('[handleBahagiSubmit] Unexpected response:', response);
+                alert(`❌ Error: Failed to create bahagi`);
             }
-        } catch (err) {
-            console.error('Error creating bahagi:', err);
-            alert('❌ Failed to create bahagi');
+        } catch (err: any) {
+            console.error('[handleBahagiSubmit] Exception:', err);
+            alert(`❌ Failed to create bahagi: ${err.message || 'Unknown error'}`);
         }
     };
 
@@ -372,7 +461,10 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             {/* Sidebar */}
             <TeacherSidebar
                 activeTab={activeTab}
-                onTabChange={(tab: 'overview' | 'classes' | 'profile') => setActiveTab(tab)}
+                onTabChange={(tab: 'overview' | 'classes' | 'profile') => {
+                    setActiveTab(tab);
+                    setSelectedClassId(null); // Clear class detail view when switching tabs
+                }}
                 user={user}
                 isSidebarOpen={isSidebarOpen}
                 onSidebarClose={() => setIsSidebarOpen(false)}
@@ -470,7 +562,8 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                                     classes={classes}
                                     onOpenClass={handleOpenClass}
                                     onCreateClass={handleCreateClass}
-                                    onArchiveClass={() => {}}
+                                    onArchiveClass={handleArchiveClass}
+                                    onRestoreClass={handleRestoreClass}
                                 />
                             )}
 
@@ -478,7 +571,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                             {activeTab === 'profile' && (
                                 <TeacherProfilePage
                                     user={user}
-                                    onUpdate={() => {}}
+                                    onUpdate={handleUpdateProfile}
                                 />
                             )}
                         </>

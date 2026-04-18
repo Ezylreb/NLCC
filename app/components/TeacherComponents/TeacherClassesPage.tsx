@@ -7,17 +7,24 @@ interface TeacherClassesPageProps {
     onOpenClass: (classId: string) => void;
     onCreateClass: (className: string) => void;
     onArchiveClass: (classId: string) => void;
+    onRestoreClass?: (classId: string) => void;
 }
 
 export const TeacherClassesPage: React.FC<TeacherClassesPageProps> = ({
     classes,
     onOpenClass,
     onCreateClass,
-    onArchiveClass
+    onArchiveClass,
+    onRestoreClass
 }) => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newClassName, setNewClassName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [showArchivedSection, setShowArchivedSection] = useState(false);
+
+    // Separate active and archived classes
+    const activeClasses = classes.filter(cls => !cls.is_archived);
+    const archivedClasses = classes.filter(cls => cls.is_archived);
 
     const handleCreateClass = async () => {
         if (!newClassName.trim()) {
@@ -50,10 +57,10 @@ export const TeacherClassesPage: React.FC<TeacherClassesPageProps> = ({
                 </button>
             </div>
 
-            {/* Classes Grid */}
-            {classes.length > 0 ? (
+            {/* Active Classes Grid */}
+            {activeClasses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {classes.map((cls) => (
+                    {activeClasses.map((cls) => (
                         <div
                             key={cls.id}
                             className="bg-slate-900/50 border-t-4 border-slate-800 border-x border-b border-slate-800/50 rounded-[2rem] p-8 flex flex-col group hover:border-brand-purple/30 hover:bg-slate-900/80 transition-all relative overflow-hidden"
@@ -124,8 +131,87 @@ export const TeacherClassesPage: React.FC<TeacherClassesPageProps> = ({
             ) : (
                 <div className="py-20 bg-slate-900/30 rounded-[3rem] border-4 border-dashed border-slate-800 flex flex-col items-center justify-center text-center">
                     <span className="text-6xl mb-4">📭</span>
-                    <h4 className="text-2xl font-black text-white">No Classes Yet</h4>
+                    <h4 className="text-2xl font-black text-white">No Active Classes</h4>
                     <p className="text-slate-500 text-sm font-bold max-w-xs mt-3">Create your first class to start organizing your lessons and students!</p>
+                </div>
+            )}
+
+            {/* Archived Classes Section */}
+            {archivedClasses.length > 0 && (
+                <div className="mt-8">
+                    <button
+                        onClick={() => setShowArchivedSection(!showArchivedSection)}
+                        className="flex items-center justify-between w-full bg-slate-900/50 border border-slate-800 rounded-2xl p-6 hover:bg-slate-900/80 transition-all group"
+                    >
+                        <div className="flex items-center gap-4">
+                            <span className="text-3xl">📦</span>
+                            <div className="text-left">
+                                <h4 className="text-xl font-black text-white group-hover:text-brand-purple transition-colors">Archived Classes</h4>
+                                <p className="text-slate-500 text-xs font-bold mt-1">{archivedClasses.length} archived class{archivedClasses.length !== 1 ? 'es' : ''}</p>
+                            </div>
+                        </div>
+                        <span className={`text-2xl text-slate-500 transition-transform duration-300 ${showArchivedSection ? 'rotate-180' : ''}`}>
+                            ▼
+                        </span>
+                    </button>
+
+                    {/* Archived Classes Grid */}
+                    {showArchivedSection && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 animate-in fade-in duration-500">
+                            {archivedClasses.map((cls) => (
+                                <div
+                                    key={cls.id}
+                                    className="bg-slate-900/30 border border-slate-800/50 rounded-[2rem] p-8 flex flex-col opacity-60 hover:opacity-100 transition-all relative overflow-hidden"
+                                >
+                                    {/* Class Header */}
+                                    <div className="relative z-10 mb-6">
+                                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest block mb-3">
+                                            🔒 Archived
+                                        </span>
+                                        <h3 className="text-3xl font-black text-slate-400 mb-2">
+                                            {cls.name}
+                                        </h3>
+                                        <p className="text-slate-600 font-bold text-xs uppercase tracking-wide">Class ID: {cls.id.slice(0, 8)}</p>
+                                    </div>
+
+                                    {/* Stats */}
+                                    <div className="flex flex-col gap-3 mb-8 relative z-10">
+                                        <div className="flex justify-between items-center bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
+                                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Students Enrolled</span>
+                                            <span className="text-lg font-black text-slate-500">{cls.student_count || 0}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
+                                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Total Lessons</span>
+                                            <span className="text-lg font-black text-slate-500">{cls.lesson_count || 0}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-3 mt-auto relative z-10">
+                                        {onRestoreClass && (
+                                            <button
+                                                onClick={() => {
+                                                    if (confirm(`Restore "${cls.name}" to active classes?`)) {
+                                                        onRestoreClass(cls.id);
+                                                    }
+                                                }}
+                                                className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                                            >
+                                                ↻ Restore
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => onOpenClass(cls.id)}
+                                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-300 rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                                            title="View archived class"
+                                        >
+                                            👁️
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 

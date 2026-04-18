@@ -84,22 +84,39 @@ class APIClient {
  */
 class BahagiAPI extends APIClient {
   constructor() {
-    super('/api/rest');
+    super('/api/teacher');
   }
 
   /**
-   * Fetch all bahagis (optionally filtered by teacher)
+   * Fetch all bahagis (optionally filtered by teacher and class)
    */
-  async fetchAll(teacherId?: string): Promise<APIResponse> {
-    const query = teacherId ? `?teacher_id=${teacherId}` : '';
-    return this.get(`/bahagis${query}`);
+  async fetchAll(teacherId?: string, className?: string): Promise<APIResponse> {
+    const params = new URLSearchParams();
+    if (teacherId) params.append('teacherId', teacherId);
+    if (className) params.append('className', className);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    
+    // Use REST endpoint directly
+    const url = `/api/rest/bahagis${query}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch bahagis');
+    }
+    return await response.json();
   }
 
   /**
    * Fetch single bahagi by ID
    */
   async fetchById(bahagiId: number): Promise<APIResponse> {
-    return this.get(`/bahagis/${bahagiId}`);
+    const url = `/api/rest/bahagis/${bahagiId}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch bahagi');
+    }
+    return await response.json();
   }
 
   /**
@@ -107,12 +124,22 @@ class BahagiAPI extends APIClient {
    */
   async create(data: {
     title: string;
-    description: string;
+    yunit?: string;
+    description?: string;
     teacher_id: string;
+    class_name?: string;
+    classId?: string;
+    className?: string;
     subject?: string;
     image_url?: string;
   }): Promise<APIResponse> {
-    return this.post('/bahagis', data);
+    // Use teacher endpoint for creating
+    return this.post('/create-bahagi', {
+      title: data.title,
+      teacherId: data.teacher_id,
+      classId: data.classId || data.class_name,
+      className: data.className || data.class_name
+    });
   }
 
   /**
@@ -129,35 +156,35 @@ class BahagiAPI extends APIClient {
       is_published: boolean;
     }>
   ): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, data);
+    return this.post('/update-bahagi', { id: bahagiId, ...data });
   }
 
   /**
    * Delete bahagi
    */
   async deleteBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.delete(`/bahagis/${bahagiId}`);
+    return this.post('/delete-bahagi', { id: bahagiId });
   }
 
   /**
    * Archive bahagi
    */
   async archive(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_archived: true });
+    return this.post('/archive-bahagi', { id: bahagiId });
   }
 
   /**
    * Restore archived bahagi
    */
   async restore(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_archived: false });
+    return this.post('/archive-bahagi', { id: bahagiId, restore: true });
   }
 
   /**
    * Publish bahagi (make public)
    */
   async publish(bahagiId: number): Promise<APIResponse> {
-    return this.patch(`/bahagis/${bahagiId}`, { is_published: true });
+    return this.post('/update-bahagi', { id: bahagiId, is_published: true });
   }
 }
 
@@ -436,6 +463,31 @@ class UserAPI extends APIClient {
   }
 
   /**
+   * Update own profile (first name, last name, email)
+   */
+  async updateOwnProfile(userId: string, data: {
+    firstName: string;
+    lastName: string;
+    email?: string;
+  }): Promise<APIResponse> {
+    // Use absolute path to bypass baseUrl (/api/rest)
+    const response = await fetch('/api/user/profile', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...data, userId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(`API Error: ${errorData.error || response.statusText}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
    * Get user lesson progress
    */
   async getLessonProgress(userId: string, lessonId: string): Promise<APIResponse> {
@@ -656,21 +708,40 @@ class ClassService extends APIClient {
    * Fetch single class
    */
   async fetchById(classId: number | string): Promise<APIResponse> {
-    return this.get(`/classes/${classId}`);
+    const tid = this.getTeacherId();
+    return this.get(`/classes/${classId}?teacherId=${tid}`);
   }
 
   /**
    * Update class
    */
   async update(classId: number | string, data: any): Promise<APIResponse> {
-    return this.patch(`/classes/${classId}`, data);
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { ...data, teacherId: tid });
   }
 
   /**
-   * Delete class
+   * Archive class (soft delete)
+   */
+  async archiveClass(classId: number | string): Promise<APIResponse> {
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { is_archived: true, teacherId: tid });
+  }
+
+  /**
+   * Restore archived class
+   */
+  async restoreClass(classId: number | string): Promise<APIResponse> {
+    const tid = this.getTeacherId();
+    return this.patch(`/classes/${classId}`, { is_archived: false, teacherId: tid });
+  }
+
+  /**
+   * Delete class (hard delete)
    */
   async deleteClass(classId: number | string): Promise<APIResponse> {
-    return this.delete(`/classes/${classId}`);
+    const tid = this.getTeacherId();
+    return this.delete(`/classes/${classId}?teacherId=${tid}`);
   }
 
   /**
