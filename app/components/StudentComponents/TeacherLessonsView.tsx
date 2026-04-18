@@ -70,6 +70,7 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
 
         // Handle both response formats (wrapped in data or direct)
         const data = result.data || result;
+        console.log('📚 Lesson titles received:', data.lessons?.map((l: any) => ({ id: l.id, title: l.title })));
         setLessons(data.lessons || []);
         setCompletedCount(data.completedLessons || 0);
 

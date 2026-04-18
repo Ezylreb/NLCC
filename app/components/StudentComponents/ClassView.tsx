@@ -89,11 +89,16 @@ export const ClassView: React.FC<ClassViewProps> = ({
               className="text-left p-6 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl hover:border-brand-purple hover:from-slate-700 hover:to-slate-800 transition-all group cursor-pointer"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-black text-lg text-white group-hover:text-brand-purple transition-colors">
-                    🏫 {cls.name}
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">Teacher: {cls.teacher}</p>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🎓</span>
+                    <h3 className="font-black text-xl text-white group-hover:text-brand-purple transition-colors">
+                      {cls.name}
+                    </h3>
+                  </div>
+                  <p className="text-sm text-slate-400 ml-8">
+                    👨‍🏫 Teacher: {cls.teacher}
+                  </p>
                 </div>
                 <div className="text-3xl group-hover:scale-110 transition-transform">📚</div>
               </div>

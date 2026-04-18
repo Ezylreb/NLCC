@@ -26,6 +26,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get student's class_name (grade level) first
+    const studentResult = await query(
+      `SELECT class_name FROM users WHERE id = $1`,
+      [studentId]
+    );
+
+    const studentClassName = studentResult.rows[0]?.class_name;
+
     // Get enrolled classes for this student
     const result = await query(
       `SELECT DISTINCT 
@@ -38,15 +46,18 @@ export async function GET(request: NextRequest) {
       FROM classes c
       JOIN class_enrollments ce ON c.id = ce.class_id
       JOIN users t ON c.teacher_id = t.id
-      LEFT JOIN bahagis b ON b.teacher_id = c.teacher_id AND b.is_archived = false
+      LEFT JOIN bahagi b ON b.teacher_id = c.teacher_id 
+        AND b.is_open = true
+        AND b.class_name = $2
       WHERE ce.student_id = $1
       GROUP BY c.id, c.name, t.id, t.first_name, t.last_name, t.email
       ORDER BY c.name`,
-      [studentId]
+      [studentId, studentClassName]
     );
 
     const classes = result.rows.map((row: any) => ({
       id: row.id,
+      name: row.name,
       title: row.name,
       description: null,
       teacher: row.teacher_name,

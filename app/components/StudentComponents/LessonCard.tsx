@@ -66,7 +66,7 @@ export const LessonCard: React.FC<LessonCardProps> = ({
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">
-              Bahagi {bahagiNumber}, Yunit 1
+              {title}
             </h3>
             <p className="text-sm text-slate-500">
               {passedYunits} of {totalYunits} units completed
@@ -97,14 +97,9 @@ export const LessonCard: React.FC<LessonCardProps> = ({
           )}
         </div>
 
-        {/* Title */}
-        <h2 className="text-lg font-black text-white mb-2 line-clamp-2 group-hover:text-brand-purple transition-colors">
-          {title}
-        </h2>
-
         {/* Description */}
         {description && (
-          <p className="text-sm text-slate-400 mb-4 line-clamp-2">
+          <p className="text-sm text-slate-400 mb-4 line-clamp-3">
             {description}
           </p>
         )}

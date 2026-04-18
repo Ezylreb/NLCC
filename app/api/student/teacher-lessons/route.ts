@@ -48,9 +48,9 @@ export async function GET(request: NextRequest) {
         b.icon_type,
         b.teacher_id,
         b.class_name,
-        COUNT(DISTINCT y.id) as yunit_count
+        COUNT(DISTINCT l.id) as yunit_count
       FROM bahagi b
-      LEFT JOIN yunits y ON b.id = y.bahagi_id
+      LEFT JOIN lesson l ON b.id = l.bahagi_id
       WHERE b.teacher_id = $1 
         AND b.is_open = true
     `;
@@ -58,8 +58,9 @@ export async function GET(request: NextRequest) {
     const queryParams = [teacherId];
 
     // If student has a class_name, filter bahagi by matching class_name (grade level)
+    // ONLY show bahagi that exactly match the student's grade level
     if (studentClassName) {
-      bahagiQuery += ` AND (b.class_name = $2 OR b.class_name IS NULL)`;
+      bahagiQuery += ` AND b.class_name = $2`;
       queryParams.push(studentClassName);
     }
 
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
 
     const bahagis = bahagiResult.rows;
     console.log(`[GET /api/student/teacher-lessons] Found ${bahagis.length} bahagi for teacher ${teacherId}`);
+    console.log('[GET /api/student/teacher-lessons] Bahagi details:', bahagis.map((b: any) => ({ id: b.id, title: b.title, class_name: b.class_name, description: b.description?.substring(0, 30) })));
 
     // For each bahagi, get yunits and their details
     const lessonsWithYunits = await Promise.all(
@@ -118,7 +120,7 @@ export async function GET(request: NextRequest) {
           // Simple unlock logic: first lesson always unlocked, others are unlocked
           const isUnlocked = bahagiIndex === 0 || allPassed; // Simplified for now
 
-        return {
+        const lessonData = {
           id: bahagi.id,
           bahagiNumber: bahagiIndex + 1,
           title: bahagi.title || `Lesson ${bahagiIndex + 1}`,
@@ -133,6 +135,10 @@ export async function GET(request: NextRequest) {
           xpReward: 10,
           difficulty: totalYunits <= 2 ? 'beginner' : totalYunits <= 4 ? 'intermediate' : 'advanced'
         };
+        
+        console.log(`[GET /api/student/teacher-lessons] Lesson ${bahagiIndex + 1} mapped:`, { id: lessonData.id, title: lessonData.title, originalTitle: bahagi.title });
+        
+        return lessonData;
         } catch (lessonErr: any) {
           console.error(`Error processing bahagi ${bahagi.id}:`, lessonErr);
           return {

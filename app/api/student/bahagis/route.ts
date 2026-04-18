@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
     const queryParams = [teacherId];
 
     // If student has a class_name, filter bahagi by matching class_name
+    // ONLY show bahagi that exactly match the student's grade level
     if (studentClassName) {
-      bahagiQuery += ` AND (class_name = $2 OR class_name IS NULL)`;
+      bahagiQuery += ` AND class_name = $2`;
       queryParams.push(studentClassName);
     }
 
