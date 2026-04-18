@@ -5,9 +5,10 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const role = searchParams.get('role') || null;
     const search = searchParams.get('search') || null;
+    const section = searchParams.get('section') || null;
 
     const offset = (page - 1) * limit;
 
@@ -19,6 +20,12 @@ export async function GET(request: Request) {
     if (role && role !== 'all') {
       whereConditions.push(`role = $${paramIndex}`);
       queryParams.push(role);
+      paramIndex++;
+    }
+
+    if (section && section !== 'all') {
+      whereConditions.push(`class_name = $${paramIndex}`);
+      queryParams.push(section);
       paramIndex++;
     }
 

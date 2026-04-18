@@ -600,6 +600,13 @@ class AdminAPI extends APIClient {
   }
 
   /**
+   * Get all classes with teacher info (for combined dropdown)
+   */
+  async getAllClassesWithTeachers(): Promise<APIResponse> {
+    return this.get(`/classes`);
+  }
+
+  /**
    * Create student
    */
   async createStudent(data: {
@@ -652,12 +659,13 @@ class AdminAPI extends APIClient {
   /**
    * Get all users with pagination and filtering
    */
-  async getUsers(page?: number, limit?: number, role?: string, search?: string): Promise<APIResponse> {
+  async getUsers(page?: number, limit?: number, role?: string, search?: string, section?: string): Promise<APIResponse> {
     const query = new URLSearchParams();
     if (page) query.append('page', String(page));
     if (limit) query.append('limit', String(limit));
     if (role && role !== 'all') query.append('role', role);
     if (search) query.append('search', search);
+    if (section && section !== 'all') query.append('section', section);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/users${queryStr}`);
   }
