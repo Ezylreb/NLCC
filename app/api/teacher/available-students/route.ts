@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 
         // Get all students that are:
         // 1. Assigned to this teacher (teacher_id matches)
-        // 2. Not yet enrolled in this specific class
+        // 2. Not yet enrolled in this specific class (neither via enrollment nor direct assignment)
         const students = await query(
             `SELECT 
                 u.id,
@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
             FROM users u
             WHERE (u.role = 'student' OR u.role = 'USER')
             AND u.teacher_id = $2
+            AND u.class_id IS NULL  -- Not directly assigned to any class
             AND u.id NOT IN (
                 SELECT student_id FROM class_enrollments WHERE class_id = $1
             )

@@ -19,8 +19,13 @@ interface TeacherDashboardV2Props {
 
 export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout, user }) => {
     // Restore active tab from sessionStorage or default to 'overview'
+    // If there's a selected class, force 'classes' tab
     const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'profile'>(() => {
         if (typeof window !== 'undefined') {
+            const hasSelectedClass = sessionStorage.getItem('teacher_selected_class_id');
+            if (hasSelectedClass) {
+                return 'classes'; // Force classes tab if restoring a class view
+            }
             const savedTab = sessionStorage.getItem('teacher_active_tab');
             return (savedTab as 'overview' | 'classes' | 'profile') || 'overview';
         }
@@ -37,9 +42,19 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const [isLoading, setIsLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
 
-    // Class Detail states
-    const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-    const [selectedClassName, setSelectedClassName] = useState<string>('');
+    // Class Detail states (restore from sessionStorage on reload)
+    const [selectedClassId, setSelectedClassId] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            return sessionStorage.getItem('teacher_selected_class_id');
+        }
+        return null;
+    });
+    const [selectedClassName, setSelectedClassName] = useState<string>(() => {
+        if (typeof window !== 'undefined') {
+            return sessionStorage.getItem('teacher_selected_class_name') || '';
+        }
+        return '';
+    });
     const [classBahagi, setClassBahagi] = useState<any[]>([]);
     const [classLessons, setClassLessons] = useState<any[]>([]);
 
@@ -102,6 +117,35 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         }
     }, [activeTab]);
 
+    // Restore class detail view on page reload
+    useEffect(() => {
+        const restoreClassView = async () => {
+            // Only restore if:
+            // 1. We have a selected class ID from sessionStorage
+            // 2. We're on the classes tab
+            // 3. Classes have been loaded
+            // 4. Bahagi haven't been loaded yet (to avoid re-fetching)
+            if (selectedClassId && selectedClassName && activeTab === 'classes' && classes.length > 0 && classBahagi.length === 0) {
+                console.log('[RESTORE] Restoring class view for:', selectedClassName);
+                try {
+                    // Fetch bahagi for the restored class
+                    const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
+                    
+                    if (bahagiResult?.success) {
+                        console.log('[RESTORE] Loaded bahagi:', bahagiResult.data);
+                        setClassBahagi(bahagiResult.data || []);
+                    } else {
+                        console.warn('[RESTORE] Failed to fetch bahagi:', bahagiResult?.error);
+                    }
+                } catch (err) {
+                    console.error('[RESTORE] Error fetching class data:', err);
+                }
+            }
+        };
+        
+        restoreClassView();
+    }, [selectedClassId, selectedClassName, activeTab, classes, user?.id]);
+
     // Handle class creation
     const handleCreateClass = async (className: string) => {
         try {
@@ -127,8 +171,12 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleOpenClass = async (classId: string) => {
         const selectedClass = classes.find(c => c.id === classId);
         if (selectedClass) {
+            setActiveTab('classes'); // Ensure we're on the classes tab
             setSelectedClassId(classId);
             setSelectedClassName(selectedClass.name);
+            // Persist to sessionStorage
+            sessionStorage.setItem('teacher_selected_class_id', classId);
+            sessionStorage.setItem('teacher_selected_class_name', selectedClass.name);
             // Load Bahagi for this class
             try {
                 console.log('[handleOpenClass] Fetching bahagi for:', {
@@ -166,6 +214,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         setSelectedClassName('');
         setClassBahagi([]);
         setClassLessons([]);
+        // Clear from sessionStorage
+        sessionStorage.removeItem('teacher_selected_class_id');
+        sessionStorage.removeItem('teacher_selected_class_name');
     };
 
     // Handle archiving a class
@@ -253,15 +304,25 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle refreshing bahagi list after edit
     const handleRefreshBahagi = async () => {
         if (!selectedClassId || !selectedClassName) return;
+        console.log('[REFRESH BAHAGI] Starting refresh for class:', selectedClassName);
         try {
             const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
             
+            console.log('[REFRESH BAHAGI] Full response:', bahagiResult);
+            
             if (bahagiResult?.success) {
-                setClassBahagi(bahagiResult.data || []);
-                console.log('✅ Bahagi list refreshed');
+                const newBahagi = bahagiResult.data || [];
+                console.log('[REFRESH BAHAGI] Fetched bahagi count:', newBahagi.length);
+                console.log('[REFRESH BAHAGI] Bahagi data:', newBahagi);
+                
+                // Force new array reference to trigger re-render
+                setClassBahagi([...newBahagi]);
+                console.log('✅ Bahagi list refreshed successfully');
+            } else {
+                console.error('[REFRESH BAHAGI] Failed:', bahagiResult?.error);
             }
         } catch (err) {
-            console.error('Failed to refresh bahagi:', err);
+            console.error('[REFRESH BAHAGI] Error:', err);
         }
     };
 
@@ -453,6 +514,10 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle logout
     const handleLogout = () => {
         setShowLogoutModal(false);
+        // Clear all session storage related to teacher dashboard
+        sessionStorage.removeItem('teacher_active_tab');
+        sessionStorage.removeItem('teacher_selected_class_id');
+        sessionStorage.removeItem('teacher_selected_class_name');
         onLogout();
     };
 
@@ -464,6 +529,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 onTabChange={(tab: 'overview' | 'classes' | 'profile') => {
                     setActiveTab(tab);
                     setSelectedClassId(null); // Clear class detail view when switching tabs
+                    // Clear from sessionStorage when switching tabs
+                    sessionStorage.removeItem('teacher_selected_class_id');
+                    sessionStorage.removeItem('teacher_selected_class_name');
                 }}
                 user={user}
                 isSidebarOpen={isSidebarOpen}

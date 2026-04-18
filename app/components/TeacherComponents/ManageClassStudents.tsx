@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api-client';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface Student {
     id: string;
@@ -24,52 +24,28 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
     className,
     teacherId
 }) => {
-    const [availableStudents, setAvailableStudents] = useState<Student[]>([]);
     const [enrolledStudents, setEnrolledStudents] = useState<Student[]>([]);
-    const [isLoadingAvailable, setIsLoadingAvailable] = useState(true);
     const [isLoadingEnrolled, setIsLoadingEnrolled] = useState(true);
-    const [isEnrolling, setIsEnrolling] = useState<string | null>(null);
-    const [isRemoving, setIsRemoving] = useState<string | null>(null);
-    const [error, setError] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
 
-    // Load available and enrolled students
+    // Load enrolled students
     useEffect(() => {
-        fetchAvailableStudents();
         fetchEnrolledStudents();
     }, [classId]);
-
-    const fetchAvailableStudents = async () => {
-        try {
-            setIsLoadingAvailable(true);
-            setError('');
-            
-            console.log('🔍 Fetching available students:', { classId, teacherId });
-            const response = await apiClient.class.getAvailableStudents(classId, teacherId);
-            console.log('📦 Available students response:', response);
-
-            if (!response.success) {
-                throw new Error(response.error || 'Failed to fetch students');
-            }
-
-            setAvailableStudents(response.data?.students || []);
-        } catch (err) {
-            console.error('❌ Error fetching available students:', err);
-            setError(err instanceof Error ? err.message : 'Failed to load students');
-        } finally {
-            setIsLoadingAvailable(false);
-        }
-    };
 
     const fetchEnrolledStudents = async () => {
         try {
             setIsLoadingEnrolled(true);
+            console.log('[ManageClassStudents] Fetching students with:', { classId, teacherId });
+            
             const response = await apiClient.class.getStudents(classId, teacherId);
+
+            console.log('[ManageClassStudents] API Response:', response);
 
             if (!response.success) {
                 throw new Error(response.error || 'Failed to fetch enrolled students');
             }
 
+            console.log('[ManageClassStudents] Students:', response.data?.students);
             setEnrolledStudents(response.data?.students || []);
         } catch (err) {
             console.error('Error fetching enrolled students:', err);
@@ -78,144 +54,20 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
         }
     };
 
-    // Enroll a student
-    const handleEnrollStudent = async (studentId: string, studentName: string) => {
-        try {
-            setIsEnrolling(studentId);
-            setError('');
-            const response = await apiClient.class.addStudent(classId, studentId, teacherId);
-
-            if (!response.success) {
-                throw new Error(response.error || 'Enrollment failed');
-            }
-
-            setSuccessMessage(`${studentName} has been added to ${className}!`);
-
-            // Refresh both lists
-            await fetchAvailableStudents();
-            await fetchEnrolledStudents();
-
-            // Clear success message after 3 seconds
-            setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Enrollment failed');
-        } finally {
-            setIsEnrolling(null);
-        }
-    };
-
-    // Unenroll a student
-    const handleUnenrollStudent = async (studentId: string, studentName: string) => {
-        if (!window.confirm(`Remove ${studentName} from ${className}?`)) {
-            return;
-        }
-
-        try {
-            setIsRemoving(studentId);
-            setError('');
-            const response = await apiClient.class.removeStudent(classId, studentId, teacherId);
-
-            if (!response.success) {
-                throw new Error(response.error || 'Removal failed');
-            }
-
-            setSuccessMessage(`${studentName} has been removed from ${className}`);
-
-            // Refresh both lists
-            await fetchAvailableStudents();
-            await fetchEnrolledStudents();
-
-            // Clear success message after 3 seconds
-            setTimeout(() => setSuccessMessage(''), 3000);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Removal failed');
-        } finally {
-            setIsRemoving(null);
-        }
-    };
-
     return (
         <div className="space-y-6 bg-slate-900/50 border border-slate-800 rounded-xl p-6">
             {/* Header */}
             <div>
-                <h2 className="text-xl font-bold text-white mb-2">📚 Manage Class Students</h2>
+                <h2 className="text-xl font-bold text-white mb-2">👥 Class Students</h2>
                 <p className="text-sm text-slate-400">{className}</p>
-            </div>
-
-            {/* Messages */}
-            {error && (
-                <div className="bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded-lg text-sm">
-                    ⚠️ {error}
+                <div className="mt-3 bg-blue-900/20 border border-blue-700/30 text-blue-300 px-4 py-2.5 rounded-lg text-xs">
+                    <span className="font-semibold">ℹ️ Note:</span> Student assignments are managed by the administrator. 
+                    Students automatically appear here when assigned to your class.
                 </div>
-            )}
-
-            {successMessage && (
-                <div className="bg-green-900/30 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-sm">
-                    ✓ {successMessage}
-                </div>
-            )}
-
-            {/* Available Students Table */}
-            <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-300">➕ Available Students</h3>
-
-                {isLoadingAvailable ? (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-5 h-5 text-brand-purple animate-spin" />
-                    </div>
-                ) : availableStudents.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">
-                        All available students have been enrolled! 🎉
-                    </p>
-                ) : (
-                    <div className="overflow-x-auto border border-slate-700 rounded-lg">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="bg-slate-800/50 border-b border-slate-700">
-                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Name</th>
-                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Level</th>
-                                    <th className="px-4 py-3 text-left font-semibold text-slate-300">Email</th>
-                                    <th className="px-4 py-3 text-right font-semibold text-slate-300">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-700">
-                                {availableStudents.map((student) => (
-                                    <tr key={student.id} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-4 py-3 text-white font-medium">
-                                            {student.firstName} {student.lastName}
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-400">
-                                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-brand-purple/20 text-brand-purple">
-                                                {student.level === 'kinder2' ? 'Kinder 2' : 'Kinder 1'}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-400 text-xs">{student.email}</td>
-                                        <td className="px-4 py-3 text-right">
-                                            <button
-                                                onClick={() =>
-                                                    handleEnrollStudent(student.id, `${student.firstName} ${student.lastName}`)
-                                                }
-                                                disabled={isEnrolling === student.id}
-                                                className="bg-brand-sky hover:bg-brand-sky/80 disabled:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-2"
-                                            >
-                                                {isEnrolling === student.id ? (
-                                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                                ) : (
-                                                    '➕'
-                                                )}
-                                                Add
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
             </div>
 
             {/* Enrolled Students Section */}
-            <div className="border-t border-slate-700 pt-6 space-y-3">
+            <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-300">
                         ✅ Students in {className} ({enrolledStudents.length})
@@ -227,56 +79,42 @@ export const ManageClassStudents: React.FC<ManageClassStudentsProps> = ({
                         <Loader2 className="w-5 h-5 text-brand-purple animate-spin" />
                     </div>
                 ) : enrolledStudents.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">
-                        No students enrolled yet. Add students from the table above.
-                    </p>
+                    <div className="text-center py-12 bg-slate-800/30 rounded-lg border border-slate-700">
+                        <div className="text-4xl mb-3">📭</div>
+                        <p className="text-sm text-slate-400 font-medium">
+                            No students assigned yet
+                        </p>
+                        <p className="text-xs text-slate-500 mt-2">
+                            Students will appear here when the administrator assigns them to this class
+                        </p>
+                    </div>
                 ) : (
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                         {enrolledStudents.map((student) => (
                             <div
                                 key={student.id}
-                                className="flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 border border-slate-700 p-3 rounded-lg transition-colors"
+                                className="flex items-center justify-between bg-slate-800/50 hover:bg-slate-800 border border-slate-700 p-4 rounded-lg transition-colors"
                             >
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium text-white text-sm">
                                         {student.firstName} {student.lastName}
                                     </p>
-                                    <p className="text-xs text-slate-400">{student.email}</p>
+                                    <p className="text-xs text-slate-400 mt-1">{student.email}</p>
                                     {student.enrolledAt && (
                                         <p className="text-xs text-slate-500 mt-1">
-                                            Enrolled: {new Date(student.enrolledAt).toLocaleDateString()}
+                                            Assigned: {new Date(student.enrolledAt).toLocaleDateString()}
                                         </p>
                                     )}
                                 </div>
-                                <button
-                                    onClick={() =>
-                                        handleUnenrollStudent(student.id, `${student.firstName} ${student.lastName}`)
-                                    }
-                                    disabled={isRemoving === student.id}
-                                    className="ml-3 flex items-center justify-center bg-red-900/50 hover:bg-red-900 disabled:bg-slate-700 text-red-300 hover:text-red-200 p-2 rounded-lg transition-colors"
-                                    title="Remove student from class"
-                                >
-                                    {isRemoving === student.id ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                    ) : (
-                                        <Trash2 className="w-4 h-4" />
-                                    )}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-green-900/30 text-green-400 border border-green-700/30">
+                                        ✓ Enrolled
+                                    </span>
+                                </div>
                             </div>
                         ))}
                     </div>
                 )}
-            </div>
-
-            {/* Info Box */}
-            <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 text-sm text-blue-300">
-                <p className="font-semibold mb-1">ℹ️ How it works:</p>
-                <ul className="list-disc list-inside space-y-1 text-xs">
-                    <li>Select students from the table above to add them to your class</li>
-                    <li>Each student shows their name, level (Kinder 1 or 2), and email</li>
-                    <li>Click the "Add" button to enroll a student in your class</li>
-                    <li>Remove students anytime using the trash button below</li>
-                </ul>
             </div>
         </div>
     );

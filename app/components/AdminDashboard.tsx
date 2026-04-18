@@ -52,6 +52,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<'all' | 'USER' | 'TEACHER' | 'ADMIN'>('all');
+    const [sectionFilter, setSectionFilter] = useState<string>('all');
+    const [availableSections, setAvailableSections] = useState<string[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [teachers, setTeachers] = useState<any[]>([]);
     const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
@@ -103,6 +105,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 class_id: newStudent.classId,
             });
 
+            console.log('[handleCreateStudent] Sending data:', {
+                teacherId: newStudent.teacherId,
+                classId: newStudent.classId,
+            });
+            console.log('[handleCreateStudent] API Response:', response);
+
             if (response.success) {
                 setShowCreateStudent(false);
                 setNewStudent({ firstName: '', lastName: '', email: '', lrn: '', password: '', teacherId: '', classId: '' });
@@ -115,11 +123,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 setRoleFilter('USER');
                 setTimeout(() => fetchUsers(1), 500);
             } else {
+                console.error('[handleCreateStudent] API error:', response.error);
                 setError(response.error || 'Failed to create student account.');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error creating student:', err);
-            setError('Connection error. Please try again.');
+            setError(err.message || 'Connection error. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -201,11 +210,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
         try {
             const response = await apiClient.admin.updateUser(selectedUser.id, {
-                name: `${selectedUser.firstName} ${selectedUser.lastName}`,
+                firstName: selectedUser.firstName,
+                lastName: selectedUser.lastName,
                 email: selectedUser.email,
                 lrn: selectedUser.lrn,
                 role: selectedUser.role,
-                class_name: selectedUser.class_name,
+                className: selectedUser.class_name,
                 teacher_id: selectedUser.teacher_id || null,
                 class_id: selectedUser.class_id || null,
                 teacher_role: selectedUser.teacher_role || null,
@@ -312,11 +322,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const fetchUsers = async (page: number = 1) => {
         setIsUsersLoading(true);
         try {
-            const response = await apiClient.admin.getUsers(page, 50, roleFilter === 'all' ? undefined : roleFilter, searchQuery || undefined);
+            const response = await apiClient.admin.getUsers(
+                page, 
+                10, 
+                roleFilter === 'all' ? undefined : roleFilter, 
+                searchQuery || undefined,
+                sectionFilter === 'all' ? undefined : sectionFilter
+            );
             if (response.success) {
                 setRecentUsers(response.data?.users || []);
                 setUserPage(response.data?.pagination?.page || page);
                 setUserTotalPages(response.data?.pagination?.totalPages || 1);
+                
+                // Extract unique class names for section filter
+                const uniqueSections = Array.from(
+                    new Set(
+                        (response.data?.users || [])
+                            .map((u: any) => u.className)
+                            .filter((name: string) => name && name.trim() !== '')
+                    )
+                ).sort();
+                setAvailableSections(uniqueSections as string[]);
             } else {
                 console.error('Failed to fetch users:', response.message);
             }
@@ -361,14 +387,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         }
     };
 
-    const fetchClasses = async (teacherId: string) => {
-        if (!teacherId) {
-            setClasses([]);
-            return;
-        }
+    const fetchClasses = async (teacherId?: string) => {
         setIsLoadingClasses(true);
         try {
-            const response = await apiClient.admin.getClassesByTeacher(teacherId);
+            // If teacherId provided, get classes for specific teacher (legacy support)
+            // Otherwise, get all classes with teacher info for combined dropdown
+            const response = teacherId 
+                ? await apiClient.admin.getClassesByTeacher(teacherId)
+                : await apiClient.admin.getAllClassesWithTeachers();
+            
+            console.log('[fetchClasses] API Response:', response);
+            console.log('[fetchClasses] Classes data:', response.data?.classes);
+            
             if (response.success) {
                 setClasses(response.data?.classes || []);
             } else {
@@ -398,7 +428,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         if (activeTab === 'users') {
             setUserPage(1);
         }
-    }, [activeTab, roleFilter, searchQuery]);
+    }, [activeTab, roleFilter, searchQuery, sectionFilter]);
 
     React.useEffect(() => {
         // Fetch users when page changes (and ensure we're on the users tab)
@@ -616,7 +646,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                             <button 
                                 onClick={() => {
                                     setShowCreateStudent(true);
-                                    fetchTeachers();
+                                    fetchClasses(); // Fetch all classes with teacher info
                                 }}
                                 className="bg-brand-purple text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg shadow-purple-500/20 hover:scale-105 transition-transform"
                             >
@@ -709,50 +739,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                     </div>
 
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">👨‍🏫 Assign Teacher (Required)</label>
-                                        <select 
-                                            value={newStudent.teacherId}
-                                            onChange={(e) => {
-                                                const teacherId = e.target.value;
-                                                setNewStudent({...newStudent, teacherId, classId: ''});
-                                                if (teacherId) {
-                                                    fetchClasses(teacherId);
-                                                } else {
-                                                    setClasses([]);
-                                                }
-                                            }}
-                                            disabled={isLoadingTeachers}
-                                            className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
-                                        >
-                                            <option value="">Select a teacher...</option>
-                                            {teachers.length > 0 ? (
-                                                teachers.map((teacher) => (
-                                                    <option key={teacher.id} value={teacher.id}>
-                                                        {teacher.fullName}
-                                                    </option>
-                                                ))
-                                            ) : !isLoadingTeachers ? (
-                                                <option disabled>No teachers available</option>
-                                            ) : null}
-                                        </select>
-                                    </div>
-
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">📚 Assign Class (Required)</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">� Assign Class & Teacher (Required)</label>
                                         <select 
                                             value={newStudent.classId}
-                                            onChange={(e) => setNewStudent({...newStudent, classId: e.target.value})}
-                                            disabled={!newStudent.teacherId || isLoadingClasses}
+                                            onChange={(e) => {
+                                                const selectedClass = classes.find(c => c.id === e.target.value);
+                                                setNewStudent({
+                                                    ...newStudent, 
+                                                    classId: e.target.value,
+                                                    teacherId: selectedClass?.teacher_id || ''
+                                                });
+                                            }}
+                                            disabled={isLoadingClasses}
                                             className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
                                         >
-                                            <option value="">{isLoadingClasses ? 'Loading classes...' : newStudent.teacherId ? 'Select a class...' : 'Select a teacher first'}</option>
+                                            <option value="">{isLoadingClasses ? 'Loading classes...' : 'Select a class...'}</option>
                                             {classes.length > 0 ? (
                                                 classes.map((cls) => (
                                                     <option key={cls.id} value={cls.id}>
-                                                        {cls.name}
+                                                        {cls.displayName || cls.name}
                                                     </option>
                                                 ))
-                                            ) : newStudent.teacherId && !isLoadingClasses ? (
+                                            ) : !isLoadingClasses ? (
                                                 <option disabled>No classes available</option>
                                             ) : null}
                                         </select>
@@ -860,48 +868,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                     )}
 
                                     {selectedUser.role !== 'TEACHER' && (
-                                        <>
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">👨‍🏫 Assigned Teacher (Required)</label>
-                                                <select 
-                                                    value={selectedUser.teacher_id || ''}
-                                                    onChange={(e) => {
-                                                        const teacherId = e.target.value;
-                                                        setSelectedUser({...selectedUser, teacher_id: teacherId || null, class_id: null});
-                                                        if (teacherId) {
-                                                            fetchClasses(teacherId);
-                                                        } else {
-                                                            setClasses([]);
-                                                        }
-                                                    }}
-                                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none"
-                                                >
-                                                    <option value="">Select a teacher...</option>
-                                                    {teachers.map((teacher) => (
-                                                        <option key={teacher.id} value={teacher.id}>
-                                                            {teacher.fullName}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">📚 Assigned Class (Required)</label>
-                                                <select 
-                                                    value={selectedUser.class_id || ''}
-                                                    onChange={(e) => setSelectedUser({...selectedUser, class_id: e.target.value || null})}
-                                                    disabled={!selectedUser.teacher_id || isLoadingClasses}
-                                                    className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
-                                                >
-                                                    <option value="">{isLoadingClasses ? 'Loading classes...' : selectedUser.teacher_id ? 'Select a class...' : 'Select a teacher first'}</option>
-                                                    {classes.map((cls) => (
-                                                        <option key={cls.id} value={cls.id}>
-                                                            {cls.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </>
+                                        <div className="flex flex-col gap-1.5">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">📚 Assigned Class & Teacher (Required)</label>
+                                            <select 
+                                                value={selectedUser.class_id || ''}
+                                                onChange={(e) => {
+                                                    const selectedClass = classes.find(c => c.id === e.target.value);
+                                                    setSelectedUser({
+                                                        ...selectedUser, 
+                                                        class_id: e.target.value || null,
+                                                        teacher_id: selectedClass?.teacher_id || null
+                                                    });
+                                                }}
+                                                disabled={isLoadingClasses}
+                                                className="bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-brand-purple transition-colors appearance-none disabled:opacity-50"
+                                            >
+                                                <option value="">{isLoadingClasses ? 'Loading classes...' : 'Select a class...'}</option>
+                                                {classes.map((cls) => (
+                                                    <option key={cls.id} value={cls.id}>
+                                                        {cls.displayName || cls.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     )}
 
                                     <div className="mt-4 flex flex-col gap-3">
@@ -1083,22 +1072,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                         className="bg-slate-900 border border-slate-700 text-white pl-10 pr-4 py-2.5 rounded-xl text-sm font-medium w-full focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all placeholder:text-slate-500"
                                     />
                                 </div>
-                                <div className="flex items-center gap-2 w-full sm:w-auto">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Filter by Role:</span>
-                                    <select
-                                        value={roleFilter}
-                                        onChange={(e) => setRoleFilter(e.target.value as any)}
-                                        className="bg-slate-900 border border-slate-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:border-brand-purple transition-all cursor-pointer appearance-none min-w-[120px]"
-                                    >
-                                        <option value="all">ALL ROLES</option>
-                                        <option value="USER">STUDENTS</option>
-                                        <option value="TEACHER">TEACHERS</option>
-                                        <option value="ADMIN">ADMINS</option>
-                                    </select>
-                                    {(searchQuery || roleFilter !== 'all') && (
+                                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Role:</span>
+                                        <select
+                                            value={roleFilter}
+                                            onChange={(e) => setRoleFilter(e.target.value as any)}
+                                            className="bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-brand-purple transition-all cursor-pointer appearance-none min-w-[110px]"
+                                        >
+                                            <option value="all">ALL</option>
+                                            <option value="USER">STUDENTS</option>
+                                            <option value="TEACHER">TEACHERS</option>
+                                            <option value="ADMIN">ADMINS</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Section:</span>
+                                        <select
+                                            value={sectionFilter}
+                                            onChange={(e) => setSectionFilter(e.target.value)}
+                                            className="bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-brand-purple transition-all cursor-pointer appearance-none min-w-[130px]"
+                                        >
+                                            <option value="all">ALL SECTIONS</option>
+                                            {availableSections.map((section) => (
+                                                <option key={section} value={section}>
+                                                    {section}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {(searchQuery || roleFilter !== 'all' || sectionFilter !== 'all') && (
                                         <button 
-                                            onClick={() => { setSearchQuery(''); setRoleFilter('all'); }}
-                                            className="text-[10px] font-black text-brand-purple hover:text-brand-purple/80 uppercase tracking-widest ml-2 px-2 py-1 bg-brand-purple/10 rounded-lg transition-colors"
+                                            onClick={() => { 
+                                                setSearchQuery(''); 
+                                                setRoleFilter('all'); 
+                                                setSectionFilter('all');
+                                            }}
+                                            className="text-[10px] font-black text-brand-purple hover:text-brand-purple/80 uppercase tracking-widest px-3 py-2 bg-brand-purple/10 rounded-lg transition-colors whitespace-nowrap"
                                         >
                                             Clear Filters
                                         </button>
@@ -1126,8 +1136,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                                 
                                                 const matchesSearch = name.includes(search) || email.includes(search) || lrn.includes(search);
                                                 const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+                                                const matchesSection = sectionFilter === 'all' || user.className === sectionFilter;
                                                 
-                                                return matchesSearch && matchesRole;
+                                                return matchesSearch && matchesRole && matchesSection;
                                             });
 
                                             if (filteredUsers.length === 0) {
@@ -1141,7 +1152,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                                                 </p>
                                                                 {!isDataLoading && (
                                                                     <button 
-                                                                        onClick={() => { setSearchQuery(''); setRoleFilter('all'); }}
+                                                                        onClick={() => { 
+                                                                            setSearchQuery(''); 
+                                                                            setRoleFilter('all'); 
+                                                                            setSectionFilter('all');
+                                                                        }}
                                                                         className="text-xs font-black text-brand-purple hover:underline mt-2"
                                                                     >
                                                                         Reset all filters
@@ -1197,10 +1212,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                                                                 setSelectedUser(user);
                                                                 setShowManageModal(true);
                                                                 if (user.role !== 'TEACHER') {
-                                                                    fetchTeachers();
-                                                                    if (user.teacher_id) {
-                                                                        fetchClasses(user.teacher_id);
-                                                                    }
+                                                                    fetchClasses(); // Fetch all classes with teacher info
                                                                 }
                                                             }}
                                                             className="bg-slate-900 hover:bg-brand-purple hover:text-white border border-slate-800 hover:border-brand-purple text-slate-400 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"

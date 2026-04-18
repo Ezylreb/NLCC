@@ -21,27 +21,9 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
   const [loading, setLoading] = useState(true);
 
   const sizeClasses = {
-    sm: 'w-16 h-20',
-    md: 'w-24 h-32',
-    lg: 'w-32 h-40'
-  };
-
-  const hairSizeClasses = {
-    sm: 'w-14 h-4',
-    md: 'w-20 h-5',
-    lg: 'w-24 h-6'
-  };
-
-  const headSizeClasses = {
-    sm: 'w-12 h-12',
-    md: 'w-16 h-16',
-    lg: 'w-20 h-20'
-  };
-
-  const bodySizeClasses = {
-    sm: 'w-8 h-10',
-    md: 'w-12 h-14',
-    lg: 'w-14 h-16'
+    sm: 'w-24 h-24',
+    md: 'w-32 h-32',
+    lg: 'w-full h-full min-h-[500px]'
   };
 
   useEffect(() => {
@@ -49,7 +31,24 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
       try {
         const response = await apiClient.avatar.getAvatar(studentId);
         if (response.success && response.data) {
-          setAvatar(response.data);
+          // Parse JSONB fields if they're strings
+          const avatarData = response.data;
+          const parsedAvatar: any = {};
+          
+          const fields = ['katawan', 'hair', 'eyes', 'mouth', 'damit', 'pants', 'shoes', 'accessory'];
+          fields.forEach(field => {
+            if (avatarData[field]) {
+              try {
+                parsedAvatar[field] = typeof avatarData[field] === 'string' 
+                  ? JSON.parse(avatarData[field]) 
+                  : avatarData[field];
+              } catch (e) {
+                console.error(`Error parsing ${field}:`, e);
+              }
+            }
+          });
+          
+          setAvatar(parsedAvatar);
         }
       } catch (error) {
         console.error('Failed to fetch avatar:', error);
@@ -63,77 +62,44 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
     }
   }, [studentId]);
 
-  if (loading || !avatar) {
+  if (loading) {
     return (
       <div className={`${sizeClasses[size]} bg-slate-700 rounded-lg animate-pulse`} />
     );
   }
 
-  const containerClass = `${sizeClasses[size]} bg-gradient-to-b from-blue-400 to-blue-200 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden border-4 border-white shadow-xl ${
-    clickable ? 'cursor-pointer hover:shadow-2xl transition-all' : ''
+  if (!avatar || Object.keys(avatar).length === 0) {
+    return (
+      <div className={`${sizeClasses[size]} bg-slate-700 rounded-lg flex items-center justify-center`}>
+        <div className="text-4xl">😊</div>
+      </div>
+    );
+  }
+
+  // Layer order for proper rendering
+  const renderOrder: string[] = ['katawan', 'pants', 'damit', 'shoes', 'accessory', 'mouth', 'eyes', 'hair'];
+
+  const containerClass = `${sizeClasses[size]} relative ${
+    clickable ? 'cursor-pointer hover:opacity-90 transition-all' : ''
   }`;
 
   const renderAvatar = () => (
-    <>
-      {/* Hair */}
-      <div
-        className={`absolute top-0 rounded-full ${hairSizeClasses[size]}`}
-        style={{
-          backgroundColor: avatar?.hair_color || '#8B4513',
-          width:
-            avatar?.hair_type === 'afro'
-              ? '120%'
-              : avatar?.hair_type === 'curly'
-                ? '100%'
-                : '80%',
-          zIndex: 2
-        }}
-      />
+    <div className="w-full h-full relative">
+      {renderOrder.map((key) => {
+        const part = avatar[key];
+        if (!part?.src) return null;
 
-      {/* Head */}
-      <div
-        className={`${headSizeClasses[size]} flex flex-col items-center justify-center z-3 relative rounded-full`}
-        style={{
-          backgroundColor: avatar?.head_color || '#FFD700'
-        }}
-      >
-        {/* Eyes */}
-        <div className="flex justify-around w-full px-2">
-          <div
-            className={`rounded-full ${size === 'sm' ? 'w-1.5 h-1.5' : size === 'md' ? 'w-2 h-2' : 'w-2.5 h-2.5'}`}
-            style={{ backgroundColor: '#000' }}
+        return (
+          <img
+            key={key}
+            src={part.src}
+            alt={part.name || key}
+            className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
+            style={{ zIndex: renderOrder.indexOf(key) }}
           />
-          <div
-            className={`rounded-full ${size === 'sm' ? 'w-1.5 h-1.5' : size === 'md' ? 'w-2 h-2' : 'w-2.5 h-2.5'}`}
-            style={{ backgroundColor: '#000' }}
-          />
-        </div>
-
-        {/* Mouth */}
-        <div className={`${size === 'sm' ? 'text-xl' : size === 'md' ? 'text-2xl' : 'text-3xl'}`}>
-          {avatar?.mouth_type === 'smile' && '😊'}
-          {avatar?.mouth_type === 'grin' && '😄'}
-          {avatar?.mouth_type === 'neutral' && '😐'}
-          {avatar?.mouth_type === 'wow' && '😮'}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div
-        className={`${bodySizeClasses[size]} rounded-lg z-1`}
-        style={{
-          backgroundColor: avatar?.body_color || '#FF6B6B'
-        }}
-      />
-
-      {/* Clothing overlay */}
-      <div
-        className={`absolute top-2/3 w-2/3 h-1/3 rounded-lg opacity-70 z-2`}
-        style={{
-          backgroundColor: avatar?.clothing_color || '#4CAF50'
-        }}
-      />
-    </>
+        );
+      })}
+    </div>
   );
 
   return clickable ? (

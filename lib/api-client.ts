@@ -74,6 +74,13 @@ class APIClient {
     });
   }
 
+  protected put<T>(endpoint: string, body: any): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
   protected delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
@@ -96,9 +103,15 @@ class BahagiAPI extends APIClient {
     if (className) params.append('className', className);
     const query = params.toString() ? `?${params.toString()}` : '';
     
-    // Use REST endpoint directly
+    // Use REST endpoint directly with cache-busting
     const url = `/api/rest/bahagis${query}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || 'Failed to fetch bahagis');
@@ -163,21 +176,21 @@ class BahagiAPI extends APIClient {
    * Delete bahagi
    */
   async deleteBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.post('/delete-bahagi', { id: bahagiId });
+    return this.delete(`/delete-bahagi?id=${bahagiId}`);
   }
 
   /**
    * Archive bahagi
    */
   async archive(bahagiId: number): Promise<APIResponse> {
-    return this.post('/archive-bahagi', { id: bahagiId });
+    return this.put('/archive-bahagi', { id: bahagiId, isArchived: true });
   }
 
   /**
    * Restore archived bahagi
    */
   async restore(bahagiId: number): Promise<APIResponse> {
-    return this.post('/archive-bahagi', { id: bahagiId, restore: true });
+    return this.put('/archive-bahagi', { id: bahagiId, isArchived: false });
   }
 
   /**
@@ -200,7 +213,7 @@ class YunitAPI extends APIClient {
    * Fetch all yunits in a bahagi
    */
   async fetchByBahagi(bahagiId: number): Promise<APIResponse> {
-    return this.get(`/yunits?bahagi_id=${bahagiId}`);
+    return this.get(`/yunits?bahagiId=${bahagiId}`);
   }
 
   /**
@@ -278,9 +291,9 @@ class AssessmentAPI extends APIClient {
     bahagi_id?: number;
   }): Promise<APIResponse> {
     const query = new URLSearchParams();
-    if (filters?.yunit_id) query.append('yunit_id', String(filters.yunit_id));
+    if (filters?.yunit_id) query.append('yunitId', String(filters.yunit_id));
     if (filters?.bahagi_id)
-      query.append('bahagi_id', String(filters.bahagi_id));
+      query.append('bahagiId', String(filters.bahagi_id));
 
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/assessments${queryStr}`);
@@ -514,7 +527,7 @@ class AvatarAPI extends APIClient {
    * Get student avatar
    */
   async getAvatar(studentId: string): Promise<APIResponse> {
-    return this.get(`/avatar?student_id=${studentId}`);
+    return this.get(`/avatar?studentId=${studentId}`);
   }
 
   /**
@@ -522,7 +535,7 @@ class AvatarAPI extends APIClient {
    */
   async updateAvatar(studentId: string, data: any): Promise<APIResponse> {
     return this.patch(`/avatars/${studentId}`, {
-      student_id: studentId,
+      studentId: studentId,
       ...data
     });
   }
@@ -531,7 +544,7 @@ class AvatarAPI extends APIClient {
    * Get avatar items/customizations
    */
   async getItems(studentId: string): Promise<APIResponse> {
-    return this.get(`/avatar-items?student_id=${studentId}`);
+    return this.get(`/avatar-items?studentId=${studentId}`);
   }
 
   /**
@@ -539,8 +552,8 @@ class AvatarAPI extends APIClient {
    */
   async purchaseItem(studentId: string, itemId: string): Promise<APIResponse> {
     return this.post(`/avatar-items`, {
-      student_id: studentId,
-      item_id: itemId
+      studentId: studentId,
+      itemId: itemId
     });
   }
 }
@@ -600,6 +613,13 @@ class AdminAPI extends APIClient {
   }
 
   /**
+   * Get all classes with teacher info (for combined dropdown)
+   */
+  async getAllClassesWithTeachers(): Promise<APIResponse> {
+    return this.get(`/classes`);
+  }
+
+  /**
    * Create student
    */
   async createStudent(data: {
@@ -652,12 +672,13 @@ class AdminAPI extends APIClient {
   /**
    * Get all users with pagination and filtering
    */
-  async getUsers(page?: number, limit?: number, role?: string, search?: string): Promise<APIResponse> {
+  async getUsers(page?: number, limit?: number, role?: string, search?: string, section?: string): Promise<APIResponse> {
     const query = new URLSearchParams();
     if (page) query.append('page', String(page));
     if (limit) query.append('limit', String(limit));
     if (role && role !== 'all') query.append('role', role);
     if (search) query.append('search', search);
+    if (section && section !== 'all') query.append('section', section);
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/users${queryStr}`);
   }

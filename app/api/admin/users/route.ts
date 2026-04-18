@@ -5,9 +5,10 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const limit = parseInt(searchParams.get('limit') || '10');
     const role = searchParams.get('role') || null;
     const search = searchParams.get('search') || null;
+    const section = searchParams.get('section') || null;
 
     const offset = (page - 1) * limit;
 
@@ -19,6 +20,12 @@ export async function GET(request: Request) {
     if (role && role !== 'all') {
       whereConditions.push(`role = $${paramIndex}`);
       queryParams.push(role);
+      paramIndex++;
+    }
+
+    if (section && section !== 'all') {
+      whereConditions.push(`class_name = $${paramIndex}`);
+      queryParams.push(section);
       paramIndex++;
     }
 
@@ -47,6 +54,7 @@ export async function GET(request: Request) {
         lrn, 
         role, 
         class_name, 
+        class_id,
         teacher_id,
         teacher_role,
         created_at 
@@ -69,7 +77,10 @@ export async function GET(request: Request) {
       role: u.role,
       className: u.class_name,
       class_name: u.class_name,
+      class_id: u.class_id,
+      classId: u.class_id,
       teacherId: u.teacher_id,
+      teacher_id: u.teacher_id,
       teacher_role: u.teacher_role,
       joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown',
       status: 'Active',

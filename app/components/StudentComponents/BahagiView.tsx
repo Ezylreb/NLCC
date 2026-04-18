@@ -18,6 +18,8 @@ interface Bahagi {
 interface BahagiViewProps {
   studentId: string;
   classId: string;
+  teacherId?: string | null;
+  className?: string | null;
   onSelectBahagi: (bahagiId: string | number) => void;
   onBack: () => void;
 }
@@ -25,6 +27,8 @@ interface BahagiViewProps {
 export const BahagiView: React.FC<BahagiViewProps> = ({
   studentId,
   classId,
+  teacherId,
+  className,
   onSelectBahagi,
   onBack
 }) => {
@@ -36,14 +40,22 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
     const fetchBahagis = async () => {
       try {
         setIsLoading(true);
-        const response = await apiClient.bahagi.fetchAll();
+        
+        // If we have a teacherId, use it. Otherwise, try to fetch all bahagis
+        const response = teacherId 
+          ? await apiClient.bahagi.fetchAll(teacherId, className || undefined)
+          : await apiClient.bahagi.fetchAll();
         
         if (response.data?.bahagis) {
           setBahagis(response.data.bahagis);
+        } else if (response.data) {
+          // Handle if data is returned directly as array
+          setBahagis(Array.isArray(response.data) ? response.data : []);
         } else if (response.error) {
           throw new Error(response.error);
         }
       } catch (err: any) {
+        console.error('Error fetching bahagis:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -51,7 +63,7 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
     };
 
     fetchBahagis();
-  }, [studentId, classId]);
+  }, [studentId, classId, teacherId, className]);
 
   if (isLoading) {
     return (
@@ -103,7 +115,7 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
                 disabled={!bahagi.isUnlocked}
                 className={`w-full text-left p-6 rounded-xl border-2 transition-all ${
                   bahagi.isUnlocked
-                    ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-brand-purple hover:from-slate-700 hover:to-slate-800 cursor-pointer group'
+                    ? 'bg-linear-to-br from-slate-800 to-slate-900 border-slate-700 hover:border-brand-purple hover:from-slate-700 hover:to-slate-800 cursor-pointer group'
                     : 'bg-slate-900/50 border-slate-800 opacity-60 cursor-not-allowed'
                 }`}
               >
@@ -134,7 +146,7 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
                         animate={{
                           width: `${(bahagi.passedYunits / bahagi.yunitCount) * 100}%`
                         }}
-                        className="h-full bg-gradient-to-r from-brand-purple to-brand-sky"
+                        className="h-full bg-linear-to-r from-brand-purple to-brand-sky"
                       />
                     </div>
                   </div>
