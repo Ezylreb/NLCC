@@ -40,19 +40,29 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
     const fetchBahagis = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         
-        // If we have a teacherId, use it. Otherwise, try to fetch all bahagis
-        const response = teacherId 
-          ? await apiClient.bahagi.fetchAll(teacherId, className || undefined)
-          : await apiClient.bahagi.fetchAll();
+        console.log('🧩 [BahagiView] Fetching bahagis with:', { studentId, teacherId, classId });
         
-        if (response.data?.bahagis) {
+        // Use student-specific endpoint
+        if (!teacherId) {
+          setError('Teacher ID is required');
+          setIsLoading(false);
+          return;
+        }
+
+        const response = await apiClient.student.getBahagis(studentId, teacherId);
+        
+        console.log('🧩 [BahagiView] Response:', response);
+        
+        if (response.success && response.data?.bahagis) {
+          console.log('🧩 [BahagiView] Found bahagis:', response.data.bahagis.length);
           setBahagis(response.data.bahagis);
-        } else if (response.data) {
-          // Handle if data is returned directly as array
-          setBahagis(Array.isArray(response.data) ? response.data : []);
         } else if (response.error) {
           throw new Error(response.error);
+        } else {
+          // No bahagis found
+          setBahagis([]);
         }
       } catch (err: any) {
         console.error('Error fetching bahagis:', err);
@@ -71,6 +81,24 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
         <div className="text-center">
           <div className="animate-spin text-4xl mb-4">🧩</div>
           <p className="text-slate-400">Loading lessons...</p>
+          <p className="text-slate-600 text-xs mt-2">Teacher ID: {teacherId}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <div className="text-center max-w-md">
+          <div className="text-5xl mb-4">❌</div>
+          <p className="text-red-400 text-lg font-semibold mb-4">{error}</p>
+          <button
+            onClick={onBack}
+            className="px-6 py-2 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-lg font-semibold transition-all"
+          >
+            Go Back
+          </button>
         </div>
       </div>
     );
@@ -94,7 +122,8 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
       {bahagis.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-4">📭</div>
-          <p className="text-slate-400">No lessons available</p>
+          <p className="text-slate-400 text-lg mb-2">No lessons available</p>
+          <p className="text-slate-600 text-sm">Your teacher hasn't created any lessons for your grade level yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -178,12 +207,6 @@ export const BahagiView: React.FC<BahagiViewProps> = ({
               )}
             </motion.div>
           ))}
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-500/20 border border-red-500 rounded-lg p-4 text-red-300">
-          {error}
         </div>
       )}
     </div>

@@ -13,75 +13,89 @@ export async function GET(request: NextRequest) {
 
     if (!studentId || !teacherId) {
       return NextResponse.json(
-        { error: 'Student ID and Teacher ID required' },
+        { success: false, error: 'Student ID and Teacher ID required' },
         { status: 400 }
       );
     }
 
-    console.log('Fetching lessons for teacher:', teacherId);
+    console.log('[GET /api/student/teacher-lessons] Fetching for:', { studentId, teacherId });
 
-    // Fetch all bahagis (parts/lessons) from the teacher
-    // Try to fetch with minimal required columns first
-    let bahagiResult;
-    try {
-      bahagiResult = await query(
-        `SELECT 
-          b.id,
-          b.title,
-          b.description,
-          b.image_url,
-          COALESCE(b.display_order, 1) as display_order,
-          b.teacher_id,
-          COUNT(DISTINCT y.id) as yunit_count
-        FROM bahagis b
-        LEFT JOIN yunits y ON b.id = y.bahagi_id
-        WHERE b.teacher_id = $1 
-        GROUP BY b.id, b.title, b.description, b.image_url, b.display_order, b.teacher_id
-        ORDER BY COALESCE(b.display_order, 1) ASC, b.id ASC`,
-        [teacherId]
-      );
-    } catch (err: any) {
-      console.error('Error fetching bahagis:', err.message);
-      // Fallback: try without display_order
-      bahagiResult = await query(
-        `SELECT 
-          b.id,
-          b.title,
-          b.description,
-          b.image_url,
-          b.teacher_id
-        FROM bahagis b
-        WHERE b.teacher_id = $1
-        ORDER BY b.id ASC`,
-        [teacherId]
+    // Get student's class_name to filter bahagi by grade level
+    const studentResult = await query(
+      `SELECT class_name FROM users WHERE id = $1`,
+      [studentId]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Student not found' },
+        { status: 404 }
       );
     }
 
+    const studentClassName = studentResult.rows[0].class_name;
+    console.log('[GET /api/student/teacher-lessons] Student class_name:', studentClassName);
+
+    // Fetch all bahagis (parts/lessons) from the teacher
+    // Filter by student's grade level (class_name) if available
+    // Only show published and non-archived bahagi
+    let bahagiQuery = `
+      SELECT 
+        b.id,
+        b.title,
+        b.description,
+        b.icon_path as image_url,
+        b.icon_type,
+        b.teacher_id,
+        b.class_name,
+        COUNT(DISTINCT y.id) as yunit_count
+      FROM bahagi b
+      LEFT JOIN yunits y ON b.id = y.bahagi_id
+      WHERE b.teacher_id = $1 
+        AND b.is_open = true
+    `;
+    
+    const queryParams = [teacherId];
+
+    // If student has a class_name, filter bahagi by matching class_name (grade level)
+    if (studentClassName) {
+      bahagiQuery += ` AND (b.class_name = $2 OR b.class_name IS NULL)`;
+      queryParams.push(studentClassName);
+    }
+
+    bahagiQuery += `
+      GROUP BY b.id, b.title, b.description, b.icon_path, b.icon_type, b.teacher_id, b.class_name
+      ORDER BY b.id ASC
+    `;
+
+    console.log('[GET /api/student/teacher-lessons] Query:', bahagiQuery);
+    console.log('[GET /api/student/teacher-lessons] Params:', queryParams);
+
+    const bahagiResult = await query(bahagiQuery, queryParams);
+
     const bahagis = bahagiResult.rows;
-    console.log(`Found ${bahagis.length} bahagis for teacher ${teacherId}`);
+    console.log(`[GET /api/student/teacher-lessons] Found ${bahagis.length} bahagi for teacher ${teacherId}`);
 
     // For each bahagi, get yunits and their details
     const lessonsWithYunits = await Promise.all(
       bahagis.map(async (bahagi: any, bahagiIndex: number) => {
         try {
-          // Get yunits for this bahagi
+          // Get lessons (yunits) for this bahagi
           let yunitResult;
           try {
             yunitResult = await query(
               `SELECT 
                 id,
                 title,
-                description,
-                display_order,
-                image_url,
+                subtitle as description,
                 bahagi_id
-              FROM yunits
+              FROM lesson
               WHERE bahagi_id = $1
-              ORDER BY COALESCE(display_order, 1) ASC`,
+              ORDER BY lesson_order ASC, id ASC`,
               [bahagi.id]
             );
           } catch (err) {
-            console.warn(`Could not fetch yunits for bahagi ${bahagi.id}:`, err);
+            console.warn(`Could not fetch lessons for bahagi ${bahagi.id}:`, err);
             yunitResult = { rows: [] };
           }
 
@@ -89,8 +103,8 @@ export async function GET(request: NextRequest) {
           let passedYunits = 0;
           try {
             const progressResult = await query(
-              `SELECT COUNT(*) as passed_count FROM student_progress
-               WHERE student_id = $1 AND bahagi_id = $2 AND is_passed = true`,
+              `SELECT COUNT(*) as passed_count FROM lesson_progress
+               WHERE student_id = $1 AND lesson_id IN (SELECT id FROM lesson WHERE bahagi_id = $2) AND completed = true`,
               [studentId, bahagi.id]
             );
             passedYunits = parseInt(progressResult.rows[0]?.passed_count || 0);
@@ -142,16 +156,19 @@ export async function GET(request: NextRequest) {
 
     console.log(`Returning ${lessonsWithYunits.length} lessons`);
     return NextResponse.json({
-      studentId,
-      teacherId,
-      totalLessons: lessonsWithYunits.length,
-      completedLessons: lessonsWithYunits.filter((l: any) => l.isCompleted).length,
-      lessons: lessonsWithYunits
+      success: true,
+      data: {
+        studentId,
+        teacherId,
+        totalLessons: lessonsWithYunits.length,
+        completedLessons: lessonsWithYunits.filter((l: any) => l.isCompleted).length,
+        lessons: lessonsWithYunits
+      }
     });
   } catch (error: any) {
     console.error('Get teacher lessons error:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error', details: error.message },
       { status: 500 }
     );
   }

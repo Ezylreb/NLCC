@@ -63,12 +63,6 @@ export const ClassView: React.FC<ClassViewProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <button
-            onClick={onBack}
-            className="mb-4 text-slate-400 hover:text-white transition-colors flex items-center gap-2"
-          >
-            ← Back
-          </button>
           <h2 className="text-3xl font-black text-white">Mag-Aral</h2>
           <p className="text-slate-500 text-sm mt-2">
             Welcome back, {studentName}! Select a class to start learning.

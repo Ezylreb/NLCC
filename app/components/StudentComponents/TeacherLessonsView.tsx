@@ -40,6 +40,13 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
   onSelectLesson,
   onBack
 }) => {
+  console.log('🎓 [TeacherLessonsView] Rendered with props:', {
+    studentId,
+    teacherId,
+    teacherName,
+    className
+  });
+
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,13 +59,17 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
         setIsLoading(true);
         setError(null);
         
-        const result = await apiClient.student.getEnrolledClasses(studentId);
+        console.log('📚 Fetching teacher lessons for:', { studentId, teacherId });
+        const result = await apiClient.student.getTeacherLessons(studentId, teacherId);
 
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to fetch lessons');
+        console.log('📚 Teacher lessons response:', result);
+
+        if (!result.success && result.error) {
+          throw new Error(result.error);
         }
 
-        const data = result.data;
+        // Handle both response formats (wrapped in data or direct)
+        const data = result.data || result;
         setLessons(data.lessons || []);
         setCompletedCount(data.completedLessons || 0);
 
@@ -67,6 +78,8 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
           return sum + (lesson.xpReward * lesson.totalYunits);
         }, 0);
         setTotalXp(total);
+        
+        console.log('📚 Loaded lessons:', data.lessons?.length || 0);
       } catch (err: any) {
         console.error('Failed to fetch teacher lessons:', err);
         setError(err.message || 'Failed to load lessons');
@@ -82,7 +95,7 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
+      <div className="flex items-center justify-center min-h-screen bg-linear-to-b from-slate-950 to-slate-900">
         <div className="text-center">
           <motion.div
             animate={{ rotate: 360 }}
@@ -93,6 +106,7 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
           </motion.div>
           <p className="text-slate-400 text-lg">Loading your lessons...</p>
           <p className="text-slate-600 text-sm mt-2">Preparing content from {teacherName}</p>
+          <p className="text-slate-700 text-xs mt-1">Teacher ID: {teacherId}</p>
         </div>
       </div>
     );
@@ -100,10 +114,33 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 p-6">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-linear-to-b from-slate-950 to-slate-900 p-6">
         <div className="text-center max-w-md">
           <div className="text-5xl mb-4">❌</div>
-          <p className="text-red-400 text-lg font-semibold mb-4">{error}</p>
+          <p className="text-red-400 text-lg font-semibold mb-2">{error}</p>
+          <p className="text-slate-500 text-sm mb-4">
+            Make sure your teacher has created lessons for your grade level.
+          </p>
+          <button
+            onClick={onBack}
+            className="px-6 py-2 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-lg font-semibold transition-all"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (lessons.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-linear-to-b from-slate-950 to-slate-900 p-6">
+        <div className="text-center max-w-md">
+          <div className="text-5xl mb-4">📭</div>
+          <p className="text-slate-300 text-lg font-semibold mb-2">No lessons available</p>
+          <p className="text-slate-500 text-sm mb-4">
+            Your teacher hasn't created any lessons for your grade level yet. Check back later!
+          </p>
           <button
             onClick={onBack}
             className="px-6 py-2 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-lg font-semibold transition-all"
@@ -116,7 +153,7 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 p-6 md:p-10">
+    <div className="min-h-screen bg-linear-to-b from-slate-950 to-slate-900 p-6 md:p-10">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}

@@ -169,7 +169,7 @@ class BahagiAPI extends APIClient {
       is_published: boolean;
     }>
   ): Promise<APIResponse> {
-    return this.post('/update-bahagi', { id: bahagiId, ...data });
+    return this.put('/update-bahagi', { id: bahagiId, ...data });
   }
 
   /**
@@ -197,7 +197,7 @@ class BahagiAPI extends APIClient {
    * Publish bahagi (make public)
    */
   async publish(bahagiId: number): Promise<APIResponse> {
-    return this.post('/update-bahagi', { id: bahagiId, is_published: true });
+    return this.put('/update-bahagi', { id: bahagiId, isPublished: true });
   }
 }
 
@@ -992,6 +992,20 @@ class StudentService extends APIClient {
    */
   async getEnrolledClasses(studentId: string): Promise<APIResponse> {
     return this.get(`/enrolled-classes?studentId=${studentId}`);
+  }
+
+  /**
+   * Get bahagis for a teacher (for students)
+   */
+  async getBahagis(studentId: string, teacherId: string): Promise<APIResponse> {
+    return this.get(`/bahagis?studentId=${studentId}&teacherId=${teacherId}`);
+  }
+
+  /**
+   * Get teacher lessons (bahagi) for student
+   */
+  async getTeacherLessons(studentId: string, teacherId: string): Promise<APIResponse> {
+    return this.get(`/teacher-lessons?studentId=${studentId}&teacherId=${teacherId}`);
   }
 
   /**

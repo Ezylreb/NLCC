@@ -305,18 +305,27 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleRefreshBahagi = async () => {
         if (!selectedClassId || !selectedClassName) return;
         console.log('[REFRESH BAHAGI] Starting refresh for class:', selectedClassName);
+        console.log('[REFRESH BAHAGI] Timestamp:', new Date().toISOString());
         try {
             const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
             
             console.log('[REFRESH BAHAGI] Full response:', bahagiResult);
+            console.log('[REFRESH BAHAGI] Response timestamp:', new Date().toISOString());
             
             if (bahagiResult?.success) {
                 const newBahagi = bahagiResult.data || [];
                 console.log('[REFRESH BAHAGI] Fetched bahagi count:', newBahagi.length);
-                console.log('[REFRESH BAHAGI] Bahagi data:', newBahagi);
+                console.log('[REFRESH BAHAGI] Bahagi data:', JSON.stringify(newBahagi, null, 2));
+                console.log('[REFRESH BAHAGI] Current classBahagi before update:', classBahagi.length);
                 
                 // Force new array reference to trigger re-render
                 setClassBahagi([...newBahagi]);
+                
+                // Verify state update happened
+                setTimeout(() => {
+                    console.log('[REFRESH BAHAGI] State updated, should trigger re-render');
+                }, 100);
+                
                 console.log('✅ Bahagi list refreshed successfully');
             } else {
                 console.error('[REFRESH BAHAGI] Failed:', bahagiResult?.error);
@@ -343,10 +352,12 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             console.log('[handleBahagiSubmit] Response:', response);
 
             if (response && response.bahagi) {
-                alert('✅ Bahagi created successfully!');
                 setShowBahagiForm(false);
-                // Refresh bahagi list to get accurate counts
+                // Small delay to ensure database commit
+                await new Promise(resolve => setTimeout(resolve, 500));
+                // Refresh bahagi list to show the newly created one
                 await handleRefreshBahagi();
+                alert('✅ Bahagi created successfully!');
             } else {
                 console.error('[handleBahagiSubmit] Unexpected response:', response);
                 alert(`❌ Error: Failed to create bahagi`);

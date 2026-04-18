@@ -262,9 +262,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                                 studentId={user?.id || ''}
                                 studentName={`${user?.firstName} ${user?.lastName}`}
                                 onNavigate={(view) => {
-                                    if (view === 'dashboard') {
-                                        setActiveTab('lessons');
-                                    }
+                                    // Navigation handler for MagAralPage
                                 }}
                             />
                         </motion.div>

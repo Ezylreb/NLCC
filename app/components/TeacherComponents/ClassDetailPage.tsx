@@ -71,6 +71,15 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const [isEditingAssessment, setIsEditingAssessment] = useState(false);
     const [showStudentsView, setShowStudentsView] = useState(false);
 
+    // Debug: Log when bahagi prop changes
+    useEffect(() => {
+        console.log('[ClassDetailPage] Bahagi prop updated:', bahagi);
+        console.log('[ClassDetailPage] Bahagi count:', bahagi.length);
+        if (bahagi.length > 0) {
+            console.log('[ClassDetailPage] First bahagi:', bahagi[0]);
+        }
+    }, [bahagi]);
+
     // Fetch yunits for a bahagi
     const fetchYunitsForBahagi = async (bahagiId: number) => {
         setIsLoadingYunits(true);
@@ -210,12 +219,15 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
 
             if (response.success) {
                 console.log('✅ API Response:', response.data);
-                alert('✅ Bahagi updated successfully!');
                 setShowEditBahagiForm(false);
                 // Refresh the bahagi list after successful edit
                 if (onRefreshBahagi) {
+                    console.log('🔄 Calling refresh bahagi...');
                     await onRefreshBahagi();
+                    console.log('✅ Refresh complete');
                 }
+                // Show alert after refresh completes
+                setTimeout(() => alert('✅ Bahagi updated successfully!'), 100);
             } else {
                 console.error('❌ API Error:', response.error);
                 alert(`❌ Error: ${response.error || 'Failed to update bahagi'}`);

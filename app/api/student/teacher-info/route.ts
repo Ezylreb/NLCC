@@ -51,13 +51,16 @@ export async function GET(request: NextRequest) {
     console.log('Teacher info found:', !!studentData.teacher_id);
 
     return NextResponse.json({
-      studentId,
-      teacherId: studentData.teacher_id || null,
-      teacherName: studentData.teacher_name || null,
-      teacherEmail: studentData.teacher_email || null,
-      classId: studentData.class_id || null,
-      className: studentData.class_name || null,
-      isAssigned: !!studentData.teacher_id
+      success: true,
+      data: {
+        studentId,
+        teacherId: studentData.teacher_id || null,
+        teacherName: studentData.teacher_name || null,
+        teacherEmail: studentData.teacher_email || null,
+        classId: studentData.class_id || null,
+        className: studentData.class_name || null,
+        isAssigned: !!studentData.teacher_id
+      }
     });
   } catch (error: any) {
     console.error('Get student teacher info error:', error);

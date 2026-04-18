@@ -65,7 +65,10 @@ export async function PUT(request: NextRequest) {
     console.log('🔧 [UPDATE-BAHAGI] Update Values:', updateValues);
 
     const result = await query(updateQuery, updateValues);
-    console.log('🔧 [UPDATE-BAHAGI] Query Result:', JSON.stringify(result, null, 2));
+    
+    console.log('🔧 [UPDATE-BAHAGI] Query executed successfully');
+    console.log('🔧 [UPDATE-BAHAGI] Query Result rows:', result.rows);
+    console.log('🔧 [UPDATE-BAHAGI] Query Result count:', result.rows?.length);
 
     if (!result.rows || result.rows.length === 0) {
       console.error('🔧 [UPDATE-BAHAGI] Bahagi not found for id:', id);
@@ -75,10 +78,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    console.log('🔧 [UPDATE-BAHAGI] Successfully updated bahagi:', result.rows[0]);
+    const updatedBahagi = result.rows[0];
+    console.log('🔧 [UPDATE-BAHAGI] Successfully updated bahagi:', JSON.stringify(updatedBahagi, null, 2));
     return NextResponse.json({
       success: true,
-      bahagi: result.rows[0]
+      bahagi: updatedBahagi,
+      data: updatedBahagi, // Also include as 'data' for consistency
     });
   } catch (error: any) {
     console.error('❌ [UPDATE-BAHAGI] Error:', error);
