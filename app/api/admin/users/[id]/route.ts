@@ -104,6 +104,39 @@ export async function PATCH(
       [firstName, lastName, email, lrn || null, classNameToSave || null, teacher_id || null, class_id || null, teacher_role || null, id]
     );
 
+    // If this is a student and has been assigned to a class, manage enrollment
+    if (role === 'USER' && class_id && teacher_id) {
+      // Check if already enrolled in this class
+      const existingEnrollment = await query(
+        'SELECT id, class_id FROM class_enrollments WHERE student_id = $1',
+        [id]
+      );
+
+      if (existingEnrollment.rows.length > 0) {
+        const currentClassId = existingEnrollment.rows[0].class_id;
+        
+        // If class changed, update the enrollment
+        if (currentClassId.toString() !== class_id.toString()) {
+          await query(
+            'UPDATE class_enrollments SET class_id = $1, enrolled_by_teacher_id = $2, enrolled_at = CURRENT_TIMESTAMP WHERE student_id = $3',
+            [class_id, teacher_id, id]
+          );
+        }
+      } else {
+        // Create new enrollment
+        await query(
+          'INSERT INTO class_enrollments (class_id, student_id, enrolled_by_teacher_id, enrolled_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
+          [class_id, id, teacher_id]
+        );
+      }
+    } else if (role === 'USER' && !class_id) {
+      // If class was removed, delete enrollment
+      await query(
+        'DELETE FROM class_enrollments WHERE student_id = $1',
+        [id]
+      );
+    }
+
     // Log activity
     try {
       await query(

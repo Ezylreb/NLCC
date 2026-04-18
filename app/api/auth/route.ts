@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -69,8 +70,19 @@ export async function POST(request: Request) {
       }
 
       const user = userRes.rows[0];
-      // Basic plain text check (should use bcrypt in production)
-      if (user.password !== password) {
+      
+      // Check password - handle both plain text (legacy) and bcrypt hashed passwords
+      let isValidPassword = false;
+      
+      if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$')) {
+        // Password is bcrypt hashed - use bcrypt.compare
+        isValidPassword = await bcrypt.compare(password, user.password);
+      } else {
+        // Password is plain text (legacy) - direct comparison
+        isValidPassword = user.password === password;
+      }
+      
+      if (!isValidPassword) {
         return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
       }
 

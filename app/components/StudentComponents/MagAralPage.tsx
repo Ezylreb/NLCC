@@ -30,7 +30,39 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   studentName,
   onNavigate
 }) => {
-  const [currentView, setCurrentView] = useState<ViewType>('classes');
+  // Initialize view and selections from localStorage
+  const getInitialView = (): ViewType => {
+    if (typeof window !== 'undefined') {
+      const savedView = localStorage.getItem('magAralView');
+      if (savedView && ['lessons', 'classes', 'bahagis', 'yunits', 'assessment'].includes(savedView)) {
+        return savedView as ViewType;
+      }
+    }
+    return 'classes';
+  };
+
+  const getInitialClassId = (): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('magAralClassId');
+    }
+    return null;
+  };
+
+  const getInitialBahagiId = (): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('magAralBahagiId');
+    }
+    return null;
+  };
+
+  const getInitialYunitId = (): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('magAralYunitId');
+    }
+    return null;
+  };
+
+  const [currentView, setCurrentView] = useState<ViewType>(getInitialView);
   const [teacherInfo, setTeacherInfo] = useState<TeacherInfo | null>(null);
   const [isLoadingTeacher, setIsLoadingTeacher] = useState(true);
 
@@ -41,8 +73,9 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
         const res = await apiClient.student.getDetails(studentId);
         if (res.success) {
           setTeacherInfo(res.data);
-          // If student has a teacher assigned, show the teacher lessons view
-          if (res.data?.isAssigned) {
+          // Only set to lessons if no saved view and student has a teacher assigned
+          const savedView = localStorage.getItem('magAralView');
+          if (!savedView && res.data?.isAssigned) {
             setCurrentView('lessons');
           }
         }
@@ -57,9 +90,39 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
       fetchTeacherInfo();
     }
   }, [studentId]);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(null);
-  const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(null);
+  
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(getInitialClassId);
+  const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(getInitialBahagiId);
+  const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(getInitialYunitId);
+
+  // Save navigation state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('magAralView', currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    if (selectedClassId) {
+      localStorage.setItem('magAralClassId', selectedClassId);
+    } else {
+      localStorage.removeItem('magAralClassId');
+    }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (selectedBahagiId) {
+      localStorage.setItem('magAralBahagiId', selectedBahagiId.toString());
+    } else {
+      localStorage.removeItem('magAralBahagiId');
+    }
+  }, [selectedBahagiId]);
+
+  useEffect(() => {
+    if (selectedYunitId) {
+      localStorage.setItem('magAralYunitId', selectedYunitId.toString());
+    } else {
+      localStorage.removeItem('magAralYunitId');
+    }
+  }, [selectedYunitId]);
 
   // Reward modal state
   const [showRewardModal, setShowRewardModal] = useState(false);
@@ -159,6 +222,8 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
         <BahagiView
           studentId={studentId}
           classId={(selectedBahagiId as string) || selectedClassId || ''}
+          teacherId={teacherInfo?.teacherId || null}
+          className={teacherInfo?.className || null}
           onSelectBahagi={handleSelectBahagi}
           onBack={goBack}
         />

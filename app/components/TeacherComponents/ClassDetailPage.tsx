@@ -292,7 +292,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             const result = await apiClient.bahagi.archive(bahagiId);
             if (result.success) {
                 alert('✅ Bahagi archived successfully!');
-                onCreateBahagi();
+                onRefreshBahagi?.();
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to archive'}`);
             }
@@ -307,15 +307,26 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             return;
         }
         try {
+            console.log('[DELETE BAHAGI] Deleting bahagi ID:', bahagiId);
             const result = await apiClient.bahagi.deleteBahagi(bahagiId);
+            console.log('[DELETE BAHAGI] Delete result:', result);
+            
             if (result.success) {
-                alert('✅ Bahagi deleted permanently!');
-                onCreateBahagi();
+                console.log('[DELETE BAHAGI] Success, calling refresh...');
+                if (onRefreshBahagi) {
+                    await onRefreshBahagi();
+                    console.log('[DELETE BAHAGI] Refresh complete');
+                    // Show alert after refresh completes
+                    setTimeout(() => alert('✅ Bahagi deleted permanently!'), 100);
+                } else {
+                    console.warn('[DELETE BAHAGI] No onRefreshBahagi callback provided');
+                    alert('✅ Bahagi deleted permanently! Please refresh the page.');
+                }
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to delete'}`);
             }
         } catch (err: any) {
-            console.error('Error deleting bahagi:', err);
+            console.error('[DELETE BAHAGI] Error:', err);
             alert('❌ Failed to delete bahagi');
         }
     };
@@ -326,7 +337,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             const result = await apiClient.bahagi.publish(bahagiId);
             if (result.success) {
                 alert(`✅ Bahagi published!`);
-                onCreateBahagi();
+                onRefreshBahagi?.();
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to update'}`);
             }
@@ -391,7 +402,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                     onClick={() => setShowStudentsView(!showStudentsView)}
                     className={`${showStudentsView ? 'bg-brand-sky hover:bg-brand-sky/80' : 'bg-slate-800 hover:bg-slate-700'} text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border ${showStudentsView ? 'border-brand-sky/30' : 'border-slate-700'}`}
                 >
-                    <span>👥</span> Manage Students
+                    <span>👥</span> View Students
                 </button>
                 {!showStudentsView && (
                     <>

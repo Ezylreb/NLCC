@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
         const classId = searchParams.get('classId');
         const teacherId = searchParams.get('teacherId');
 
+        console.log('[class-students GET] Received params:', { classId, teacherId });
+
         if (!classId || !teacherId) {
             return NextResponse.json(
                 { success: false, error: 'classId and teacherId parameters required' },
@@ -32,6 +34,8 @@ export async function GET(req: NextRequest) {
             [classId, teacherId]
         );
 
+        console.log('[class-students GET] Class check result:', classCheck.rows);
+
         if (!classCheck.rows.length) {
             return NextResponse.json(
                 { success: false, error: 'Class not found or you do not own this class' },
@@ -39,21 +43,25 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // Get enrolled students
+        // Get enrolled students from both class_enrollments table AND users table assignments
+        // This ensures students assigned by admin also appear
         const students = await query(
-            `SELECT 
+            `SELECT DISTINCT
                 u.id,
                 u.first_name as "firstName",
                 u.last_name as "lastName",
                 u.email,
-                ce.enrolled_at as "enrolledAt",
-                COUNT(*) OVER () as "totalCount"
+                COALESCE(ce.created_at, u.created_at) as "enrolledAt"
             FROM users u
-            JOIN class_enrollments ce ON u.id = ce.student_id
-            WHERE ce.class_id = $1
+            LEFT JOIN class_enrollments ce ON u.id = ce.student_id AND ce.class_id = $1
+            WHERE (ce.class_id = $1 OR u.class_id = $1)
+              AND u.role = 'USER'
             ORDER BY u.first_name, u.last_name`,
             [classId]
         );
+
+        console.log('[class-students GET] Students query result:', students.rows);
+        console.log('[class-students GET] Total students found:', students.rows.length);
 
         return NextResponse.json({
             success: true,
