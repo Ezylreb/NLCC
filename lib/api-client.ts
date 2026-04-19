@@ -240,11 +240,15 @@ class YunitAPI extends APIClient {
   async create(data: {
     bahagi_id: number;
     title: string;
-    subtitle: string;
+    subtitle?: string;
     discussion?: string;
     media_url?: string;
     audio_url?: string;
     order?: number;
+    lesson_order?: number;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<APIResponse> {
     return this.post('/yunits', data);
   }

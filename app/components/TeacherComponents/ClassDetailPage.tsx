@@ -368,28 +368,24 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                 }, 60000); // 60 second timeout
             });
             
-            // Call the bahagi lessons endpoint with timeout
-            const fetchPromise = fetch(`/api/teacher/bahagi/${data.bahagiId}/lessons`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    title: data.title,
-                    subtitle: data.subtitle || data.description,
-                    discussion: data.discussion,
-                    media_url: data.media_url,
-                    audio_url: data.audio_url,
-                    lesson_order: data.lesson_order
-                })
+            const createPromise = apiClient.yunit.create({
+                bahagi_id: data.bahagiId,
+                title: data.title,
+                subtitle: data.subtitle,
+                discussion: data.discussion,
+                media_url: data.media_url,
+                audio_url: data.audio_url,
+                lesson_order: data.lesson_order,
+                week_number: data.week_number,
+                module_number: data.module_number,
+                quarter: selectedBahagiForYunit?.quarter
             });
 
-            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-            const result = await response.json();
+            const result = await Promise.race([createPromise, timeoutPromise]) as any;
             
             console.log('[ClassDetailPage handleYunitSubmit] Response:', result);
 
-            if (response.ok && result.lesson) {
+            if (result.success && result.data) {
                 setShowYunitForm(false);
                 // Immediate refresh
                 fetchYunitsForBahagi(data.bahagiId);

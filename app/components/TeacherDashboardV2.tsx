@@ -449,28 +449,21 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleYunitSubmit = async (data: any) => {
         try {
             console.log('[handleYunitSubmit] Creating yunit with data:', data);
-            
-            // Call the bahagi lessons endpoint
-            const response = await fetch(`/api/teacher/bahagi/${data.bahagiId}/lessons`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    title: data.title,
-                    subtitle: data.subtitle || data.description,
-                    discussion: data.discussion,
-                    media_url: data.media_url,
-                    audio_url: data.audio_url,
-                    lesson_order: data.lesson_order
-                })
+            const result = await apiClient.yunit.create({
+                bahagi_id: data.bahagiId,
+                title: data.title,
+                subtitle: data.subtitle,
+                discussion: data.discussion,
+                media_url: data.media_url,
+                audio_url: data.audio_url,
+                lesson_order: data.lesson_order,
+                week_number: data.week_number,
+                module_number: data.module_number
             });
-
-            const result = await response.json();
             
             console.log('[handleYunitSubmit] Response:', result);
 
-            if (response.ok && result.lesson) {
+            if (result.success && result.data) {
                 setShowYunitForm(false);
                 setSelectedBahagiId(null);
                 // Refresh bahagi list to show the new yunit count

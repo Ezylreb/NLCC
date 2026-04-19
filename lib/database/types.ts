@@ -44,6 +44,9 @@ export interface Lesson {
   media_url?: string;
   audio_url?: string;
   lesson_order?: number;
+  quarter?: string;
+  week_number?: number;
+  module_number?: string;
   is_published: boolean;
   is_archived: boolean;
   created_at: Date;

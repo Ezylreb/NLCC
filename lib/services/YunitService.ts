@@ -17,13 +17,22 @@ export class YunitService {
     discussion?: string;
     media_url?: string;
     audio_url?: string;
+    lesson_order?: number;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<Lesson> {
     // Convert bahagi_id to number if it's a string
     const bahagiIdNum = typeof data.bahagi_id === 'string' ? parseInt(data.bahagi_id, 10) : data.bahagi_id;
+
+    const normalizedSubtitle = typeof data.subtitle === 'string'
+      ? data.subtitle.trim().slice(0, 255)
+      : undefined;
     
     return repositories.lesson.create({
       ...data,
       bahagi_id: bahagiIdNum,
+      subtitle: normalizedSubtitle,
       is_published: false,
       is_archived: false,
     } as any);
