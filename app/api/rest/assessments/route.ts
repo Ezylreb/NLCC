@@ -69,7 +69,13 @@ export async function GET(request: NextRequest) {
       assessments = assessments.filter((a) => a.is_published === publishedBool);
     }
 
-    return NextResponse.json({ success: true, data: assessments });
+    return NextResponse.json({
+      success: true,
+      data: {
+        assessments,
+      },
+      assessments,
+    });
   } catch (error: any) {
     console.error('[GET /api/rest/assessments]', error);
     return NextResponse.json(

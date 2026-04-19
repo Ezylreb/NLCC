@@ -107,6 +107,20 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         }
     }, [bahagi]);
 
+    // Debug: Log bahagiYunits state changes
+    useEffect(() => {
+        console.log('[ClassDetailPage] bahagiYunits state updated:', bahagiYunits);
+        console.log('[ClassDetailPage] bahagiYunits keys:', Object.keys(bahagiYunits));
+        Object.entries(bahagiYunits).forEach(([bahagiId, yunits]) => {
+            console.log(`[ClassDetailPage] Bahagi ${bahagiId} has ${yunits?.length || 0} yunits`);
+        });
+    }, [bahagiYunits]);
+
+    // Debug: Log expandedBahagiId changes
+    useEffect(() => {
+        console.log('[ClassDetailPage] expandedBahagiId changed to:', expandedBahagiId);
+    }, [expandedBahagiId]);
+
     // Fetch yunits for a bahagi
     const fetchYunitsForBahagi = async (bahagiId: number) => {
         console.log('[fetchYunitsForBahagi] Starting fetch for bahagiId:', bahagiId);
@@ -143,12 +157,16 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         setIsLoadingAssessments(true);
         try {
             const response = await apiClient.assessment.fetch({ bahagi_id: bahagiId });
-            if (response.data?.assessments) {
-                setBahagiAssessments(prev => ({
-                    ...prev,
-                    [bahagiId]: response.data.assessments || []
-                }));
-            }
+            const assessments = Array.isArray(response.data?.assessments)
+                ? response.data.assessments
+                : Array.isArray((response as any).assessments)
+                    ? (response as any).assessments
+                    : [];
+
+            setBahagiAssessments(prev => ({
+                ...prev,
+                [bahagiId]: assessments
+            }));
         } catch (err) {
             console.error('Error fetching assessments:', err);
         } finally {
@@ -158,16 +176,35 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
 
     // Handle expanding a bahagi
     const handleToggleBahagiExpand = (bahagiId: number) => {
+        console.log('[handleToggleBahagiExpand] Called with bahagiId:', bahagiId);
+        console.log('[handleToggleBahagiExpand] Current expandedBahagiId:', expandedBahagiId);
+        
         if (expandedBahagiId === bahagiId) {
+            console.log('[handleToggleBahagiExpand] Collapsing bahagi:', bahagiId);
             setExpandedBahagiId(null);
         } else {
+            console.log('[handleToggleBahagiExpand] Expanding bahagi:', bahagiId);
             setExpandedBahagiId(bahagiId);
+            
             // Load yunits and assessments when expanding
+            console.log('[handleToggleBahagiExpand] Checking if yunits already loaded for bahagi:', bahagiId);
+            console.log('[handleToggleBahagiExpand] bahagiYunits[bahagiId]:', bahagiYunits[bahagiId]);
+            
             if (!bahagiYunits[bahagiId]) {
+                console.log('[handleToggleBahagiExpand] Yunits not loaded, fetching for bahagi:', bahagiId);
                 fetchYunitsForBahagi(bahagiId);
+            } else {
+                console.log('[handleToggleBahagiExpand] Yunits already loaded, count:', bahagiYunits[bahagiId]?.length);
             }
+            
+            console.log('[handleToggleBahagiExpand] Checking if assessments already loaded for bahagi:', bahagiId);
+            console.log('[handleToggleBahagiExpand] bahagiAssessments[bahagiId]:', bahagiAssessments[bahagiId]);
+            
             if (!bahagiAssessments[bahagiId]) {
+                console.log('[handleToggleBahagiExpand] Assessments not loaded, fetching for bahagi:', bahagiId);
                 fetchAssessmentsForBahagi(bahagiId);
+            } else {
+                console.log('[handleToggleBahagiExpand] Assessments already loaded, count:', bahagiAssessments[bahagiId]?.length);
             }
         }
     };
@@ -258,11 +295,21 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentSubmit = async (data: any) => {
         setIsCreatingAssessment(true);
         try {
+            // Calculate total points from all questions
+            const totalPoints = data.questions?.reduce((sum: number, q: any) => {
+                return sum + (parseInt(q.xp) || 0);
+            }, 0) || 0;
+
+            // Get assessment type from first question
+            const assessmentType = data.questions?.[0]?.type || data.type || 'multiple-choice';
+
             const response = await apiClient.assessment.create({
                 yunit_id: data.lessonId || 0,
                 bahagi_id: data.bahagiId || 0,
                 title: data.title,
                 description: data.instructions,
+                assessment_type: assessmentType,
+                points: totalPoints,
                 questions: data.questions,
                 total_questions: data.questions?.length || 0
             });
@@ -270,7 +317,18 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             if (response.success) {
                 alert('✅ Assessment created successfully!');
                 setShowAssessmentForm(false);
-                // Refresh assessments
+
+                const createdAssessment = response.data;
+                if (createdAssessment && data.bahagiId) {
+                    setBahagiAssessments(prev => ({
+                        ...prev,
+                        [data.bahagiId]: [
+                            ...((prev[data.bahagiId] || []).filter((assessment: any) => assessment.id !== createdAssessment.id)),
+                            createdAssessment
+                        ]
+                    }));
+                }
+
                 fetchAssessmentsForBahagi(data.bahagiId);
             } else {
                 alert(`❌ Error: ${response.error}`);
@@ -428,7 +486,16 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             if (response.success) {
                 alert('✅ Assessment updated successfully!');
                 setShowEditAssessmentForm(false);
-                // Refresh assessments
+
+                if (response.data && data.bahagiId) {
+                    setBahagiAssessments(prev => ({
+                        ...prev,
+                        [data.bahagiId]: (prev[data.bahagiId] || []).map((assessment: any) =>
+                            assessment.id === response.data.id ? response.data : assessment
+                        )
+                    }));
+                }
+
                 fetchAssessmentsForBahagi(data.bahagiId);
             } else {
                 alert(`❌ Error: ${response.error || 'Failed to update assessment'}`);
@@ -527,6 +594,10 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             const result = await apiClient.assessment.deleteAssessment(assessmentId);
             if (result.success) {
                 alert('✅ Assessment deleted!');
+                setBahagiAssessments(prev => ({
+                    ...prev,
+                    [bahagiId]: (prev[bahagiId] || []).filter((assessment: any) => assessment.id !== assessmentId)
+                }));
                 fetchAssessmentsForBahagi(bahagiId);
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to delete'}`);
@@ -896,6 +967,16 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                     {bahagiYunits[b.id]?.length || 0}
                                                 </span>
                                             </div>
+                                            {(() => {
+                                                console.log(`[Yunits Render] Checking bahagi ${b.id}:`, {
+                                                    isLoadingYunits,
+                                                    'bahagiYunits[b.id]': bahagiYunits[b.id],
+                                                    'bahagiYunits[b.id]?.length': bahagiYunits[b.id]?.length,
+                                                    'expandedBahagiId': expandedBahagiId,
+                                                    'b.id === expandedBahagiId': b.id === expandedBahagiId
+                                                });
+                                                return null;
+                                            })()}
                                             {isLoadingYunits ? (
                                                 <p className="text-slate-500 text-sm">Loading yunits...</p>
                                             ) : bahagiYunits[b.id]?.length > 0 ? (
@@ -1116,6 +1197,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             {editingAssessment && showEditAssessmentForm && (
                 <EditAssessmentV2Form
                     assessmentId={editingAssessment.id || ''}
+                    initialAssessment={editingAssessment}
                     onClose={() => {
                         setShowEditAssessmentForm(false);
                         setEditingAssessment(null);

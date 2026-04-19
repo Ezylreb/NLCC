@@ -6,9 +6,9 @@
 import { NextResponse } from 'next/server';
 import AssessmentService from '@/lib/services/AssessmentService';
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = await params;
+    const { id } = params;
 
     const assessment = await AssessmentService.getById(id);
 
