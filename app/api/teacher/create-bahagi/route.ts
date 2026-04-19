@@ -42,12 +42,14 @@ export async function POST(request: NextRequest) {
 
     if (!result.rows || result.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Failed to create bahagi' },
+        { success: false, error: 'Failed to create bahagi' },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
+      success: true,
+      data: result.rows[0],
       bahagi: result.rows[0]
     });
   } catch (error: any) {
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
       detail: error?.detail
     });
     return NextResponse.json(
-      { error: 'Failed to create bahagi', details: error?.message },
+      { success: false, error: 'Failed to create bahagi', details: error?.message },
       { status: 500 }
     );
   }
