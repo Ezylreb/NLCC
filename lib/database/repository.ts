@@ -16,9 +16,10 @@ export class Repository<T extends Record<string, any> = any> {
    * Find by ID
    */
   async findById(id: string): Promise<T | null> {
+    const paramId = typeof id === 'string' && /^\d+$/.test(id) ? parseInt(id, 10) : id;
     const result = await query<T>(
       `SELECT * FROM ${this.tableName} WHERE id = $1`,
-      [id]
+      [paramId]
     );
     return result.rows[0] || null;
   }
@@ -28,13 +29,15 @@ export class Repository<T extends Record<string, any> = any> {
    */
   async findAll(options?: RepositoryOptions): Promise<T[]> {
     let sql = `SELECT * FROM ${this.tableName}`;
+    const params: any[] = [];
 
     if (options?.where && Object.keys(options.where).length > 0) {
       const conditions = Object.entries(options.where)
-        .map(([key, value], idx) => {
+        .map(([key, value]) => {
           if (value === null) return `${key} IS NULL`;
-          if (Array.isArray(value)) return `${key} = ANY($${idx + 1})`;
-          return `${key} = $${idx + 1}`;
+          params.push(value);
+          if (Array.isArray(value)) return `${key} = ANY($${params.length})`;
+          return `${key} = $${params.length}`;
         })
         .join(' AND ');
       sql += ` WHERE ${conditions}`;
@@ -52,7 +55,7 @@ export class Repository<T extends Record<string, any> = any> {
       sql += ` OFFSET ${options.offset}`;
     }
 
-    const result = await query<T>(sql, Object.values(options?.where || {}));
+    const result = await query<T>(sql, params);
     return result.rows;
   }
 
@@ -95,13 +98,15 @@ export class Repository<T extends Record<string, any> = any> {
    * Update record by ID
    */
   async update(id: string, data: Partial<T>): Promise<T | null> {
+    // Ensure numeric IDs are passed as numbers for correct pg type binding
+    const paramId = typeof id === 'string' && /^\d+$/.test(id) ? parseInt(id, 10) : id;
     const keys = Object.keys(data).filter(k => (data as any)[k] !== undefined);
     if (keys.length === 0) {
       return this.findById(id);
     }
 
     const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(',');
-    const values = [...keys.map(k => (data as any)[k]), id];
+    const values = [...keys.map(k => (data as any)[k]), paramId];
 
     const sql = `
       UPDATE ${this.tableName}
@@ -117,15 +122,18 @@ export class Repository<T extends Record<string, any> = any> {
   /**
    * Delete record (soft delete via is_archived column if exists)
    */
-  async delete(id: string, soft: boolean = true): Promise<boolean> {
+  async delete(id: string | number, soft: boolean = true): Promise<boolean> {
+    // Ensure numeric IDs are passed as numbers for correct pg type binding
+    const paramId = typeof id === 'string' && /^\d+$/.test(id) ? parseInt(id, 10) : id;
+
     if (soft) {
       // Try soft delete first
       try {
-        await query(
+        const softResult = await query(
           `UPDATE ${this.tableName} SET is_archived = true, updated_at = NOW() WHERE id = $1`,
-          [id]
+          [paramId]
         );
-        return true;
+        return (softResult.rowCount || 0) > 0;
       } catch {
         // Fall through to hard delete if soft delete not supported
       }
@@ -134,7 +142,7 @@ export class Repository<T extends Record<string, any> = any> {
     // Hard delete
     const result = await query(
       `DELETE FROM ${this.tableName} WHERE id = $1`,
-      [id]
+      [paramId]
     );
 
     return (result.rowCount || 0) > 0;

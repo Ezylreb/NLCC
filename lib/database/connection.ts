@@ -27,8 +27,8 @@ export function initializeConnectionPool(): Pool {
     ssl: connectionString?.includes('supabase') ? { rejectUnauthorized: false } : false,
     max: 20, // Maximum connection pool size
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000, // Increased to 10 seconds for complex queries
-    query_timeout: 15000, // Query timeout set to 15 seconds
+    connectionTimeoutMillis: 10000,
+    query_timeout: 30000, // Query timeout set to 30 seconds
   });
 
   connectionPool.on('error', (err) => {
@@ -51,7 +51,7 @@ export function getConnectionPool(): Pool {
 export async function query<T extends Record<string, any> = any>(
   text: string,
   params?: any[],
-  retries: number = 1
+  retries: number = 2
 ): Promise<PgQueryResult<T>> {
   const pool = getConnectionPool();
 
@@ -59,10 +59,29 @@ export async function query<T extends Record<string, any> = any>(
     try {
       return await pool.query<T>(text, params);
     } catch (error: any) {
-      // Schema compatibility - try fallback query
-      if (attempt < retries && (error.message?.includes('media_url') || error.message?.includes('unknown column'))) {
-        // Log but continue to fallback
-        console.warn(`Query attempt ${attempt + 1} failed with schema error, retrying...`);
+      const msg = error.message || '';
+      const code = error.code || '';
+
+      // Retryable: schema compatibility errors
+      const isSchemaError = msg.includes('media_url') || msg.includes('unknown column');
+
+      // Retryable: transient connection/timeout errors (Supabase pooler can drop idle connections)
+      const isTransientError =
+        msg.includes('Connection terminated') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ETIMEDOUT') ||
+        msg.includes('connection is insecure') ||
+        msg.includes('timeout') ||
+        msg.includes('Timeout') ||
+        msg.includes('read timeout') ||
+        msg.includes('Query read timeout') ||
+        code === '57P01' || // admin_shutdown
+        code === '57014' || // query_canceled (statement timeout)
+        code === '08006' || // connection_failure
+        code === '08003';   // connection_does_not_exist
+
+      if (attempt < retries && (isSchemaError || isTransientError)) {
+        console.warn(`Query attempt ${attempt + 1} failed (${isTransientError ? 'transient' : 'schema'} error: ${msg.substring(0, 80)}), retrying...`);
         continue;
       }
 
@@ -70,7 +89,8 @@ export async function query<T extends Record<string, any> = any>(
       console.error('Database query error:', {
         query: text.substring(0, 100),
         params: params?.slice(0, 3),
-        error: error.message,
+        error: msg,
+        code,
         attempt: attempt + 1,
       });
 

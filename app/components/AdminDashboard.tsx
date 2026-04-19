@@ -424,15 +424,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     }, [activityPage, activeTab]);
 
     React.useEffect(() => {
-        // When switching to users tab or filters change, fetch users starting from page 1
+        // When switching to users tab or filters change, fetch from page 1
         if (activeTab === 'users') {
             setUserPage(1);
+            fetchUsers(1);
         }
     }, [activeTab, roleFilter, searchQuery, sectionFilter]);
 
     React.useEffect(() => {
         // Fetch users when page changes (and ensure we're on the users tab)
-        if (activeTab === 'users' && userPage >= 1) {
+        if (activeTab === 'users' && userPage > 1) {
             fetchUsers(userPage);
         }
     }, [userPage, activeTab]);

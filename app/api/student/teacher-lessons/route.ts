@@ -146,6 +146,8 @@ export async function GET(request: NextRequest) {
 
           // Get student's progress for this bahagi
           let passedYunits = 0;
+          let completedAssessments = 0;
+          let totalAssessments = 0;
           try {
             const progressResult = await query(
               `SELECT COUNT(*) as passed_count FROM lesson_progress
@@ -153,6 +155,25 @@ export async function GET(request: NextRequest) {
               [studentId, bahagi.id]
             );
             passedYunits = parseInt(progressResult.rows[0]?.passed_count || 0);
+
+            // Count total assessments for this bahagi
+            const totalAssessmentsResult = await query(
+              `SELECT COUNT(*) as total FROM bahagi_assessment WHERE bahagi_id = $1 AND (is_archived IS NULL OR is_archived = false)`,
+              [bahagi.id]
+            );
+            totalAssessments = parseInt(totalAssessmentsResult.rows[0]?.total || 0);
+
+            // Count assessments the student has answered
+            if (totalAssessments > 0) {
+              const completedAssessmentsResult = await query(
+                `SELECT COUNT(DISTINCT ar.assessment_id) as completed FROM assessment_responses ar
+                 WHERE ar.student_id = $1 AND ar.assessment_id IN (
+                   SELECT id FROM bahagi_assessment WHERE bahagi_id = $2 AND (is_archived IS NULL OR is_archived = false)
+                 )`,
+                [studentId, bahagi.id]
+              );
+              completedAssessments = parseInt(completedAssessmentsResult.rows[0]?.completed || 0);
+            }
             
             // Detailed logging for debugging
             console.log(`[Bahagi ${bahagiIndex}] "${bahagi.title}":`);
@@ -181,7 +202,9 @@ export async function GET(request: NextRequest) {
           }
 
           const totalYunits = yunitResult.rows.length;
-          const allPassed = totalYunits > 0 && passedYunits === totalYunits;
+          const totalItems = totalYunits + totalAssessments;
+          const completedItems = passedYunits + completedAssessments;
+          const allPassed = totalItems > 0 && completedItems === totalItems;
           
           console.log(`[Bahagi ${bahagiIndex}] Progress: ${passedYunits}/${totalYunits} yunits (${allPassed ? 'COMPLETE' : 'INCOMPLETE'})`);
 
@@ -196,11 +219,11 @@ export async function GET(request: NextRequest) {
           bahagiNumber: bahagiIndex + 1,
           title: bahagi.title || `Lesson ${bahagiIndex + 1}`,
           description: bahagi.description || '',
-          imageUrl: bahagi.image_url || '',
+          imageUrl: bahagi.image_url || '/Character/NLLCTeachHalf1.png',
           yunitCount: yunitResult?.rows?.length || 0,
           yunits: yunitResult?.rows || [],
-          passedYunits,
-          totalYunits,
+          passedYunits: completedItems,
+          totalYunits: totalItems,
           isCompleted: allPassed,
           isUnlocked,
           xpReward: 10,
@@ -217,7 +240,7 @@ export async function GET(request: NextRequest) {
             bahagiNumber: bahagiIndex + 1,
             title: bahagi.title || `Lesson ${bahagiIndex + 1}`,
             description: bahagi.description || '',
-            imageUrl: bahagi.image_url || '',
+            imageUrl: bahagi.image_url || '/Character/NLLCTeachHalf1.png',
             yunitCount: 0,
             yunits: [],
             passedYunits: 0,

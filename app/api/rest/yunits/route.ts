@@ -53,8 +53,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const bahagiIdNum = parseInt(bahagiId, 10);
+    if (isNaN(bahagiIdNum)) {
+      return NextResponse.json(
+        { error: 'Invalid Bahagi ID' },
+        { status: 400 }
+      );
+    }
+
     // List yunits
-    let yunits = await YunitService.listByBahagi(bahagiId);
+    let yunits = await YunitService.listByBahagi(String(bahagiIdNum));
 
     // Filter by status
     if (published !== null) {
@@ -91,8 +99,17 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
 
+    // Only allow known lesson columns to prevent SQL errors
+    const allowedFields = ['title', 'subtitle', 'discussion', 'media_url', 'audio_url', 'lesson_order', 'is_published', 'is_archived', 'quarter', 'week_number', 'module_number'];
+    const sanitized: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) {
+        sanitized[key] = body[key];
+      }
+    }
+
     // Update yunit
-    const yunit = await YunitService.update(id, body);
+    const yunit = await YunitService.update(id, sanitized);
 
     if (!yunit) {
       return NextResponse.json(
@@ -123,10 +140,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    console.log(`[DELETE /api/rest/yunits] Deleting yunit ${id}`);
+    const idNum = parseInt(id, 10);
+    if (isNaN(idNum)) {
+      return NextResponse.json(
+        { error: 'Invalid yunit ID' },
+        { status: 400 }
+      );
+    }
 
-    // Delete permanently (lesson table doesn't have is_archived column)
-    const result = await YunitService.delete(id);
+    console.log(`[DELETE /api/rest/yunits] Deleting yunit ${idNum}`);
+
+    // Delete permanently
+    const result = await YunitService.delete(String(idNum));
 
     if (!result) {
       return NextResponse.json(

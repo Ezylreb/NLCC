@@ -118,15 +118,15 @@ export async function PATCH(
         // If class changed, update the enrollment
         if (currentClassId.toString() !== class_id.toString()) {
           await query(
-            'UPDATE class_enrollments SET class_id = $1, enrolled_by_teacher_id = $2, enrolled_at = CURRENT_TIMESTAMP WHERE student_id = $3',
-            [class_id, teacher_id, id]
+            'UPDATE class_enrollments SET class_id = $1 WHERE student_id = $2',
+            [class_id, id]
           );
         }
       } else {
         // Create new enrollment
         await query(
-          'INSERT INTO class_enrollments (class_id, student_id, enrolled_by_teacher_id, enrolled_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
-          [class_id, id, teacher_id]
+          'INSERT INTO class_enrollments (class_id, student_id) VALUES ($1, $2)',
+          [class_id, id]
         );
       }
     } else if (role === 'USER' && !class_id) {

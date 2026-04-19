@@ -110,12 +110,11 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         setIsLoadingAssessments(true);
         try {
             const response = await apiClient.assessment.fetch({ bahagi_id: bahagiId });
-            if (response.data?.assessments) {
-                setBahagiAssessments(prev => ({
-                    ...prev,
-                    [bahagiId]: response.data.assessments || []
-                }));
-            }
+            const assessments = response.data?.assessments || response.data || [];
+            setBahagiAssessments(prev => ({
+                ...prev,
+                [bahagiId]: Array.isArray(assessments) ? assessments : []
+            }));
         } catch (err) {
             console.error('Error fetching assessments:', err);
         } finally {
@@ -225,13 +224,25 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const handleAssessmentSubmit = async (data: any) => {
         setIsCreatingAssessment(true);
         try {
+            // Map form type names to DB-compatible type names
+            const typeMap: Record<string, string> = {
+                'media-audio': 'audio',
+                'scramble': 'scramble-word',
+            };
+            const assessmentType = typeMap[data.type] || data.type;
+            const totalPoints = (data.questions || []).reduce(
+                (sum: number, q: any) => sum + (parseInt(q.xp) || 10), 0
+            );
+
             const response = await apiClient.assessment.create({
-                yunit_id: data.lessonId || 0,
-                bahagi_id: data.bahagiId || 0,
+                bahagi_id: data.bahagiId,
                 title: data.title,
-                description: data.instructions,
-                questions: data.questions,
-                total_questions: data.questions?.length || 0
+                assessment_type: assessmentType,
+                content: {
+                    instructions: data.instructions,
+                    questions: data.questions,
+                },
+                points: totalPoints,
             });
 
             if (response.success) {
@@ -455,9 +466,14 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     // Handle toggling publish status
     const handleTogglePublish = async (bahagiId: number, currentStatus: boolean) => {
         try {
-            const result = await apiClient.bahagi.publish(bahagiId);
+            const newStatus = !currentStatus;
+            const bahagiItem = bahagi.find(b => b.id === bahagiId);
+            const result = await apiClient.bahagi.update(bahagiId, {
+                title: bahagiItem?.title || 'Untitled',
+                is_published: newStatus
+            });
             if (result.success) {
-                alert(`✅ Bahagi published!`);
+                alert(newStatus ? '✅ Bahagi published! Students can now see it.' : '✅ Bahagi unpublished. Hidden from students.');
                 onRefreshBahagi?.();
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to update'}`);
@@ -587,6 +603,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     iconPath={b.icon_path}
                                     iconType={b.icon_type}
                                     isArchived={b.is_archived}
+                                    isPublished={b.is_open === true}
                                     lessonCount={b.lessonCount || 0}
                                     assessmentCount={b.assessmentCount || 0}
                                     expanded={expandedBahagiId === b.id}
@@ -595,6 +612,8 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     onArchive={() => handleArchiveBahagi(b.id)}
                                     onDelete={() => handleDeleteBahagi(b.id)}
                                     onAddYunit={() => handleCreateYunit(b)}
+                                    onTogglePublish={() => handleTogglePublish(b.id, b.is_open === true)}
+                                    onAddAssessment={() => handleCreateAssessment(b)}
                                     userId={teacherId || ''}
                                 />
                                 
@@ -645,17 +664,17 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     </span>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-2">
+                                                            <div className="flex items-center gap-1">
                                                                 <button
-                                                                    className="px-2 py-1 text-xs bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 rounded transition-all"
+                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-blue-600/30 text-slate-400 hover:text-blue-400 transition-all"
                                                                     onClick={() => handleEditYunit(yunit)}
                                                                     title="Edit Yunit"
                                                                     onMouseDown={(e) => e.stopPropagation()}
                                                                 >
-                                                                    ✏️
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                                                                 </button>
                                                                 <button
-                                                                    className="px-2 py-1 text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition-all"
+                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-red-600/30 text-slate-400 hover:text-red-400 transition-all"
                                                                     onClick={async () => {
                                                                         if (confirm('Delete this Yunit?')) {
                                                                             await handleDeleteYunitInline(yunit.id, b.id);
@@ -664,7 +683,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     title="Delete Yunit"
                                                                     onMouseDown={(e) => e.stopPropagation()}
                                                                 >
-                                                                    🗑️
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -703,16 +722,16 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     </span>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-2">
+                                                            <div className="flex items-center gap-1">
                                                                 <button
-                                                                    className="px-2 py-1 text-xs bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 rounded transition-all"
+                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-blue-600/30 text-slate-400 hover:text-blue-400 transition-all"
                                                                     onClick={() => handleEditAssessment(assessment)}
                                                                     title="Edit Assessment"
                                                                 >
-                                                                    ✏️
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                                                                 </button>
                                                                 <button
-                                                                    className="px-2 py-1 text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition-all"
+                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-700/50 hover:bg-red-600/30 text-slate-400 hover:text-red-400 transition-all"
                                                                     onClick={async () => {
                                                                         if (confirm('Delete this Assessment?')) {
                                                                             await handleDeleteAssessmentInline(assessment.id, b.id);
@@ -720,7 +739,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     }}
                                                                     title="Delete Assessment"
                                                                 >
-                                                                    🗑️
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -729,22 +748,6 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                             ) : (
                                                 <p className="text-xs text-slate-600 italic">No assessments yet</p>
                                             )}
-                                        </div>
-
-                                        {/* Add Yunit/Assessment Buttons */}
-                                        <div className="border-t border-slate-700/50 pt-4 flex gap-2">
-                                            <button
-                                                onClick={() => handleCreateYunit(b)}
-                                                className="flex-1 text-center text-xs font-black text-brand-sky hover:text-white uppercase tracking-widest px-4 py-2 rounded-lg border border-brand-sky/30 hover:bg-brand-sky/10 transition-all"
-                                            >
-                                                + Add Yunit
-                                            </button>
-                                            <button
-                                                onClick={() => handleCreateAssessment(b)}
-                                                className="flex-1 text-center text-xs font-black text-brand-sky hover:text-white uppercase tracking-widest px-4 py-2 rounded-lg border border-brand-sky/30 hover:bg-brand-sky/10 transition-all"
-                                            >
-                                                + Edit Assessment
-                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -813,7 +816,11 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                     }}
                     onSuccess={() => {
                         setShowEditAssessmentForm(false);
-                        // Refresh if needed
+                        setEditingAssessment(null);
+                        // Refresh assessments for the bahagi
+                        if (editingAssessment?.bahagi_id) {
+                            fetchAssessmentsForBahagi(editingAssessment.bahagi_id);
+                        }
                     }}
                     userId={teacherId || ''}
                 />

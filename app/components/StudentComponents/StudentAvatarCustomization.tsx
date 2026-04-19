@@ -674,7 +674,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
 
@@ -709,6 +709,7 @@ type AvatarItem = AvatarPart & {
 };
 
 export const StudentAvatarCustomization = () => {
+    const avatarRef = useRef<HTMLDivElement>(null);
     const [activeCategory, setActiveCategory] =
         useState<keyof AvatarCustomization>('katawan');
     const [isLoading, setIsLoading] = useState(true);
@@ -771,6 +772,12 @@ export const StudentAvatarCustomization = () => {
         const loadAvatar = async () => {
             try {
                 setIsLoading(true);
+
+                if (!apiClient.student.hasStudentId()) {
+                    console.warn('No student ID found in session, skipping avatar load');
+                    return;
+                }
+
                 const result = await apiClient.student.getAvatarCustomization();
                 
                 if (result.success && result.data) {
@@ -815,7 +822,13 @@ export const StudentAvatarCustomization = () => {
         try {
             setIsSaving(true);
             setSaveMessage('');
-            
+
+            if (!apiClient.student.hasStudentId()) {
+                setSaveMessage('❌ Please log in again to save');
+                setTimeout(() => setSaveMessage(''), 3000);
+                return;
+            }
+
             const result = await apiClient.student.saveAvatarCustomization(customization);
             
             if (result.success) {
@@ -948,7 +961,7 @@ export const StudentAvatarCustomization = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
                 {/* PREVIEW */}
-                <div className="p-6 rounded-xl">
+                <motion.div className="p-6 rounded-xl">
                     <h2 className="text-white mb-4 text-center">
                         Preview
                     </h2>
@@ -998,7 +1011,6 @@ export const StudentAvatarCustomization = () => {
                                 {saveMessage}
                             </motion.div>
                         )}
-                    </div>
                 </motion.div>
 
                 {/* OPTIONS */}

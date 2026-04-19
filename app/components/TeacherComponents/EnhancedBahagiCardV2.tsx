@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Edit2, Archive, Trash2, ChevronDown, ChevronUp, Plus
+    Edit2, Archive, Trash2, ChevronDown, ChevronUp, Plus, Globe, GlobeLock
 } from 'lucide-react';
 import { BahagiIconSelector } from './BahagiIconSelector';
 
@@ -16,6 +16,7 @@ interface EnhancedBahagiCardProps {
     description?: string;
     isOpen?: boolean;
     isArchived?: boolean;
+    isPublished?: boolean;
     lessonCount?: number;
     assessmentCount?: number;
     totalXP?: number;
@@ -23,6 +24,8 @@ interface EnhancedBahagiCardProps {
     onAddYunit?: () => void;
     onArchive?: () => void;
     onDelete?: () => void;
+    onTogglePublish?: () => void;
+    onAddAssessment?: () => void;
     onIconChange?: (iconPath: string, iconType: string) => void;
     userId: string;
     expanded?: boolean;
@@ -38,6 +41,7 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     description,
     isOpen = true,
     isArchived = false,
+    isPublished = false,
     lessonCount = 0,
     assessmentCount = 0,
     totalXP = 0,
@@ -45,6 +49,8 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     onAddYunit,
     onArchive,
     onDelete,
+    onTogglePublish,
+    onAddAssessment,
     onIconChange,
     userId,
     expanded = false,
@@ -98,14 +104,18 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                                 </p>
                             )}
                             <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                                {isPublished ? (
+                                    <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded flex items-center gap-1">
+                                        <Globe size={12} /> Published
+                                    </span>
+                                ) : (
+                                    <span className="bg-yellow-900/30 text-yellow-400 px-2 py-1 rounded flex items-center gap-1">
+                                        <GlobeLock size={12} /> Draft
+                                    </span>
+                                )}
                                 {isArchived && (
                                     <span className="bg-red-900/30 text-red-400 px-2 py-1 rounded">
                                         📂 Archived
-                                    </span>
-                                )}
-                                {!isOpen && (
-                                    <span className="bg-yellow-900/30 text-yellow-400 px-2 py-1 rounded">
-                                        🔒 Draft
                                     </span>
                                 )}
                             </div>
@@ -143,40 +153,62 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="border-t border-slate-700 p-4 space-y-2 bg-slate-900"
+                        className="border-t border-slate-700 p-3 bg-slate-900 space-y-2"
                     >
-                        <button
-                            onClick={onAddYunit}
-                            className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold"
-                        >
-                            <Plus size={18} />
-                            Add Yunit
-                        </button>
-
-                        <div className="grid grid-cols-2 gap-2">
+                        {/* Secondary actions row */}
+                        <div className="grid grid-cols-4 gap-2">
+                            <button
+                                onClick={onTogglePublish}
+                                className={`flex flex-col items-center justify-center gap-1 py-2 rounded-lg transition font-semibold text-xs ${
+                                    isPublished
+                                        ? 'bg-green-600/20 text-green-400 border border-green-600/40 hover:bg-green-600/30'
+                                        : 'bg-slate-700/50 text-slate-300 border border-slate-600/40 hover:bg-slate-700'
+                                }`}
+                                title={isPublished ? 'Unpublish (hide from students)' : 'Publish (show to students)'}
+                            >
+                                {isPublished ? <Globe size={16} /> : <GlobeLock size={16} />}
+                                {isPublished ? 'Published' : 'Publish'}
+                            </button>
                             <button
                                 onClick={onEdit}
-                                className="flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-bold"
+                                className="flex flex-col items-center justify-center gap-1 bg-slate-700/50 text-slate-300 border border-slate-600/40 py-2 rounded-lg hover:bg-slate-700 transition font-semibold text-xs"
                             >
                                 <Edit2 size={16} />
                                 Edit
                             </button>
                             <button
                                 onClick={() => setShowArchiveConfirm(true)}
-                                className="flex items-center justify-center gap-2 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 transition font-bold"
+                                className="flex flex-col items-center justify-center gap-1 bg-slate-700/50 text-yellow-400 border border-slate-600/40 py-2 rounded-lg hover:bg-slate-700 transition font-semibold text-xs"
                             >
                                 <Archive size={16} />
                                 Archive
                             </button>
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="flex flex-col items-center justify-center gap-1 bg-slate-700/50 text-red-400 border border-slate-600/40 py-2 rounded-lg hover:bg-slate-700 transition font-semibold text-xs"
+                            >
+                                <Trash2 size={16} />
+                                Delete
+                            </button>
                         </div>
 
-                        <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            className="w-full flex items-center justify-center gap-2 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition font-bold"
-                        >
-                            <Trash2 size={16} />
-                            Delete
-                        </button>
+                        {/* Add content actions */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                onClick={onAddYunit}
+                                className="flex items-center justify-center gap-2 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold text-sm"
+                            >
+                                <Plus size={16} />
+                                Add Yunit
+                            </button>
+                            <button
+                                onClick={onAddAssessment}
+                                className="flex items-center justify-center gap-2 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold text-sm"
+                            >
+                                <Plus size={16} />
+                                Add Assessment
+                            </button>
+                        </div>
                     </motion.div>
                 )}
             </motion.div>

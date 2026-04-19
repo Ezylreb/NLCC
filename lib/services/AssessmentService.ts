@@ -11,20 +11,30 @@ export class AssessmentService {
    * Create a new Assessment
    */
   static async create(data: {
-    bahagi_id: string;
-    lesson_id?: string;
+    bahagi_id: string | number;
+    lesson_id?: string | number;
     title: string;
-    description?: string;
-    assessment_type: 'multiple-choice' | 'short-answer' | 'checkbox' | 'audio' | 'matching' | 'scramble-word';
+    assessment_type: string;
+    content?: Record<string, any>;
     options?: Record<string, any>;
     correct_answers?: Record<string, any>;
-    points: number;
+    points?: number;
   }): Promise<BahagiAssessment> {
-    return repositories.assessment.create({
-      ...data,
+    // Map field names to actual DB columns
+    const dbData: Record<string, any> = {
+      bahagi_id: data.bahagi_id,
+      title: data.title,
+      type: data.assessment_type,  // DB column is 'type', not 'assessment_type'
+      points: data.points || 10,
       is_published: false,
       is_archived: false,
-    } as any);
+    };
+    if (data.lesson_id) dbData.lesson_id = data.lesson_id;
+    if (data.content) dbData.content = JSON.stringify(data.content);
+    if (data.options) dbData.options = JSON.stringify(data.options);
+    if (data.correct_answers) dbData.correct_answer = JSON.stringify(data.correct_answers); // DB column is 'correct_answer' (singular)
+
+    return repositories.assessment.create(dbData as any);
   }
 
   /**
@@ -115,28 +125,33 @@ export class AssessmentService {
     let feedback = '';
     let partialCredit = false;
 
-    switch (assessment.assessment_type) {
+    // Support both DB column name (type) and legacy alias (assessment_type)
+    const assessmentType = assessment.type || assessment.assessment_type;
+    // Support both DB column name (correct_answer) and legacy alias (correct_answers)
+    const correctData = assessment.correct_answer || assessment.correct_answers;
+
+    switch (assessmentType) {
       case 'multiple-choice': {
-        isCorrect = studentAnswer === assessment.correct_answers?.answer;
+        isCorrect = studentAnswer === correctData?.answer;
         pointsEarned = isCorrect ? assessment.points : 0;
-        correctAnswer = assessment.correct_answers?.answer;
+        correctAnswer = correctData?.answer;
         feedback = isCorrect ? 'Correct!' : `The correct answer is: ${correctAnswer}`;
         break;
       }
 
       case 'short-answer': {
         const normalized = String(studentAnswer).toLowerCase().trim();
-        const correctNormalized = String(assessment.correct_answers?.answer).toLowerCase().trim();
+        const correctNormalized = String(correctData?.answer).toLowerCase().trim();
         isCorrect = normalized === correctNormalized;
         pointsEarned = isCorrect ? assessment.points : 0;
-        correctAnswer = assessment.correct_answers?.answer;
+        correctAnswer = correctData?.answer;
         feedback = isCorrect ? 'Correct!' : `Expected: ${correctAnswer}`;
         break;
       }
 
       case 'checkbox': {
-        const correctAnswers = Array.isArray(assessment.correct_answers?.answers)
-          ? assessment.correct_answers.answers
+        const correctAnswers = Array.isArray(correctData?.answers)
+          ? correctData.answers
           : [];
         const studentAnswers = Array.isArray(studentAnswer) ? studentAnswer : [studentAnswer];
 
@@ -166,7 +181,7 @@ export class AssessmentService {
       }
 
       case 'matching': {
-        const correctPairs = assessment.correct_answers?.pairs || {};
+        const correctPairs = correctData?.pairs || {};
         const studentPairs = studentAnswer || {};
 
         const matchCount = Object.entries(correctPairs).filter(([key, value]) => studentPairs[key] === value).length;
@@ -186,7 +201,7 @@ export class AssessmentService {
       }
 
       case 'scramble-word': {
-        const correctWord = String(assessment.correct_answers?.word).toLowerCase().trim();
+        const correctWord = String(correctData?.word).toLowerCase().trim();
         const studentWord = String(studentAnswer).toLowerCase().trim();
         isCorrect = studentWord === correctWord;
         pointsEarned = isCorrect ? assessment.points : 0;
@@ -195,12 +210,12 @@ export class AssessmentService {
         break;
       }
 
-      case 'audio': {
-        // Audio validation would require speech-to-text API
-        // For now, mark as pending review
+      case 'audio':
+      case 'media-audio': {
+        // Audio answers are submitted for teacher review — award points on submission
         feedback = 'Audio answer submitted for review';
-        pointsEarned = 0;
-        isCorrect = false;
+        pointsEarned = question.points || 1;
+        isCorrect = true;
         partialCredit = false;
         break;
       }
@@ -239,7 +254,7 @@ export class AssessmentService {
       student_answer: studentAnswer,
       is_correct: validation.isCorrect,
       points_earned: validation.pointsEarned,
-      assessment_type: assessment.assessment_type,
+      assessment_type: assessment.type || assessment.assessment_type,
       attempt_number: attemptNumber,
       submitted_at: new Date(),
     } as any);
@@ -273,12 +288,13 @@ export class AssessmentService {
       errors.push('Assessment type is required');
     }
 
-    const validTypes = ['multiple-choice', 'short-answer', 'checkbox', 'audio', 'matching', 'scramble-word'];
+    const validTypes = ['multiple-choice', 'short-answer', 'checkbox', 'audio', 'media-audio', 'matching', 'scramble-word'];
     if (data.assessment_type && !validTypes.includes(data.assessment_type)) {
       errors.push(`Invalid assessment type. Must be one of: ${validTypes.join(', ')}`);
     }
 
-    if (!data.points || typeof data.points !== 'number' || data.points <= 0) {
+    // Points is optional (defaults to 10, or summed from questions)
+    if (data.points !== undefined && data.points !== null && (typeof data.points !== 'number' || data.points <= 0)) {
       errors.push('Points must be a positive number');
     }
 

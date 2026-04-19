@@ -170,13 +170,6 @@ export const YunitView: React.FC<YunitViewProps> = ({
                       </div>
                     ) : null}
 
-                    {/* Assessment Count */}
-                    {yunit.assessment_count > 0 && !yunit.isLocked && (
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <span>📝 {yunit.assessment_count} assessment{yunit.assessment_count !== 1 ? 's' : ''}</span>
-                      </div>
-                    )}
-
                     {/* Media Indicators */}
                     {!yunit.isLocked && (yunit.media_url || yunit.audio_url) && (
                       <div className="flex items-center gap-2 text-xs text-slate-500">

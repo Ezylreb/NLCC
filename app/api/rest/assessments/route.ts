@@ -93,6 +93,12 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
 
+    // Map assessment_type to type for DB column
+    if (body.assessment_type) {
+      body.type = body.assessment_type;
+      delete body.assessment_type;
+    }
+
     // Update assessment
     const assessment = await AssessmentService.update(id, body);
 
@@ -126,8 +132,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Archive (soft delete) by default
-    const result = permanent ? await AssessmentService.delete(id) : await AssessmentService.archive(id);
+    const idNum = parseInt(id, 10);
+    if (isNaN(idNum)) {
+      return NextResponse.json(
+        { error: 'Invalid assessment ID' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[DELETE /api/rest/assessments] Deleting assessment ${idNum}, permanent=${permanent}`);
+
+    // Archive (soft delete) by default, permanent delete if requested
+    const result = permanent ? await AssessmentService.delete(String(idNum)) : await AssessmentService.archive(String(idNum));
 
     if (!result) {
       return NextResponse.json(

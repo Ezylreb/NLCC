@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
                 u.last_name as "lastName",
                 u.email
             FROM users u
-            WHERE (u.role = 'student' OR u.role = 'USER')
+            WHERE u.role = 'USER'
             AND u.teacher_id = $2
             AND u.class_id IS NULL  -- Not directly assigned to any class
             AND u.id NOT IN (

@@ -169,7 +169,11 @@ class BahagiAPI extends APIClient {
       is_published: boolean;
     }>
   ): Promise<APIResponse> {
-    return this.put('/update-bahagi', { id: bahagiId, ...data });
+    const { is_published, is_archived, ...rest } = data;
+    const payload: any = { id: bahagiId, ...rest };
+    if (is_published !== undefined) payload.isPublished = is_published;
+    if (is_archived !== undefined) payload.isArchived = is_archived;
+    return this.put('/update-bahagi', payload);
   }
 
   /**
@@ -313,13 +317,12 @@ class AssessmentAPI extends APIClient {
    * Create new assessment
    */
   async create(data: {
-    yunit_id: number;
     bahagi_id: number;
     title: string;
-    description?: string;
-    total_questions?: number;
-    time_limit?: number;
-    questions?: any[];
+    assessment_type: string;
+    content?: Record<string, any>;
+    points?: number;
+    lesson_id?: number;
   }): Promise<APIResponse> {
     return this.post('/assessments', data);
   }
@@ -331,20 +334,23 @@ class AssessmentAPI extends APIClient {
     assessmentId: number,
     data: Partial<{
       title: string;
+      assessment_type: string;
+      content: any;
+      points: number;
       description: string;
       total_questions: number;
       time_limit: number;
       questions: any[];
     }>
   ): Promise<APIResponse> {
-    return this.patch(`/assessments/${assessmentId}`, data);
+    return this.patch(`/assessments?id=${assessmentId}`, data);
   }
 
   /**
    * Delete assessment
    */
   async deleteAssessment(assessmentId: number): Promise<APIResponse> {
-    return this.delete(`/assessments/${assessmentId}`);
+    return this.delete(`/assessments?id=${assessmentId}&permanent=true`);
   }
 
   /**
@@ -895,6 +901,13 @@ class StudentService extends APIClient {
       console.warn('Failed to parse nllc_user from localStorage');
       return '';
     }
+  }
+
+  /**
+   * Check if a student ID is available in the session
+   */
+  hasStudentId(): boolean {
+    return !!this.getStudentId();
   }
 
   /**
