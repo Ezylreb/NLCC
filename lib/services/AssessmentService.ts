@@ -380,12 +380,26 @@ export class AssessmentService {
       }
 
       case 'scramble-word': {
-        const correctWord = String(assessment.correct_answers?.word).toLowerCase().trim();
-        const studentWord = String(studentAnswer).toLowerCase().trim();
-        isCorrect = studentWord === correctWord;
+        // correctAnswer is an array of words in correct order
+        // studentAnswer is also an array of words in student's order
+        if (Array.isArray(correctData) && Array.isArray(studentAnswer)) {
+          const correctArr = correctData.map((w: string) => String(w).toLowerCase().trim());
+          const studentArr = studentAnswer.map((w: string) => String(w).toLowerCase().trim());
+          isCorrect = JSON.stringify(studentArr) === JSON.stringify(correctArr);
+        } else if (question.scrambleWords?.length && Array.isArray(studentAnswer)) {
+          // Fallback: use scrambleWords order as correct answer
+          const correctArr = question.scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').toLowerCase().trim());
+          const studentArr = studentAnswer.map((w: string) => String(w).toLowerCase().trim());
+          isCorrect = JSON.stringify(studentArr) === JSON.stringify(correctArr);
+        } else {
+          // Legacy string comparison fallback
+          const correctWord = String(correctData?.word || correctData || '').toLowerCase().trim();
+          const studentWord = String(studentAnswer).toLowerCase().trim();
+          isCorrect = studentWord === correctWord;
+        }
         pointsEarned = isCorrect ? assessment.points : 0;
-        correctAnswer = correctWord;
-        feedback = isCorrect ? 'Correct!' : `The correct word is: ${correctWord}`;
+        correctAnswer = Array.isArray(correctData) ? correctData.join(' ') : String(correctData?.word || correctData || '');
+        feedback = isCorrect ? 'Correct!' : `The correct order is: ${correctAnswer}`;
         break;
       }
 

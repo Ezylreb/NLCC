@@ -43,18 +43,16 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // Get enrolled students from both class_enrollments table AND users table assignments
-        // This ensures students assigned by admin also appear
+        // Get students assigned to this class (uses users.class_id as source of truth)
         const students = await query(
-            `SELECT DISTINCT
+            `SELECT
                 u.id,
                 u.first_name as "firstName",
                 u.last_name as "lastName",
                 u.email,
-                COALESCE(ce.created_at, u.created_at) as "enrolledAt"
+                u.created_at as "enrolledAt"
             FROM users u
-            LEFT JOIN class_enrollments ce ON u.id = ce.student_id AND ce.class_id = $1
-            WHERE (ce.class_id = $1 OR u.class_id = $1)
+            WHERE u.class_id = $1
               AND u.role = 'USER'
             ORDER BY u.first_name, u.last_name`,
             [classId]

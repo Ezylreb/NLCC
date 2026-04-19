@@ -227,7 +227,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                 setTimeout(() => {
                     timedOut = true;
                     reject(new Error('Request timeout'));
-                }, 8000); // 8 second timeout
+                }, 30000); // 30 second timeout
             });
             
             // Call the bahagi lessons endpoint with timeout

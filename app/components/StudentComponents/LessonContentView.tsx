@@ -51,8 +51,10 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
   const [showLoading, setShowLoading] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [isYunitAudioPlaying, setIsYunitAudioPlaying] = useState(false);
   const topicAudioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const yunitAudioRef = useRef<HTMLAudioElement | null>(null);
   const animationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch all yunits for the bahagi (once)
@@ -218,20 +220,8 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
 
     // Get the content to display (parse JSON topics if needed)
     const content = extractDisplayText(lesson.discussion, lesson.subtitle);
-    
-    // Start audio if available
-    if (lesson.audio_url) {
-      const audio = new Audio(lesson.audio_url);
-      audioRef.current = audio;
-      audio.play().catch(err => console.error('Audio play error:', err));
-      
-      // Show complete button when audio ends
-      audio.addEventListener('ended', () => {
-        setShowCompleteButton(true);
-      });
-    }
 
-    // Animate text
+    // Animate text (audio is only played via the play button)
     let currentIndex = 0;
     const typingSpeed = 65; // milliseconds per character
 
@@ -242,20 +232,43 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
       } else {
         clearInterval(timer);
         setIsAnimating(false);
-        // Show complete button if no audio or audio already ended
-        if (!lesson.audio_url) {
-          setShowCompleteButton(true);
-        }
+        setShowCompleteButton(true);
       }
     }, typingSpeed);
 
     animationTimerRef.current = timer;
   };
 
-  // Start text animation and audio when lesson loads
+  // Stop all audio playing on the current slide
+  const stopAllAudio = () => {
+    // Stop yunit-level audio
+    if (yunitAudioRef.current) {
+      yunitAudioRef.current.pause();
+      yunitAudioRef.current.currentTime = 0;
+      yunitAudioRef.current = null;
+    }
+    setIsYunitAudioPlaying(false);
+    // Stop auto-play audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    // Stop all topic/quote audio
+    Object.values(topicAudioRefs.current).forEach(audio => {
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+    setPlayingAudioId(null);
+  };
+
+  // Start text animation when lesson loads
   useEffect(() => {
     if (!lesson) return;
 
+    stopAllAudio();
     startAnimation();
 
     return () => {
@@ -266,6 +279,11 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (yunitAudioRef.current) {
+        yunitAudioRef.current.pause();
+        yunitAudioRef.current = null;
+      }
+      setIsYunitAudioPlaying(false);
     };
   }, [lesson]);
 
@@ -443,9 +461,43 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
           </div>
 
           {/* Lesson Title */}
-          <h1 className="text-2xl md:text-3xl font-bold text-brand-purple mb-6">
-            {lesson.title}
-          </h1>
+          <div className="flex items-center gap-3 mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold text-brand-purple">
+              {lesson.title}
+            </h1>
+            {lesson.audio_url && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isYunitAudioPlaying) {
+                    // Stop
+                    yunitAudioRef.current?.pause();
+                    if (yunitAudioRef.current) yunitAudioRef.current.currentTime = 0;
+                    setIsYunitAudioPlaying(false);
+                  } else {
+                    // Play
+                    const audio = new Audio(lesson.audio_url!);
+                    yunitAudioRef.current = audio;
+                    audio.play().catch(() => {});
+                    audio.addEventListener('ended', () => setIsYunitAudioPlaying(false));
+                    setIsYunitAudioPlaying(true);
+                  }
+                }}
+                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  isYunitAudioPlaying
+                    ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                    : 'bg-brand-purple/20 text-brand-purple hover:bg-brand-purple/30'
+                }`}
+                title={isYunitAudioPlaying ? 'Stop audio' : 'Play yunit audio'}
+              >
+                {isYunitAudioPlaying ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                )}
+              </button>
+            )}
+          </div>
 
           {/* Topic Content */}
           <div className="mb-6 space-y-6">
@@ -661,6 +713,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
               {currentIndex > 0 && (
                 <button
                   onClick={() => {
+                    stopAllAudio();
                     const prevYunit = allYunits[currentIndex - 1];
                     if (prevYunit) {
                       onNextYunit(prevYunit.id);
@@ -675,6 +728,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
               {currentIndex < allYunits.length - 1 && (
                 <button
                   onClick={async () => {
+                    stopAllAudio();
                     if (isSuriinLesson) {
                       setShowInteractivePage(true);
                     } else if (isPagyamaninLesson) {
@@ -696,6 +750,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
               {currentIndex === allYunits.length - 1 && (
                 <button
                   onClick={() => {
+                    stopAllAudio();
                     if (isSuriinLesson) {
                       setShowInteractivePage(true);
                     } else if (isPagyamaninLesson) {

@@ -102,11 +102,20 @@ export const CreateAssessmentForm: React.FC<CreateAssessmentFormProps> = ({
             title,
             type: assessmentType,
             instructions,
-            questions: questions.map(q => ({
-                ...q,
-                xp: parseInt(q.xp),
-                coins: parseInt(q.coins)
-            }))
+            questions: questions.map(q => {
+                const mapped: any = {
+                    ...q,
+                    xp: parseInt(q.xp),
+                    coins: parseInt(q.coins)
+                };
+                // For scramble questions, store the correct word order as correctAnswer
+                if (q.type === 'scramble' && q.scrambleWords?.length) {
+                    mapped.correctAnswer = q.scrambleWords
+                        .map((w: any) => (typeof w === 'string' ? w : w.text || '').trim())
+                        .filter((t: string) => t.length > 0);
+                }
+                return mapped;
+            })
         };
 
         onSubmit(data);

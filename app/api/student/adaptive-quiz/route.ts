@@ -61,13 +61,19 @@ export async function GET(request: NextRequest) {
             ? q.options.map((o: any) => typeof o === 'string' ? o : (o?.text || ''))
             : q.options || null;
 
+          // For scramble-word, derive correctAnswer from scrambleWords if not explicitly set
+          let correctAnswer = q.correctAnswer ?? null;
+          if (!correctAnswer && (qType === 'scramble-word' || qType === 'scramble') && q.scrambleWords?.length) {
+            correctAnswer = q.scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').trim()).filter(Boolean);
+          }
+
           allQuestions.push({
             id: `${assessment.id}-${i}`,
             assessmentId: assessment.id,
             type: qType,
             question: q.question || assessment.title,
             options,
-            correctAnswer: q.correctAnswer ?? null,
+            correctAnswer,
             questionMedia: q.questionMedia || null,
             scrambleWords: q.scrambleWords || null,
             pairs,

@@ -72,6 +72,10 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Scramble word state
+  const [scramblePool, setScramblePool] = useState<string[]>([]); // available words (shuffled)
+  const [scrambleSelected, setScrambleSelected] = useState<string[]>([]); // user's arranged order
+
   const isAudioQuestion = (type: string) =>
     type === 'audio' || type === 'media-audio';
 
@@ -142,6 +146,26 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
     };
   }, [currentIdx]);
 
+  // Shuffle scramble words when question changes
+  useEffect(() => {
+    const q = questions[currentIdx];
+    if (q && (q.type === 'scramble' || q.type === 'scramble-word') && q.scrambleWords?.length) {
+      const words = q.scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').trim()).filter(Boolean);
+      // Fisher-Yates shuffle
+      const shuffled = [...words];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      // Ensure shuffled order differs from correct order (retry once)
+      if (shuffled.length > 1 && JSON.stringify(shuffled) === JSON.stringify(words)) {
+        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+      }
+      setScramblePool(shuffled);
+      setScrambleSelected([]);
+    }
+  }, [currentIdx, questions]);
+
   // Fetch questions
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -190,7 +214,17 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
         answer?.[idx]?.toLowerCase() === pair.correctMatch?.toLowerCase()
       ) ?? false;
     } else if (type === 'scramble' || type === 'scramble-word') {
-      return String(answer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
+      // answer is an array of words in user's order, correctAnswer is the correct order array
+      if (Array.isArray(answer) && Array.isArray(question.correctAnswer)) {
+        return JSON.stringify(answer.map((w: string) => w.toLowerCase().trim())) ===
+               JSON.stringify(question.correctAnswer.map((w: string) => w.toLowerCase().trim()));
+      }
+      // Fallback: also support correctAnswer from scrambleWords (for older data without correctAnswer)
+      if (Array.isArray(answer) && question.scrambleWords?.length) {
+        const correct = question.scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').toLowerCase().trim());
+        return JSON.stringify(answer.map((w: string) => w.toLowerCase().trim())) === JSON.stringify(correct);
+      }
+      return false;
     } else if (type === 'audio' || type === 'media-audio') {
       return answer === 'audio-recorded';
     }
@@ -208,8 +242,10 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
       if (correctText) return `Hint: Nagsisimula sa "${correctText.charAt(0).toUpperCase()}..."`;
     } else if (type === 'short-answer' && typeof correct === 'string') {
       return `Hint: Nagsisimula sa "${correct.charAt(0).toUpperCase()}${correct.length > 2 ? correct.charAt(1) : ''}..."`;
-    } else if ((type === 'scramble' || type === 'scramble-word') && typeof correct === 'string') {
-      return `Hint: Ang tamang sagot ay may ${correct.length} letra at nagsisimula sa "${correct.substring(0, 2).toUpperCase()}..."`;
+    } else if ((type === 'scramble' || type === 'scramble-word') && (Array.isArray(correct) || question.scrambleWords)) {
+      const words = Array.isArray(correct) ? correct : question.scrambleWords?.map((w: any) => typeof w === 'string' ? w : w.text) || [];
+      if (words.length > 0) return `Hint: Ang unang salita ay "${words[0]}"`;
+      return 'Hint: Ayusin ang mga salita sa tamang pagkakasunod.';
     } else if (type === 'matching') {
       return 'Hint: Subukang basahin muli ang mga pagpipilian nang mabuti.';
     }
@@ -586,21 +622,72 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
 
               {/* Scramble */}
               {(currentQuestion.type === 'scramble' || currentQuestion.type === 'scramble-word') && (
-                <div className="space-y-4">
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-6 text-center">
-                    <p className="text-sm text-slate-400 mb-2">Ayusin ang mga letra:</p>
-                    <p className="text-3xl font-black text-purple-400 tracking-widest">
-                      {currentQuestion.scrambleWords?.map((w: any) => w.text || w).join(' ') || '???'}
-                    </p>
+                <div className="space-y-5">
+                  {/* Selected words (answer area) */}
+                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-[60px]">
+                    <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-wider">Iyong sagot:</p>
+                    <div className="flex flex-wrap gap-2 min-h-[40px]">
+                      {scrambleSelected.length === 0 && (
+                        <p className="text-slate-600 text-sm italic">Pindutin ang mga salita sa ibaba para ayusin...</p>
+                      )}
+                      {scrambleSelected.map((word, idx) => (
+                        <motion.button
+                          key={`sel-${idx}`}
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          onClick={() => {
+                            if (showResult) return;
+                            // Move word back to pool
+                            setScrambleSelected(prev => prev.filter((_, i) => i !== idx));
+                            setScramblePool(prev => [...prev, word]);
+                            setSelectedAnswer(null);
+                          }}
+                          disabled={showResult}
+                          className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                            showResult
+                              ? isCorrect
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                : 'bg-red-500/20 border-red-500 text-red-300'
+                              : 'bg-purple-500/20 border-purple-500 text-purple-300 hover:bg-purple-500/30'
+                          }`}
+                        >
+                          {word}
+                        </motion.button>
+                      ))}
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={selectedAnswer || ''}
-                    onChange={(e) => setSelectedAnswer(e.target.value.toUpperCase())}
-                    placeholder="I-type ang tamang salita..."
-                    disabled={showResult}
-                    className="w-full p-4 bg-slate-800 border-2 border-slate-700 text-white rounded-xl font-semibold text-lg focus:border-purple-500 outline-none"
-                  />
+
+                  {/* Divider */}
+                  <div className="border-t border-slate-700/50" />
+
+                  {/* Word pool (shuffled buttons) */}
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {scramblePool.map((word, idx) => (
+                      <motion.button
+                        key={`pool-${idx}`}
+                        initial={{ scale: 0.9 }}
+                        animate={{ scale: 1 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          if (showResult) return;
+                          // Move word to selected
+                          const newSelected = [...scrambleSelected, word];
+                          setScramblePool(prev => prev.filter((_, i) => i !== idx));
+                          setScrambleSelected(newSelected);
+                          // If all words placed, set as answer for validation
+                          const totalWords = (currentQuestion.scrambleWords || []).length;
+                          if (newSelected.length === totalWords) {
+                            setSelectedAnswer(newSelected);
+                          }
+                        }}
+                        disabled={showResult}
+                        className="px-4 py-2.5 rounded-xl font-bold text-sm bg-slate-800 border-2 border-slate-600 text-white hover:border-slate-400 hover:bg-slate-700 transition-all"
+                      >
+                        {word}
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               )}
 

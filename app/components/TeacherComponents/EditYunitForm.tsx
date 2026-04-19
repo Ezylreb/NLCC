@@ -65,13 +65,16 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
   const [description, setDescription] = useState(yunit?.subtitle || '');
   const [topics, setTopics] = useState<TopicData[]>([]);
   const [mediaUrl, setMediaUrl] = useState(yunit?.media_url || '');
+  const [audioUrl, setAudioUrl] = useState(yunit?.audio_url || '');
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (yunit) {
       setTitle(yunit.title || '');
       setDescription(yunit.subtitle || '');
       setMediaUrl(yunit.media_url || '');
+      setAudioUrl(yunit.audio_url || '');
       setTopics(parseDiscussion(yunit.discussion));
     }
   }, [yunit]);
@@ -92,7 +95,8 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
       quotes: t.quotes,
     }));
 
-    const firstAudio = topics.find(t => t.audio)?.audio || '';
+    // Use dedicated yunit audio, fallback to first topic's audio
+    const yunitAudio = audioUrl || topics.find(t => t.audio)?.audio || '';
 
     onSubmit({
       id: yunit.id,
@@ -100,7 +104,7 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
       subtitle: description,
       discussion: JSON.stringify(topicsPayload),
       media_url: mediaUrl || (topics.find(t => t.images.length > 0)?.images[0] || ''),
-      audio_url: firstAudio,
+      audio_url: yunitAudio,
       is_published: yunit.is_published
     });
   };
@@ -110,6 +114,14 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = () => setMediaUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setAudioUrl(reader.result as string);
     reader.readAsDataURL(file);
   };
 
@@ -184,11 +196,26 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
               >
                 🖼
               </button>
+              <button
+                type="button"
+                onClick={() => audioInputRef.current?.click()}
+                className="shrink-0 w-12 h-12 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl flex items-center justify-center transition-all"
+                title="Upload yunit audio"
+              >
+                🎵
+              </button>
               <input
                 ref={mediaInputRef}
                 type="file"
                 accept="image/*"
                 onChange={handleMediaUpload}
+                className="hidden"
+              />
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={handleAudioUpload}
                 className="hidden"
               />
             </div>
@@ -197,6 +224,13 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
                 <img src={mediaUrl} alt="Cover" className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
                 <span className="text-xs text-slate-400">Cover image set</span>
                 <button type="button" onClick={() => setMediaUrl('')} className="text-xs text-red-400 hover:text-red-300 ml-auto">Remove</button>
+              </div>
+            )}
+            {audioUrl && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-lg">🎵</span>
+                <audio src={audioUrl} controls className="h-8 flex-1" />
+                <button type="button" onClick={() => setAudioUrl('')} className="text-xs text-red-400 hover:text-red-300">Remove</button>
               </div>
             )}
           </div>

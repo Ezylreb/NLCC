@@ -273,6 +273,16 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
             }));
             const totalPoints = normalizedQuestions.reduce((sum, question) => sum + (Number(question.xp) || 0), 0);
 
+            const payloadQuestions = normalizedQuestions.map((question) => {
+                const mapped: any = { ...question };
+                if ((question.type === 'scramble' || question.type === 'scramble-word') && question.scrambleWords?.length) {
+                    mapped.correctAnswer = question.scrambleWords
+                        .map((word: any) => (typeof word === 'string' ? word : word.text || '').trim())
+                        .filter((word: string) => word.length > 0);
+                }
+                return mapped;
+            });
+
             const response = await apiClient.assessment.update(Number(assessmentId), {
                 title,
                 description: instructions,
@@ -280,7 +290,7 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                 type: normalizedQuestions[0]?.type || 'multiple-choice',
                 points: totalPoints,
                 total_questions: normalizedQuestions.length,
-                questions: normalizedQuestions,
+                questions: payloadQuestions,
             });
 
             if (!response.success) {
