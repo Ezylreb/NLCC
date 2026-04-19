@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -57,13 +58,16 @@ export async function POST(request: Request) {
     const classNameRes = await query('SELECT name FROM classes WHERE id = $1', [classId]);
     const className = classNameRes.rows[0]?.name || 'Unknown';
 
+    // Hash the password before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // Create the student user with required teacher and class assignment
     // Try to include teacher_id and class_id, but have fallback if columns don't exist yet
     let insertRes;
     try {
       insertRes = await query(
         'INSERT INTO users (first_name, last_name, email, password, lrn, role, teacher_id, class_id, class_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id',
-        [firstName, lastName, email, password, lrn, 'USER', teacherId, classId, className]
+        [firstName, lastName, email, hashedPassword, lrn, 'USER', teacherId, classId, className]
       );
     } catch (dbError: any) {
       // If columns don't exist, try without them

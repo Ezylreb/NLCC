@@ -47,16 +47,7 @@ export async function GET(request: NextRequest) {
 
     console.log('[GET /api/student/yunits-progress] Found', result.rows.length, 'lessons');
 
-    // Find the furthest lesson that has been accessed (completed or has progress)
-    let furthestAccessedIndex = -1;
-    result.rows.forEach((lesson, index) => {
-      // If lesson is completed or has any progress (xp/coins earned), count it as accessed
-      if (lesson.completed || lesson.xp_earned > 0 || lesson.coins_earned > 0) {
-        furthestAccessedIndex = Math.max(furthestAccessedIndex, index);
-      }
-    });
-
-    // Add isLocked status based on progression
+    // Add isLocked status based on strict sequential progression
     const yunits = result.rows.map((lesson, index) => {
       let isLocked = false;
       
@@ -64,16 +55,7 @@ export async function GET(request: NextRequest) {
       if (index === 0) {
         isLocked = false;
       }
-      // Second lesson is also unlocked by default (allows sequential viewing)
-      else if (index === 1) {
-        isLocked = false;
-      }
-      // Unlock all lessons up to 2 positions beyond the furthest accessed
-      // This allows continuous navigation through lessons
-      else if (furthestAccessedIndex >= 0 && index <= furthestAccessedIndex + 2) {
-        isLocked = false;
-      }
-      // Otherwise, check if previous lesson is completed
+      // All other lessons require the previous lesson to be completed
       else {
         const previousLesson = result.rows[index - 1];
         isLocked = !previousLesson.completed;

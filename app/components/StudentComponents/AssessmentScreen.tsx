@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
 
@@ -48,6 +48,86 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Audio recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isAudioQuestion = (type: string) =>
+    type === 'audio' || type === 'media-audio';
+
+  const startRecording = useCallback(async () => {
+    try {
+      setMicError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioUrl(url);
+        setSelectedAnswer('audio-recorded');
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      setMicError('Hindi ma-access ang mikropono. Pakisuri ang pahintulot.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const discardRecording = useCallback(() => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setSelectedAnswer(null);
+  }, [audioUrl]);
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // Cleanup audio on question change
+  useEffect(() => {
+    return () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, [currentQuestionIdx]);
 
   useEffect(() => {
     const fetchAssessment = async () => {
@@ -136,6 +216,9 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       return question.pairs?.every((pair: any, idx: number) => answer?.[idx] === pair.correctMatch) ?? false;
     } else if (question.type === 'scramble' || question.type === 'scramble-word') {
       return answer?.toLowerCase() === question.correctAnswer?.toLowerCase();
+    } else if (isAudioQuestion(question.type)) {
+      // Audio answers are always "submitted for review" — count as correct for progression
+      return answer === 'audio-recorded';
     }
     return false;
   };
@@ -146,6 +229,8 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       setSelectedAnswer(null);
       setShowResult(false);
       setIsCorrect(null);
+      // Reset audio state for next question
+      discardRecording();
     } else {
       // Assessment complete
       await handleSubmitAssessment();
@@ -181,6 +266,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
 
   const handleSkip = () => {
     if (currentQuestionIdx < totalQuestions - 1) {
+      discardRecording();
       setCurrentQuestionIdx(currentQuestionIdx + 1);
       setSelectedAnswer(null);
       setShowResult(false);
@@ -380,6 +466,123 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                   />
                 </div>
               )}
+
+              {/* Audio Recording Answer */}
+              {isAudioQuestion(currentQuestion.type) && (
+                <div className="space-y-6">
+                  {/* Avatar with speech bubble */}
+                  <div className="flex items-end gap-3">
+                    {/* Character avatar */}
+                    <div className="w-24 h-28 shrink-0">
+                      <img
+                        src="/Character/NLLCTeachHalf1.png"
+                        alt="Teacher"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+
+                    {/* Speech bubble with audio prompt */}
+                    <div className="relative bg-slate-800 border border-slate-600 rounded-2xl rounded-bl-sm px-4 py-3 max-w-xs">
+                      {currentQuestion.questionMedia?.preview ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                            </svg>
+                          </div>
+                          <p className="text-cyan-400 font-bold text-sm">{currentQuestion.question}</p>
+                        </div>
+                      ) : (
+                        <p className="text-cyan-400 font-bold text-sm">{currentQuestion.question}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mic Error */}
+                  {micError && (
+                    <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-3 text-center">
+                      <p className="text-red-400 text-sm">{micError}</p>
+                    </div>
+                  )}
+
+                  {/* Record / Playback Area */}
+                  {!audioUrl ? (
+                    <div className="space-y-3">
+                      {/* Wide mic button */}
+                      <motion.button
+                        type="button"
+                        onClick={isRecording ? stopRecording : startRecording}
+                        disabled={showResult}
+                        whileTap={{ scale: 0.97 }}
+                        className={`w-full py-4 rounded-xl border-2 flex items-center justify-center gap-3 font-bold text-sm tracking-wider uppercase transition-all ${
+                          isRecording
+                            ? 'bg-red-500/10 border-red-500 text-red-400 shadow-lg shadow-red-500/10'
+                            : 'bg-slate-800/80 border-slate-600 text-cyan-400 hover:border-cyan-500/60 hover:bg-slate-800'
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        {isRecording ? (
+                          <>
+                            <motion.div
+                              className="w-3 h-3 rounded-sm bg-red-400"
+                              animate={{ opacity: [1, 0.3, 1] }}
+                              transition={{ repeat: Infinity, duration: 1 }}
+                            />
+                            <span>Nire-record... {formatTime(recordingTime)}</span>
+                            <span className="text-xs opacity-60">(pindutin para ihinto)</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                              <line x1="12" x2="12" y1="19" y2="22"/>
+                            </svg>
+                            <span>Pindutin para magsalita</span>
+                          </>
+                        )}
+                      </motion.button>
+
+                      {/* Recording pulse animation */}
+                      {isRecording && (
+                        <div className="flex justify-center gap-1">
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <motion.div
+                              key={i}
+                              className="w-1 bg-red-400 rounded-full"
+                              animate={{ height: [4, Math.random() * 20 + 8, 4] }}
+                              transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.05 }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Playback / Re-record UI */
+                    <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-white font-bold text-sm">Na-record na!</p>
+                          <p className="text-slate-400 text-xs">Tagal: {formatTime(recordingTime)}</p>
+                        </div>
+                      </div>
+                      <audio src={audioUrl} controls className="w-full h-10" />
+                      {!showResult && (
+                        <button
+                          type="button"
+                          onClick={discardRecording}
+                          className="w-full py-2 bg-slate-700/60 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold transition-all"
+                        >
+                          🔄 I-record Ulit
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Result Message */}
@@ -393,7 +596,11 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                     : 'bg-red-500/20 border border-red-500 text-red-300'
                 }`}
               >
-                {isCorrect ? '✅ Tama! Excellent!' : '❌ Mali. Try again!'}
+                {isCorrect
+                  ? isAudioQuestion(currentQuestion.type)
+                    ? '🎤 Na-submit na ang iyong sagot!'
+                    : '✅ Tama! Excellent!'
+                  : '❌ Mali. Try again!'}
               </motion.div>
             )}
           </motion.div>
@@ -419,7 +626,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                 handleContinue();
               }
             }}
-            disabled={selectedAnswer === null && selectedAnswer !== 0}
+            disabled={(selectedAnswer === null && selectedAnswer !== 0) && !isRecording}
             className="flex-1 px-4 py-3 bg-brand-purple text-white rounded-lg font-bold hover:opacity-90 transition-all disabled:opacity-50"
           >
             {!showResult ? 'Pakitsek' : currentQuestionIdx < totalQuestions - 1 ? 'Magpatuloy' : 'Tapusin'}

@@ -9,10 +9,10 @@ export async function PUT(request: NextRequest) {
     const { id, title, description, isPublished, iconPath, iconType, quarter, week_number, module_number } = body;
     console.log('🔧 [UPDATE-BAHAGI] Parsed fields:', { id, title, description, isPublished, iconPath, iconType, quarter, week_number, module_number });
 
-    if (!id || !title) {
-      console.error('🔧 [UPDATE-BAHAGI] Validation failed: Missing id or title');
+    if (!id) {
+      console.error('🔧 [UPDATE-BAHAGI] Validation failed: Missing id');
       return NextResponse.json(
-        { error: 'ID and title are required' },
+        { error: 'ID is required' },
         { status: 400 }
       );
     }
@@ -22,15 +22,19 @@ export async function PUT(request: NextRequest) {
     const updateValues: any[] = [];
     let paramCount = 1;
 
-    // Title
-    updateFields.push(`title = $${paramCount}`);
-    updateValues.push(title);
-    paramCount++;
+    // Title (optional)
+    if (title !== undefined) {
+      updateFields.push(`title = $${paramCount}`);
+      updateValues.push(title);
+      paramCount++;
+    }
 
-    // Description
-    updateFields.push(`description = $${paramCount}`);
-    updateValues.push(description || null);
-    paramCount++;
+    // Description (optional)
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramCount}`);
+      updateValues.push(description || null);
+      paramCount++;
+    }
 
     // Quarter - always update if provided
     updateFields.push(`quarter = $${paramCount}`);

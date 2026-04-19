@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { InteractiveSuriinPage } from './InteractiveSuriinPage';
@@ -12,10 +12,8 @@ interface LessonContentViewProps {
   yunitId: string | number;
   bahagiId: string | number;
   studentId: string;
-  cachedYunits?: any; // Pre-fetched yunits data
   onComplete: () => void;
   onNextYunit: (yunitId: string | number) => void;
-  onLessonCompleted?: () => void; // Callback when a lesson is marked complete
   onBack: () => void;
 }
 
@@ -32,21 +30,19 @@ interface LessonData {
   isLocked?: boolean;
 }
 
-const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
+export const LessonContentView: React.FC<LessonContentViewProps> = ({
   yunitId,
   bahagiId,
   studentId,
-  cachedYunits,
   onComplete,
   onNextYunit,
-  onLessonCompleted,
   onBack
 }) => {
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [allYunits, setAllYunits] = useState<LessonData[]>([]);
   const [bahagiIconPath, setBahagiIconPath] = useState<string>('');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(!cachedYunits); // Don't show loading if we have cached data
+  const [isLoading, setIsLoading] = useState(true);
   const [displayedText, setDisplayedText] = useState('');
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCompleteButton, setShowCompleteButton] = useState(false);
@@ -54,91 +50,38 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
   const [showPagyamaninPage, setShowPagyamaninPage] = useState(false);
   const [showLoading, setShowLoading] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const topicAudioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Use cached data immediately if available
+  // Fetch all yunits for the bahagi (once)
   useEffect(() => {
-    if (cachedYunits?.data) {
-      setAllYunits(cachedYunits.data);
-      
-      // Find current yunit index
-      const index = cachedYunits.data.findIndex((y: LessonData) => y.id === Number(yunitId));
-      setCurrentIndex(index >= 0 ? index : 0);
-      
-      // Get current yunit from cache and display immediately
-      const currentYunit = cachedYunits.data.find((y: LessonData) => y.id === Number(yunitId));
-      if (currentYunit) {
-        // Set lesson from cache immediately - no loading!
-        setLesson(currentYunit);
-        setIsLoading(false);
-        
-        // Fetch icon in background without blocking UI
-        fetchIconInBackground(yunitId);
-      }
-    }
-  }, [cachedYunits, yunitId]);
-
-  // Fetch only the icon without showing loading state
-  const fetchIconInBackground = async (yId: string | number) => {
-    try {
-      const response = await fetch(`/api/rest/yunits/${yId}`);
-      const data = await response.json();
-      
-      if (data.success && data.data?.bahagi_icon_path) {
-        setBahagiIconPath(data.data.bahagi_icon_path);
-        // Update lesson with icon path
-        setLesson(prev => prev ? {
-          ...prev,
-          bahagi_icon_path: data.data.bahagi_icon_path
-        } : null);
-      }
-    } catch (err) {
-      console.error('[LessonContentView] Error fetching icon (non-critical):', err);
-      // Silently fail - lesson content already shown
-    }
-  };
-
-  // Fetch all yunits for the bahagi (only if not cached)
-  useEffect(() => {
-    // Skip if we have cached data
-    if (cachedYunits) {
-      return;
-    }
-
     const fetchYunits = async () => {
       try {
         setIsLoading(true);
+        console.log('[LessonContentView] Fetching yunits for bahagi:', bahagiId);
         
-        // Fetch yunits and first yunit details in parallel
-        const [yunitsResponse, firstYunitResponse] = await Promise.all([
-          fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`),
-          fetch(`/api/rest/yunits/${yunitId}`)
-        ]);
+        const response = await fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`);
+        const data = await response.json();
         
-        const [yunitsData, firstYunitData] = await Promise.all([
-          yunitsResponse.json(),
-          firstYunitResponse.json()
-        ]);
+        console.log('[LessonContentView] Yunits data:', data);
         
-        if (yunitsData.success && yunitsData.data) {
-          setAllYunits(yunitsData.data);
+        if (data.success && data.data) {
+          setAllYunits(data.data);
           
           // Find current yunit index
-          const index = yunitsData.data.findIndex((y: LessonData) => y.id === Number(yunitId));
+          const index = data.data.findIndex((y: LessonData) => y.id === Number(yunitId));
           setCurrentIndex(index >= 0 ? index : 0);
           
-          // Set bahagi icon from first yunit response
-          if (firstYunitData.success && firstYunitData.data?.bahagi_icon_path) {
-            setBahagiIconPath(firstYunitData.data.bahagi_icon_path);
-          }
-          
-          // Set the current lesson immediately from parallel fetch
-          if (firstYunitData.success && firstYunitData.data) {
-            setLesson({
-              ...firstYunitData.data,
-              bahagi_icon_path: firstYunitData.data.bahagi_icon_path
-            });
+          // Fetch bahagi icon once
+          const firstYunit = data.data[0];
+          if (firstYunit?.id) {
+            const lessonResponse = await fetch(`/api/rest/yunits/${firstYunit.id}`);
+            const lessonData = await lessonResponse.json();
+            if (lessonData.success && lessonData.data?.bahagi_icon_path) {
+              setBahagiIconPath(lessonData.data.bahagi_icon_path);
+            }
           }
         }
       } catch (err) {
@@ -149,7 +92,7 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
     };
 
     fetchYunits();
-  }, [bahagiId, studentId, yunitId, cachedYunits]);
+  }, [bahagiId, studentId]);
 
   // Update current lesson when yunitId changes
   useEffect(() => {
@@ -194,6 +137,7 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
   // Mark current lesson as complete in database
   const markLessonComplete = async (lessonId: string | number) => {
     try {
+      console.log('[Lesson Complete] Attempting to save:', { lessonId, studentId, timestamp: new Date().toISOString() });
       
       const response = await fetch(`/api/student/lesson/${lessonId}/complete`, {
         method: 'POST',
@@ -214,16 +158,42 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
         fullData: data
       });
       
-      // Notify parent component that lesson was completed (to invalidate cache)
-      if (onLessonCompleted) {
-        onLessonCompleted();
-      }
-      
       return data;
     } catch (error) {
       console.error('[Lesson Complete] ❌ FAILED:', error);
       return null;
     }
+  };
+
+  // Extract plain text from discussion (handles JSON topics or legacy text)
+  const extractDisplayText = (discussion?: string, subtitle?: string): string => {
+    if (!discussion) return subtitle || 'Welcome to this lesson!';
+    try {
+      const parsed = JSON.parse(discussion);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((t: any) => {
+          let text = '';
+          if (t.title) text += t.title + '\n\n';
+          if (t.content) {
+            const div = typeof document !== 'undefined' ? document.createElement('div') : null;
+            if (div) {
+              div.innerHTML = t.content;
+              text += div.textContent || div.innerText || t.content;
+            } else {
+              text += t.content.replace(/<[^>]*>/g, '');
+            }
+          }
+          if (t.quotes && t.quotes.length > 0) {
+            text += '\n\n' + t.quotes.map((q: any) => {
+              const qText = typeof q === 'string' ? q : q.text || '';
+              return `"${qText}"`;
+            }).join('\n');
+          }
+          return text;
+        }).join('\n\n');
+      }
+    } catch { /* legacy plain text */ }
+    return discussion;
   };
 
   // Function to start/restart animation and audio
@@ -246,8 +216,8 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
       audioRef.current.currentTime = 0;
     }
 
-    // Get the content to display (prefer discussion over subtitle)
-    const content = lesson.discussion || lesson.subtitle || 'Welcome to this lesson!';
+    // Get the content to display (parse JSON topics if needed)
+    const content = extractDisplayText(lesson.discussion, lesson.subtitle);
     
     // Start audio if available
     if (lesson.audio_url) {
@@ -301,37 +271,10 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-linear-to-b from-slate-950 to-slate-900">
-        <div className="max-w-4xl w-full p-8">
-          {/* Skeleton for lesson content */}
-          <div className="animate-pulse space-y-6">
-            {/* Books icon skeleton */}
-            <div className="flex justify-center mb-4">
-              <div className="h-16 w-16 bg-slate-800/50 rounded-lg"></div>
-            </div>
-            
-            {/* Title skeleton */}
-            <div className="space-y-3">
-              <div className="h-10 bg-slate-800/50 rounded-lg w-3/4 mx-auto"></div>
-              <div className="h-6 bg-slate-800/50 rounded-lg w-1/2 mx-auto"></div>
-            </div>
-            
-            {/* Content box skeleton */}
-            <div className="bg-slate-800/50 border-2 border-slate-700 rounded-2xl p-8 mt-8">
-              <div className="space-y-3">
-                <div className="h-4 bg-slate-700/50 rounded w-full"></div>
-                <div className="h-4 bg-slate-700/50 rounded w-11/12"></div>
-                <div className="h-4 bg-slate-700/50 rounded w-10/12"></div>
-                <div className="h-4 bg-slate-700/50 rounded w-full"></div>
-                <div className="h-4 bg-slate-700/50 rounded w-9/12"></div>
-              </div>
-            </div>
-            
-            {/* Avatar skeleton */}
-            <div className="flex justify-end">
-              <div className="h-48 w-48 bg-slate-800/50 rounded-full"></div>
-            </div>
-          </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin text-4xl mb-4">📖</div>
+          <p className="text-slate-400">Loading lesson...</p>
         </div>
       </div>
     );
@@ -354,14 +297,29 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
     );
   }
 
-  const content = lesson.discussion || lesson.subtitle || 'Welcome to this lesson!';
+  // Parse discussion — could be JSON topics array or legacy plain text
+  let parsedTopics: { title: string; content: string; images: string[]; audio: string; quotes: { text: string; audio: string }[] }[] = [];
+  const content = extractDisplayText(lesson.discussion, lesson.subtitle);
+  try {
+    const parsed = JSON.parse(lesson.discussion || '');
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      parsedTopics = parsed.map((t: any) => ({
+        ...t,
+        quotes: (t.quotes || []).map((q: any) =>
+          typeof q === 'string' ? { text: q, audio: '' } : { text: q.text || '', audio: q.audio || '' }
+        ),
+      }));
+    }
+  } catch {
+    // Legacy plain text — use as-is
+  }
 
   // Check if this is the Suriin lesson
   const isSuriinLesson = lesson.title?.toLowerCase().includes('suriin') || lesson.subtitle?.toLowerCase().includes('suriin');
 
   // Check if this is the Pagyamanin lesson with the specific self-introduction text
-  const isPagyamaninLesson = lesson.discussion?.includes('Upang mas lalong makilala ang iyong sarili') || 
-                             lesson.discussion?.includes('ipakilala ang iyong sarili');
+  const isPagyamaninLesson = content?.includes('Upang mas lalong makilala ang iyong sarili') || 
+                             content?.includes('ipakilala ang iyong sarili');
 
   // Handle completion with loading and celebration (for final lesson)
   const handleComplete = async () => {
@@ -412,7 +370,10 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
       <InteractivePagyamaninPage
         imageUrl={lesson.media_url}
         onBack={() => setShowPagyamaninPage(false)}
-        onNext={() => {
+        onNext={async () => {
+          // Mark current lesson as complete
+          await markLessonComplete(yunitId);
+          
           const nextYunit = allYunits[currentIndex + 1];
           if (nextYunit) {
             setShowPagyamaninPage(false);
@@ -421,11 +382,6 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
             setShowPagyamaninPage(false);
             handleComplete();
           }
-          
-          // Mark lesson complete in background
-          markLessonComplete(yunitId).catch(err =>
-            console.error('Background completion failed:', err)
-          );
         }}
       />
     );
@@ -438,7 +394,10 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
         currentIndex={currentIndex}
         totalLessons={allYunits.length}
         onBack={() => setShowInteractivePage(false)}
-        onNext={() => {
+        onNext={async () => {
+          // Mark current lesson as complete
+          await markLessonComplete(yunitId);
+          
           const nextYunit = allYunits[currentIndex + 1];
           if (nextYunit) {
             setShowInteractivePage(false);
@@ -447,227 +406,332 @@ const LessonContentViewComponent: React.FC<LessonContentViewProps> = ({
             setShowInteractivePage(false);
             handleComplete();
           }
-          
-          // Mark lesson complete in background
-          markLessonComplete(yunitId).catch(err =>
-            console.error('Background completion failed:', err)
-          );
         }}
       />
     );
   }
 
   return (
-    <div className="relative h-screen bg-linear-to-br from-slate-900 via-slate-800 to-slate-900 p-4 overflow-hidden">
+    <div className="relative h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8 overflow-hidden">
       {/* Back Button */}
       <button
         onClick={onBack}
-        className="absolute top-4 left-4 z-20 text-slate-400 hover:text-white transition-colors flex items-center gap-2 bg-slate-800/50 backdrop-blur-sm px-3 py-2 rounded-lg text-sm"
+        className="mb-6 text-slate-300 hover:text-white transition-colors flex items-center gap-2 text-lg font-semibold"
       >
-        ← Back
+        ← Bumalik
       </button>
 
-      {/* Main Content Container */}
-      <div className="flex items-center justify-center h-full py-16">
-        <div className="relative w-full max-w-7xl">
-          {/* Blackboard */}
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="relative bg-linear-to-br from-green-900 to-green-950 rounded-3xl shadow-2xl border-8 border-amber-900 p-8"
-            style={{
-              backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)',
-              backgroundSize: '20px 20px'
-            }}
-          >
-            {/* Lesson Title at Top */}
-            <motion.h1
-              initial={{ y: -20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-2xl md:text-3xl font-black text-white mb-4 text-center drop-shadow-lg"
-              style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}
-            >
-              {lesson.title}
-            </motion.h1>
-
-            {/* Progress Indicator */}
+      {/* Main Layout: Card + Teacher Avatar */}
+      <div className="flex items-start justify-center gap-6 w-full">
+        {/* Content Card */}
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="flex-1 bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 md:p-10 shadow-xl h-[calc(100vh-8rem)] flex flex-col overflow-y-auto"
+        >
+          {/* Header: Module Info + Slide Counter */}
+          <div className="flex items-start justify-between mb-2">
+            <p className="text-slate-400 text-sm">
+              Yunit {currentIndex + 1}
+            </p>
             {allYunits.length > 0 && (
-              <div className="text-center mb-4">
-                <span className="text-white/60 text-sm font-semibold">
-                  Aralin {currentIndex + 1} ng {allYunits.length}
-                </span>
+              <span className="text-brand-purple font-semibold text-sm">
+                {currentIndex + 1}/{allYunits.length} Slides
+              </span>
+            )}
+          </div>
+
+          {/* Lesson Title */}
+          <h1 className="text-2xl md:text-3xl font-bold text-brand-purple mb-6">
+            {lesson.title}
+          </h1>
+
+          {/* Topic Content */}
+          <div className="mb-6 space-y-6">
+            {parsedTopics.length > 0 ? (
+              /* Structured topic rendering */
+              parsedTopics.map((topic, idx) => {
+                const audioId = `topic-${idx}`;
+                return (
+                  <div key={idx} className="space-y-3">
+                    {topic.title && (
+                      <h3 className="text-lg font-bold text-white">{topic.title}</h3>
+                    )}
+                    {topic.content && (
+                      <div
+                        className="text-slate-200 text-base leading-relaxed prose prose-invert max-w-none [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-white [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_hr]:border-slate-600"
+                        dangerouslySetInnerHTML={{ __html: topic.content }}
+                      />
+                    )}
+                    {/* Topic audio toggle */}
+                    {topic.audio && (
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => {
+                            const el = topicAudioRefs.current[audioId];
+                            if (!el) return;
+                            if (playingAudioId === audioId) {
+                              el.pause();
+                              el.currentTime = 0;
+                              setPlayingAudioId(null);
+                            } else {
+                              // Stop any other playing audio
+                              Object.entries(topicAudioRefs.current).forEach(([k, a]) => {
+                                if (a && k !== audioId) { a.pause(); a.currentTime = 0; }
+                              });
+                              el.play().catch(() => {});
+                              setPlayingAudioId(audioId);
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            playingAudioId === audioId
+                              ? 'bg-brand-purple text-white shadow-lg shadow-brand-purple/30'
+                              : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+                          }`}
+                        >
+                          <span className="text-lg">{playingAudioId === audioId ? '🔊' : '🔇'}</span>
+                          {playingAudioId === audioId ? 'Naka-on ang Audio' : 'I-play ang Audio'}
+                        </button>
+                        <audio
+                          ref={el => { topicAudioRefs.current[audioId] = el; }}
+                          src={topic.audio}
+                          onEnded={() => setPlayingAudioId(null)}
+                          className="hidden"
+                        />
+                      </div>
+                    )}
+                    {/* Side by side: images + quotes */}
+                    {((topic.images && topic.images.length > 0) || (topic.quotes && topic.quotes.length > 0)) && (
+                      <div className="flex items-start gap-0">
+                        {/* Image column */}
+                        {topic.images && topic.images.length > 0 && (
+                          <div className="shrink-0">
+                            {topic.images.map((img, ii) => (
+                              <div key={ii}>
+                                <img src={img} alt={`${topic.title || 'Topic'} image ${ii + 1}`} className="w-56 h-auto object-contain" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Callout bubble */}
+                        {topic.quotes && topic.quotes.length > 0 && (
+                          <div className="relative flex-1 ml-2">
+                            {/* Triangle pointer */}
+                            {topic.images && topic.images.length > 0 && (
+                              <div className="absolute left-[-8px] top-4 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] border-r-slate-700/80" />
+                            )}
+                            <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl px-4 py-3 space-y-3">
+                              {topic.quotes.map((q, qi) => {
+                                const qAudioId = `quote-${idx}-${qi}`;
+                                return (
+                                  <div key={qi} className="space-y-1.5">
+                                    <p className="text-slate-200 text-sm leading-relaxed">&ldquo;{q.text}&rdquo;</p>
+                                    <button
+                                      disabled={!q.audio}
+                                      onClick={() => {
+                                        if (!q.audio) return;
+                                        const el = topicAudioRefs.current[qAudioId];
+                                        if (!el) return;
+                                        if (playingAudioId === qAudioId) {
+                                          el.pause();
+                                          el.currentTime = 0;
+                                          setPlayingAudioId(null);
+                                        } else {
+                                          Object.entries(topicAudioRefs.current).forEach(([k, a]) => {
+                                            if (a && k !== qAudioId) { a.pause(); a.currentTime = 0; }
+                                          });
+                                          el.play().catch(() => {});
+                                          setPlayingAudioId(qAudioId);
+                                        }
+                                      }}
+                                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                        !q.audio
+                                          ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                                          : playingAudioId === qAudioId
+                                            ? 'bg-brand-purple/80 text-white'
+                                            : 'bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600'
+                                      }`}
+                                    >
+                                      <span>{playingAudioId === qAudioId ? '🔊' : '🔇'}</span>
+                                      {!q.audio ? 'Walang Audio' : playingAudioId === qAudioId ? 'Naka-on' : 'I-play'}
+                                    </button>
+                                    {q.audio && (
+                                      <audio
+                                        ref={el => { topicAudioRefs.current[qAudioId] = el; }}
+                                        src={q.audio}
+                                        onEnded={() => setPlayingAudioId(null)}
+                                        className="hidden"
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              /* Legacy plain text with typing animation */
+              <div className="text-slate-200 text-base leading-relaxed whitespace-pre-wrap break-words">
+                {displayedText}
+                {isAnimating && (
+                  <motion.span
+                    animate={{ opacity: [1, 0] }}
+                    transition={{ repeat: Infinity, duration: 0.8 }}
+                    className="inline-block w-0.5 h-5 bg-white ml-1 align-middle"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Media Content Section */}
+          <div className="space-y-4 flex-1">
+            {/* Image + Audio Row — only for legacy content */}
+            {parsedTopics.length === 0 && (
+              <div className="flex flex-col md:flex-row gap-4">
+                {/* Bahagi Icon / Character Image */}
+                {lesson.bahagi_icon_path && (
+                  <div className="shrink-0">
+                    <div className="relative w-40 h-48 bg-slate-900/50 rounded-xl overflow-hidden border border-slate-700/50">
+                      <Image
+                        src={lesson.bahagi_icon_path}
+                        alt="Character"
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Audio Controls — legacy only */}
+                {lesson.audio_url && (
+                  <div className="flex flex-col justify-center">
+                    <button
+                      onClick={startAnimation}
+                      className="flex items-center gap-3 bg-slate-700/60 hover:bg-slate-700 transition-colors px-5 py-3 rounded-xl group"
+                      title="Click to replay"
+                    >
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🔊</span>
+                      <div className="text-left">
+                        <p className="text-white font-semibold text-sm">{lesson.title}</p>
+                        <p className="text-slate-400 text-xs">Click to replay</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Content Area with Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              {/* Text Content - Takes 2 columns */}
-              <div className="lg:col-span-2">
-                <div className="bg-green-950/50 rounded-2xl p-6 max-h-125 overflow-y-auto relative backdrop-blur-sm border-2 border-white/10">
-                  {/* Chalk Text Animation */}
-                  <motion.div
-                    className="text-white text-xl md:text-2xl lg:text-3xl leading-relaxed whitespace-pre-wrap font-medium"
-                    style={{
-                      fontFamily: "'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', cursive",
-                      textShadow: '2px 2px 3px rgba(0,0,0,0.4)'
-                    }}
-                  >
-                    {displayedText}
-                    {isAnimating && (
-                      <motion.span
-                        animate={{ opacity: [1, 0] }}
-                        transition={{ repeat: Infinity, duration: 0.8 }}
-                        className="inline-block w-3 h-8 bg-white ml-1"
-                      />
-                    )}
-                  </motion.div>
-
-                  {/* Audio Controls */}
-                  {lesson.audio_url && (
-                    <div className="mt-4 flex items-center gap-3">
-                      <button
-                        onClick={startAnimation}
-                        className="flex items-center gap-2 text-white/70 hover:text-white transition-colors bg-green-900/30 hover:bg-green-900/50 px-4 py-2 rounded-lg group"
-                        title="Click to replay lesson"
-                      >
-                        <span className="text-2xl group-hover:scale-110 transition-transform">🔊</span>
-                        <span className="text-sm">Click to replay</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Media Display - Hide for Pagyamanin lesson as it shows on the next interactive page */}
-                {lesson.media_url && !isPagyamaninLesson && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1 }}
-                    className="mt-4"
-                  >
-                    <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
-                      <img
-                        src={lesson.media_url}
-                        alt="Lesson media"
-                        className="w-full rounded-lg shadow-lg"
-                      />
-                    </div>
-                  </motion.div>
-                )}
+            {/* Content Labels — only for legacy (non-topic) content */}
+            {parsedTopics.length === 0 && (lesson.media_url || lesson.audio_url) && (
+              <div className="text-slate-400 text-sm space-y-0.5">
+                <p className="font-semibold text-slate-300">Media Content:</p>
+                {lesson.media_url && <p>Image Content</p>}
+                {(lesson.discussion || lesson.subtitle) && <p>Text Content</p>}
+                {lesson.audio_url && <p>Audio Content</p>}
               </div>
+            )}
 
-              {/* Teacher Chibi - Takes 1 column */}
-              <div className="lg:col-span-1 flex justify-center items-start">
-                <motion.div
-                  initial={{ x: 50, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.5, type: 'spring', stiffness: 100 }}
-                  className="relative"
-                >
-                  {/* Teacher Image - Use Bahagi Icon */}
-                  <div className="relative w-64 h-64 lg:w-80 lg:h-80">
-                    <Image
-                      src={lesson.bahagi_icon_path || '/Character/NLLCTeacher.png'}
-                      alt="Teacher"
-                      fill
-                      className="object-contain drop-shadow-2xl"
-                      priority
-                    />
-                  </div>
-
-                  {/* Floating Animation */}
-                  <motion.div
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
-                    className="absolute inset-0 -z-10"
-                  />
-                </motion.div>
-              </div>
-            </div>
-
-            {/* Navigation Buttons */}
-            {showCompleteButton && (
+            {/* Lesson Media Image — only for legacy content or explicit cover */}
+            {lesson.media_url && !isPagyamaninLesson && parsedTopics.length === 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mt-6 flex justify-center gap-4"
+                transition={{ delay: 0.5 }}
               >
-                {/* Previous Button - Show if not first yunit */}
-                {currentIndex > 0 && (
-                  <button
-                    onClick={() => {
-                      const prevYunit = allYunits[currentIndex - 1];
-                      if (prevYunit) {
-                        onNextYunit(prevYunit.id);
-                      }
-                    }}
-                    className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-black text-base uppercase tracking-widest transition-all shadow-lg hover:scale-105"
-                  >
-                    ← Bumalik
-                  </button>
-                )}
-
-                {/* Next Button - Show if not last yunit */}
-                {currentIndex < allYunits.length - 1 && (
-                  <button
-                    onClick={() => {
-                      // If Suriin lesson, show interactive page first
-                      if (isSuriinLesson) {
-                        setShowInteractivePage(true);
-                      // If Pagyamanin lesson, show interactive page first
-                      } else if (isPagyamaninLesson) {
-                        setShowPagyamaninPage(true);
-                      } else {
-                        // Navigate immediately for instant response
-                        const nextYunit = allYunits[currentIndex + 1];
-                        if (nextYunit) {
-                          onNextYunit(nextYunit.id);
-                        }
-                        
-                        // Mark lesson complete in background (non-blocking)
-                        markLessonComplete(yunitId).catch(err => 
-                          console.error('Background completion failed:', err)
-                        );
-                      }
-                    }}
-                    className="px-6 py-3 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-xl font-black text-base uppercase tracking-widest transition-all shadow-lg hover:shadow-brand-purple/50 hover:scale-105"
-                  >
-                    Susunod →
-                  </button>
-                )}
-
-                {/* Complete Button - Show only on last yunit */}
-                {currentIndex === allYunits.length - 1 && (
-                  <button
-                    onClick={() => {
-                      // If Suriin lesson, show interactive page first
-                      if (isSuriinLesson) {
-                        setShowInteractivePage(true);
-                      // If Pagyamanin lesson, show interactive page first
-                      } else if (isPagyamaninLesson) {
-                        setShowPagyamaninPage(true);
-                      } else {
-                        handleComplete();
-                      }
-                    }}
-                    className="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-black text-base uppercase tracking-widest transition-all shadow-lg hover:shadow-green-500/50 hover:scale-105"
-                  >
-                    Tapusin
-                  </button>
-                )}
+                <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-700/30">
+                  <img
+                    src={lesson.media_url}
+                    alt="Lesson media"
+                    className="w-full max-h-80 object-contain rounded-lg"
+                  />
+                </div>
               </motion.div>
             )}
-          </motion.div>
-        </div>
+          </div>
+
+          {/* Navigation Button - Inside Card Bottom */}
+          <div className="flex items-center justify-center gap-4 pt-6 mt-auto">
+              {currentIndex > 0 && (
+                <button
+                  onClick={() => {
+                    const prevYunit = allYunits[currentIndex - 1];
+                    if (prevYunit) {
+                      onNextYunit(prevYunit.id);
+                    }
+                  }}
+                  className="px-6 py-3 text-slate-400 hover:text-white transition-colors text-sm font-semibold"
+                >
+                  ← Bumalik
+                </button>
+              )}
+
+              {currentIndex < allYunits.length - 1 && (
+                <button
+                  onClick={async () => {
+                    if (isSuriinLesson) {
+                      setShowInteractivePage(true);
+                    } else if (isPagyamaninLesson) {
+                      setShowPagyamaninPage(true);
+                    } else {
+                      await markLessonComplete(yunitId);
+                      const nextYunit = allYunits[currentIndex + 1];
+                      if (nextYunit) {
+                        onNextYunit(nextYunit.id);
+                      }
+                    }
+                  }}
+                  className="px-8 py-3 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-xl font-bold text-base transition-all shadow-lg hover:shadow-brand-purple/40 hover:scale-105"
+                >
+                  Magpatuloy
+                </button>
+              )}
+
+              {currentIndex === allYunits.length - 1 && (
+                <button
+                  onClick={() => {
+                    if (isSuriinLesson) {
+                      setShowInteractivePage(true);
+                    } else if (isPagyamaninLesson) {
+                      setShowPagyamaninPage(true);
+                    } else {
+                      handleComplete();
+                    }
+                  }}
+                  className="px-8 py-3 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-xl font-bold text-base transition-all shadow-lg hover:shadow-brand-purple/40 hover:scale-105"
+                >
+                  Magpatuloy
+                </button>
+              )}
+            </div>
+        </motion.div>
+
+        {/* Teacher Avatar - Side */}
+        <motion.div
+          initial={{ x: 30, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ delay: 0.4, type: 'spring', stiffness: 120 }}
+          className="hidden lg:block shrink-0"
+        >
+          <div className="relative w-52 h-72">
+            <Image
+              src="/Character/NLLCTeachHalf1.png"
+              alt="Teacher"
+              fill
+              className="object-contain drop-shadow-2xl"
+              priority
+            />
+          </div>
+        </motion.div>
       </div>
 
-      {/* Decorative Elements */}
-      <div className="absolute top-10 left-10 text-6xl opacity-20 animate-pulse">📚</div>
-      <div className="absolute bottom-10 right-10 text-6xl opacity-20 animate-pulse delay-1000">✏️</div>
+
     </div>
   );
 };
-
-export const LessonContentView = memo(LessonContentViewComponent);

@@ -44,6 +44,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Check if student already owns this item
+    const { data: existingPurchase } = await supabase
+      .from("student_inventory")
+      .select("id")
+      .eq("student_id", studentId)
+      .eq("item_id", itemId)
+      .maybeSingle();
+
+    if (existingPurchase) {
+      return NextResponse.json(
+        { error: "You already own this item" },
+        { status: 400 }
+      );
+    }
+
     // Get item details
     const { data: item, error: itemError } = await supabase
       .from("shop_items")

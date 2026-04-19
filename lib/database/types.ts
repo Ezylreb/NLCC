@@ -55,15 +55,20 @@ export interface BahagiAssessment {
   bahagi_id: string;
   lesson_id?: string;
   title: string;
-  description?: string;
-  assessment_type: 'multiple-choice' | 'short-answer' | 'checkbox' | 'audio' | 'matching' | 'scramble-word';
+  type: 'multiple-choice' | 'short-answer' | 'checkbox' | 'audio' | 'matching' | 'scramble-word';
+  content?: Record<string, any>;
   options?: Record<string, any>;
-  correct_answers?: Record<string, any>;
+  correct_answer?: Record<string, any>;
   points: number;
+  assessment_order?: number;
   is_published: boolean;
   is_archived: boolean;
   created_at: Date;
   updated_at: Date;
+  // Aliases for backward compatibility in service code
+  assessment_type?: string;
+  correct_answers?: Record<string, any>;
+  description?: string;
 }
 
 export interface YunitAnswer {

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       try {
         await query(
           `INSERT INTO class_enrollments (class_id, student_id)
-           SELECT $1, id FROM users WHERE role = 'student' AND teacher_id = $2
+           SELECT $1, id FROM users WHERE role = 'USER' AND teacher_id = $2
            ON CONFLICT DO NOTHING`,
           [classData.id, finalTeacherId]
         );

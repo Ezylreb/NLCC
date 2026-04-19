@@ -14,6 +14,7 @@ interface TeacherLessonsViewProps {
   cachedData?: any; // Pre-fetched lessons data
   onYunitsCached?: (bahagiId: string, data: any) => void; // Callback to cache yunits data
   onSelectLesson: (bahagiId: string) => void;
+  onStartQuiz?: (bahagiId: string) => void;
   onBack: () => void;
 }
 
@@ -44,6 +45,7 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
   cachedData,
   onYunitsCached,
   onSelectLesson,
+  onStartQuiz,
   onBack
 }) => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -252,7 +254,7 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
-              className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-4"
+              className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-4"
             >
               <div className="text-2xl mb-2">{stat.icon}</div>
               <div className="text-sm text-slate-400 font-semibold mb-1">{stat.label}</div>
@@ -284,7 +286,7 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
             </button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {lessons.map((lesson, idx) => (
               <motion.div
                 key={lesson.id}
@@ -306,7 +308,8 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
                   quarter={lesson.quarter}
                   week_number={lesson.week_number}
                   module_number={lesson.module_number}
-                  onStart={() => onSelectLesson(lesson.id)}
+                  onMatuto={() => onSelectLesson(lesson.id)}
+                  onStart={() => onStartQuiz?.(lesson.id)}
                 />
               </motion.div>
             ))}

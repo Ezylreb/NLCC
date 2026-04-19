@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -15,10 +16,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
     }
 
+    // Hash the password before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // Create the teacher user
     const insertRes = await query(
       'INSERT INTO users (first_name, last_name, email, password, role, class_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id',
-      [firstName, lastName, email, password, 'TEACHER', className || null]
+      [firstName, lastName, email, hashedPassword, 'TEACHER', className || null]
     );
     const userId = insertRes.rows[0].id;
 

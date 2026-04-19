@@ -331,11 +331,6 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 // Force new array reference to trigger re-render
                 setClassBahagi([...newBahagi]);
                 
-                // Verify state update happened
-                setTimeout(() => {
-                    console.log('[REFRESH BAHAGI] State updated, should trigger re-render');
-                }, 100);
-                
                 console.log('✅ Bahagi list refreshed successfully');
             } else {
                 console.error('[REFRESH BAHAGI] Failed:', bahagiResult?.error);
@@ -369,8 +364,6 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             if (response && response.bahagi) {
                 setShowBahagiForm(false);
-                // Small delay to ensure database commit
-                await new Promise(resolve => setTimeout(resolve, 500));
                 // Refresh bahagi list to show the newly created one
                 await handleRefreshBahagi();
                 alert('✅ Bahagi created successfully!');
@@ -451,8 +444,6 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             if (response.ok && result.lesson) {
                 setShowYunitForm(false);
                 setSelectedBahagiId(null);
-                // Small delay to ensure database commit
-                await new Promise(resolve => setTimeout(resolve, 500));
                 // Refresh bahagi list to show the new yunit count
                 await handleRefreshBahagi();
                 alert('✅ Yunit created successfully!');
@@ -525,7 +516,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             if (response.success) {
                 alert('✅ Yunit deleted successfully!');
-                // TODO: Refresh Bahagi view
+                await handleRefreshBahagi();
             } else {
                 alert(`❌ Error: ${response.error}`);
             }
