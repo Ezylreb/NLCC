@@ -23,6 +23,9 @@ export interface Bahagi {
   icon_type?: string;
   custom_icon_url?: string;
   description?: string;
+  quarter?: string;
+  week_number?: number;
+  module_number?: string;
   teacher_id: string;
   class_name?: string;
   is_open: boolean;

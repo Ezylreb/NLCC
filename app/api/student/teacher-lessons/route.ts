@@ -48,6 +48,9 @@ export async function GET(request: NextRequest) {
         b.icon_type,
         b.teacher_id,
         b.class_name,
+        b.quarter,
+        b.week_number,
+        b.module_number,
         COUNT(DISTINCT l.id) as yunit_count
       FROM bahagi b
       LEFT JOIN lesson l ON b.id = l.bahagi_id
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     bahagiQuery += `
-      GROUP BY b.id, b.title, b.description, b.icon_path, b.icon_type, b.teacher_id, b.class_name
+      GROUP BY b.id, b.title, b.description, b.icon_path, b.icon_type, b.teacher_id, b.class_name, b.quarter, b.week_number, b.module_number
       ORDER BY b.id ASC
     `;
 
@@ -76,7 +79,15 @@ export async function GET(request: NextRequest) {
 
     const bahagis = bahagiResult.rows;
     console.log(`[GET /api/student/teacher-lessons] Found ${bahagis.length} bahagi for teacher ${teacherId}`);
-    console.log('[GET /api/student/teacher-lessons] Bahagi details:', bahagis.map((b: any) => ({ id: b.id, title: b.title, class_name: b.class_name, description: b.description?.substring(0, 30) })));
+    console.log('[GET /api/student/teacher-lessons] Bahagi details:', bahagis.map((b: any) => ({ 
+      id: b.id, 
+      title: b.title, 
+      class_name: b.class_name, 
+      quarter: b.quarter,
+      week_number: b.week_number,
+      module_number: b.module_number,
+      description: b.description?.substring(0, 30) 
+    })));
 
     // Determine which bahagis the student has COMPLETED (all yunits done)
     const bahagiCompletionMap = new Map<string, boolean>();
@@ -204,8 +215,17 @@ export async function GET(request: NextRequest) {
           isCompleted: allPassed,
           isUnlocked,
           xpReward: 10,
-          difficulty: totalYunits <= 2 ? 'beginner' : totalYunits <= 4 ? 'intermediate' : 'advanced'
+          quarter: bahagi.quarter || null,
+          week_number: bahagi.week_number || null,
+          module_number: bahagi.module_number || null
         };
+        
+        console.log(`[Bahagi ${bahagiIndex}] Lesson data:`, {
+          title: lessonData.title,
+          quarter: lessonData.quarter,
+          week_number: lessonData.week_number,
+          module_number: lessonData.module_number
+        });
         
         console.log(`[GET /api/student/teacher-lessons] Lesson ${bahagiIndex + 1} mapped:`, { id: lessonData.id, title: lessonData.title, originalTitle: bahagi.title });
         
@@ -225,7 +245,9 @@ export async function GET(request: NextRequest) {
             isCompleted: false,
             isUnlocked: bahagiIndex === 0,
             xpReward: 10,
-            difficulty: 'beginner'
+            quarter: bahagi.quarter || null,
+            week_number: bahagi.week_number || null,
+            module_number: bahagi.module_number || null
           };
         }
       })

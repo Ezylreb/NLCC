@@ -14,7 +14,9 @@ interface LessonCardProps {
   isCompleted: boolean;
   isUnlocked: boolean;
   xpReward: number;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  quarter?: string | null;
+  week_number?: number | null;
+  module_number?: string | null;
   onStart: () => void;
 }
 
@@ -29,14 +31,13 @@ const LessonCardComponent: React.FC<LessonCardProps> = ({
   isCompleted,
   isUnlocked,
   xpReward,
-  difficulty,
+  quarter,
+  week_number,
+  module_number,
   onStart
 }) => {
-  const difficultyColors = {
-    beginner: 'from-emerald-500 to-teal-500',
-    intermediate: 'from-amber-500 to-orange-500',
-    advanced: 'from-rose-500 to-red-500'
-  };
+  
+  console.log(`[LessonCard] ${title}:`, { quarter, week_number, module_number });
 
   // Calculate progress percentage
   const progressPercentage = totalYunits > 0 ? (passedYunits / totalYunits) * 100 : 0;
@@ -66,20 +67,32 @@ const LessonCardComponent: React.FC<LessonCardProps> = ({
       )}
 
       <div className="p-6 h-full flex flex-col">
-        {/* Top Section: Bahagi & Yunit Info + Libro Gabay Button */}
+        {/* Top Section: Bahagi Title + Metadata + Libro Gabay Button */}
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">
               {title}
             </h3>
-            <p className="text-sm text-slate-500">
-              {passedYunits} of {totalYunits} units completed
-              {totalYunits > 0 && (
-                <span className="ml-2 text-xs font-bold text-brand-purple">
-                  ({Math.round(progressPercentage)}%)
-                </span>
-              )}
-            </p>
+            {/* Quarter, Week, Module Info */}
+            {(quarter || week_number || module_number) && (
+              <div className="flex items-center gap-2 mt-1">
+                {quarter && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-900/30 text-indigo-400">
+                    {quarter} Q
+                  </span>
+                )}
+                {week_number && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-cyan-900/30 text-cyan-400">
+                    Week {week_number}
+                  </span>
+                )}
+                {module_number && (
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-900/30 text-purple-400">
+                    {module_number}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <button
             disabled={!isUnlocked}
@@ -121,7 +134,7 @@ const LessonCardComponent: React.FC<LessonCardProps> = ({
               initial={{ width: 0 }}
               animate={{ width: `${displayPercentage}%` }}
               transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
-              className={`h-full bg-gradient-to-r ${difficultyColors[difficulty]} shadow-lg`}
+              className="h-full bg-gradient-to-r from-brand-purple to-brand-sky shadow-lg"
               style={{
                 boxShadow: passedYunits > 0 ? `0 0 10px rgba(139, 92, 246, 0.5)` : 'none',
                 minWidth: passedYunits > 0 ? '5%' : '0%'
@@ -130,11 +143,16 @@ const LessonCardComponent: React.FC<LessonCardProps> = ({
           </div>
         </div>
 
-        {/* Difficulty Badge & XP */}
+        {/* Progress Text & XP */}
         <div className="flex items-center justify-between mb-4">
-          <span className={`text-xs font-black px-3 py-1.5 rounded-full bg-gradient-to-r ${difficultyColors[difficulty]} text-white uppercase tracking-widest`}>
-            {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-          </span>
+          <p className="text-xs text-slate-400">
+            {passedYunits} of {totalYunits} units completed
+            {totalYunits > 0 && (
+              <span className="ml-1 font-bold text-brand-purple">
+                ({Math.round(progressPercentage)}%)
+              </span>
+            )}
+          </p>
           <span className="text-sm font-black text-amber-400 flex items-center gap-1">
             ⚡ +{xpReward * totalYunits}XP
           </span>

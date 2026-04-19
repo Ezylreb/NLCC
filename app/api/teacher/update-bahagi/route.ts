@@ -6,8 +6,8 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     console.log('🔧 [UPDATE-BAHAGI] Received request body:', JSON.stringify(body, null, 2));
     
-    const { id, title, description, isPublished, iconPath, iconType } = body;
-    console.log('🔧 [UPDATE-BAHAGI] Parsed fields:', { id, title, description, isPublished, iconPath, iconType });
+    const { id, title, description, isPublished, iconPath, iconType, quarter, week_number, module_number } = body;
+    console.log('🔧 [UPDATE-BAHAGI] Parsed fields:', { id, title, description, isPublished, iconPath, iconType, quarter, week_number, module_number });
 
     if (!id || !title) {
       console.error('🔧 [UPDATE-BAHAGI] Validation failed: Missing id or title');
@@ -30,6 +30,21 @@ export async function PUT(request: NextRequest) {
     // Description
     updateFields.push(`description = $${paramCount}`);
     updateValues.push(description || null);
+    paramCount++;
+
+    // Quarter - always update if provided
+    updateFields.push(`quarter = $${paramCount}`);
+    updateValues.push(quarter || null);
+    paramCount++;
+
+    // Week Number - always update if provided
+    updateFields.push(`week_number = $${paramCount}`);
+    updateValues.push(week_number || null);
+    paramCount++;
+
+    // Module Number - always update if provided
+    updateFields.push(`module_number = $${paramCount}`);
+    updateValues.push(module_number || null);
     paramCount++;
 
     // Is Open (not is_published)
@@ -59,7 +74,7 @@ export async function PUT(request: NextRequest) {
     const updateQuery = `UPDATE bahagi 
        SET ${updateFields.join(', ')}
        WHERE id = $${paramCount}
-       RETURNING id, title, description, is_open, icon_path, icon_type, created_at, updated_at`;
+       RETURNING id, title, description, quarter, week_number, module_number, is_open, icon_path, icon_type, created_at, updated_at`;
 
     console.log('🔧 [UPDATE-BAHAGI] Update Query:', updateQuery);
     console.log('🔧 [UPDATE-BAHAGI] Update Values:', updateValues);

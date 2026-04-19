@@ -20,6 +20,9 @@ export const CreateBahagiForm: React.FC<CreateBahagiFormProps> = ({
   isLoading = false
 }) => {
   const [title, setTitle] = useState('');
+  const [quarter, setQuarter] = useState('First');
+  const [weekNumber, setWeekNumber] = useState('');
+  const [moduleNumber, setModuleNumber] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,12 +33,18 @@ export const CreateBahagiForm: React.FC<CreateBahagiFormProps> = ({
 
     const data = {
       title,
+      quarter,
+      week_number: weekNumber ? parseInt(weekNumber) : undefined,
+      module_number: moduleNumber,
       classId,
       className
     };
 
     onSubmit(data);
     setTitle('');
+    setQuarter('First');
+    setWeekNumber('');
+    setModuleNumber('');
   };
 
   if (!isOpen) return null;
@@ -56,6 +65,52 @@ export const CreateBahagiForm: React.FC<CreateBahagiFormProps> = ({
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+              Quarter *
+            </label>
+            <select
+              required
+              value={quarter}
+              onChange={(e) => setQuarter(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all"
+            >
+              <option value="First">First Quarter</option>
+              <option value="Second">Second Quarter</option>
+              <option value="Third">Third Quarter</option>
+              <option value="Fourth">Fourth Quarter</option>
+            </select>
+          </div>
+
+          {/* Week Number and Module Number - Horizontal */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                Week Number
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={weekNumber}
+                onChange={(e) => setWeekNumber(e.target.value)}
+                placeholder="e.g., 1"
+                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                Module Number
+              </label>
+              <input
+                type="text"
+                value={moduleNumber}
+                onChange={(e) => setModuleNumber(e.target.value)}
+                placeholder="e.g., Module 1"
+                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
               Bahagi Title (e.g., "Bahagi 1: Ang Ating Bansa")

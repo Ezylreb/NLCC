@@ -86,22 +86,32 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
 
     // Fetch yunits for a bahagi
     const fetchYunitsForBahagi = async (bahagiId: number) => {
+        console.log('[fetchYunitsForBahagi] Starting fetch for bahagiId:', bahagiId);
         setIsLoadingYunits(true);
         try {
+            console.log('[fetchYunitsForBahagi] Calling API...');
             const response = await apiClient.yunit.fetchByBahagi(bahagiId);
+            console.log('[fetchYunitsForBahagi] API Response:', response);
+            console.log('[fetchYunitsForBahagi] response.success:', response.success);
+            console.log('[fetchYunitsForBahagi] response.data:', response.data);
+            console.log('[fetchYunitsForBahagi] data length:', response.data?.length);
+            
             // API returns { success: true, data: [...yunits array...] }
             if (response.success && response.data) {
                 const yunits = Array.isArray(response.data) ? response.data : [];
-                console.log(`[fetchYunitsForBahagi] Found ${yunits.length} yunits for bahagi ${bahagiId}:`, yunits);
+                console.log('[fetchYunitsForBahagi] Setting yunits:', yunits);
                 setBahagiYunits(prev => ({
                     ...prev,
                     [bahagiId]: yunits
                 }));
+            } else {
+                console.warn('[fetchYunitsForBahagi] No yunits found or response unsuccessful');
             }
         } catch (err) {
-            console.error('Error fetching yunits:', err);
+            console.error('[fetchYunitsForBahagi] Error fetching yunits:', err);
         } finally {
             setIsLoadingYunits(false);
+            console.log('[fetchYunitsForBahagi] Fetch complete');
         }
     };
 
@@ -584,6 +594,9 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     id={b.id}
                                     title={b.title}
                                     description={b.description}
+                                    quarter={b.quarter}
+                                    week_number={b.week_number}
+                                    module_number={b.module_number}
                                     iconPath={b.icon_path}
                                     iconType={b.icon_type}
                                     isArchived={b.is_archived}
@@ -632,18 +645,27 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     <span className="text-slate-600 cursor-grab active:cursor-grabbing">⋮⋮</span>
                                                                     <p className="text-sm font-bold text-white">{yunit.title}</p>
                                                                 </div>
+                                                                {/* Quarter, Week, Module Info */}
+                                                                {(yunit.quarter || yunit.week_number || yunit.module_number) && (
+                                                                    <div className="flex items-center gap-2 mt-1 ml-6">
+                                                                        {yunit.quarter && (
+                                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-900/30 text-indigo-400">
+                                                                                {yunit.quarter} Q
+                                                                            </span>
+                                                                        )}
+                                                                        {yunit.week_number && (
+                                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-cyan-900/30 text-cyan-400">
+                                                                                Week {yunit.week_number}
+                                                                            </span>
+                                                                        )}
+                                                                        {yunit.module_number && (
+                                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-900/30 text-purple-400">
+                                                                                {yunit.module_number}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                                 <p className="text-xs text-slate-400 mt-1 ml-6">{yunit.subtitle}</p>
-                                                                <div className="flex gap-2 mt-2 ml-6">
-                                                                    <span
-                                                                        className={`text-[9px] font-black uppercase px-2 py-1 rounded ${
-                                                                            yunit.is_published
-                                                                                ? 'bg-green-900/30 text-green-400'
-                                                                                : 'bg-orange-900/30 text-orange-400'
-                                                                        }`}
-                                                                    >
-                                                                        {yunit.is_published ? '✓ Published' : '○ Draft'}
-                                                                    </span>
-                                                                </div>
                                                             </div>
                                                             <div className="flex gap-2">
                                                                 <button

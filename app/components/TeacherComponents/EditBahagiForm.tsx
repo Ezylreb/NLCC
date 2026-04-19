@@ -21,6 +21,9 @@ export const EditBahagiForm: React.FC<EditBahagiFormProps> = ({
 }) => {
   const [title, setTitle] = useState(bahagi?.title || '');
   const [description, setDescription] = useState(bahagi?.description || '');
+  const [quarter, setQuarter] = useState(bahagi?.quarter || 'First');
+  const [weekNumber, setWeekNumber] = useState(bahagi?.week_number?.toString() || '');
+  const [moduleNumber, setModuleNumber] = useState(bahagi?.module_number || '');
   const [iconPreview, setIconPreview] = useState(bahagi?.icon_path || '/Character/NLLCTeachHalf1.png');
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -59,7 +62,10 @@ export const EditBahagiForm: React.FC<EditBahagiFormProps> = ({
     const submitData: any = {
       id: bahagi.id,
       title,
-      description
+      description,
+      quarter,
+      week_number: weekNumber ? parseInt(weekNumber) : null,
+      module_number: moduleNumber || null
     };
 
     // Only include iconPath if it has changed or is not null
@@ -115,6 +121,51 @@ export const EditBahagiForm: React.FC<EditBahagiFormProps> = ({
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+              Quarter
+            </label>
+            <select
+              value={quarter}
+              onChange={(e) => setQuarter(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all"
+            >
+              <option value="First">First Quarter</option>
+              <option value="Second">Second Quarter</option>
+              <option value="Third">Third Quarter</option>
+              <option value="Fourth">Fourth Quarter</option>
+            </select>
+          </div>
+
+          {/* Week Number and Module Number - Horizontal */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                Week Number
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={weekNumber}
+                onChange={(e) => setWeekNumber(e.target.value)}
+                placeholder="e.g., 1"
+                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                Module Number
+              </label>
+              <input
+                type="text"
+                value={moduleNumber}
+                onChange={(e) => setModuleNumber(e.target.value)}
+                placeholder="e.g., Module 1"
+                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
               Title

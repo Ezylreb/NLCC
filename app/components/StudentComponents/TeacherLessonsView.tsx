@@ -30,7 +30,9 @@ interface Lesson {
   isCompleted: boolean;
   isUnlocked: boolean;
   xpReward: number;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  quarter?: string | null;
+  week_number?: number | null;
+  module_number?: string | null;
 }
 
 const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
@@ -301,7 +303,9 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
                   isCompleted={lesson.isCompleted}
                   isUnlocked={lesson.isUnlocked}
                   xpReward={lesson.xpReward}
-                  difficulty={lesson.difficulty}
+                  quarter={lesson.quarter}
+                  week_number={lesson.week_number}
+                  module_number={lesson.module_number}
                   onStart={() => onSelectLesson(lesson.id)}
                 />
               </motion.div>

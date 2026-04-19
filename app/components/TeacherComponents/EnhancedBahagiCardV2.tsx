@@ -14,6 +14,9 @@ interface EnhancedBahagiCardProps {
     iconPath?: string;
     iconType?: string;
     description?: string;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
     isOpen?: boolean;
     isArchived?: boolean;
     lessonCount?: number;
@@ -36,6 +39,9 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     iconPath,
     iconType = 'default',
     description,
+    quarter,
+    week_number,
+    module_number,
     isOpen = true,
     isArchived = false,
     lessonCount = 0,
@@ -92,6 +98,26 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                             <h3 className="font-bold text-lg text-white line-clamp-1">
                                 {title}
                             </h3>
+                            {/* Quarter, Week, Module Info */}
+                            {(quarter || week_number || module_number) && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    {quarter && (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-900/30 text-indigo-400">
+                                            {quarter} Q
+                                        </span>
+                                    )}
+                                    {week_number && (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-cyan-900/30 text-cyan-400">
+                                            Week {week_number}
+                                        </span>
+                                    )}
+                                    {module_number && (
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-900/30 text-purple-400">
+                                            {module_number}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             {description && (
                                 <p className="text-sm text-slate-400 line-clamp-1">
                                     {description}
@@ -143,40 +169,38 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="border-t border-slate-700 p-4 space-y-2 bg-slate-900"
+                        className="border-t border-slate-700 p-4 bg-slate-900"
                     >
-                        <button
-                            onClick={onAddYunit}
-                            className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold"
-                        >
-                            <Plus size={18} />
-                            Add Yunit
-                        </button>
-
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
+                            <button
+                                onClick={onAddYunit}
+                                className="flex items-center justify-center gap-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold text-xs"
+                            >
+                                <Plus size={16} />
+                                Add Yunit
+                            </button>
                             <button
                                 onClick={onEdit}
-                                className="flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-bold"
+                                className="flex items-center justify-center gap-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-bold text-xs"
                             >
                                 <Edit2 size={16} />
                                 Edit
                             </button>
                             <button
                                 onClick={() => setShowArchiveConfirm(true)}
-                                className="flex items-center justify-center gap-2 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 transition font-bold"
+                                className="flex items-center justify-center gap-1 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 transition font-bold text-xs"
                             >
                                 <Archive size={16} />
                                 Archive
                             </button>
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="flex items-center justify-center gap-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition font-bold text-xs"
+                            >
+                                <Trash2 size={16} />
+                                Delete
+                            </button>
                         </div>
-
-                        <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            className="w-full flex items-center justify-center gap-2 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition font-bold"
-                        >
-                            <Trash2 size={16} />
-                            Delete
-                        </button>
                     </motion.div>
                 )}
             </motion.div>

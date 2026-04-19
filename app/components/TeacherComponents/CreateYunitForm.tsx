@@ -24,6 +24,8 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
     const [discussion, setDiscussion] = useState('');
     const [mediaUrl, setMediaUrl] = useState('');
     const [audioUrl, setAudioUrl] = useState('');
+    const [weekNumber, setWeekNumber] = useState('');
+    const [moduleNumber, setModuleNumber] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,6 +44,8 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
             discussion,
             media_url: mediaUrl,
             audio_url: audioUrl,
+            week_number: weekNumber ? parseInt(weekNumber) : undefined,
+            module_number: moduleNumber,
             lesson_order: undefined
         };
 
@@ -55,6 +59,8 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
         setDiscussion('');
         setMediaUrl('');
         setAudioUrl('');
+        setWeekNumber('');
+        setModuleNumber('');
     };
 
     const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,6 +115,35 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Week Number and Module Number - Horizontal */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                        Week Number
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={weekNumber}
+                        onChange={(e) => setWeekNumber(e.target.value)}
+                        placeholder="e.g., 1"
+                        className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                        Module Number
+                      </label>
+                      <input
+                        type="text"
+                        value={moduleNumber}
+                        onChange={(e) => setModuleNumber(e.target.value)}
+                        placeholder="e.g., Module 1"
+                        className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
                       Yunit Title *

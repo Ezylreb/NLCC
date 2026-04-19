@@ -18,6 +18,9 @@ export class BahagiService {
     icon_type?: string;
     teacher_id: string;
     class_name?: string;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<Bahagi> {
     return repositories.bahagi.create({
       ...data,

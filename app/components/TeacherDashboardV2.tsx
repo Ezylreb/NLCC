@@ -351,6 +351,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         try {
             const bahagiData = {
                 title: data.title,
+                quarter: data.quarter,
+                week_number: data.week_number,
+                module_number: data.module_number,
                 classId: selectedClassId || data.classId,
                 className: selectedClassName || data.className,
                 teacher_id: user?.id || ''

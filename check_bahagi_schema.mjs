@@ -9,7 +9,8 @@ if (connStr && !connStr.includes('sslmode')) {
 }
 
 const client = new Client({
-  connectionString: connStr
+  connectionString: connStr,
+  ssl: connStr?.includes('sslmode=disable') ? false : { rejectUnauthorized: false }
 });
 
 async function checkBahagiSchema() {

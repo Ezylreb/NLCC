@@ -43,10 +43,16 @@ export class YunitService {
    * List all Yunits for a Bahagi
    */
   static async listByBahagi(bahagiId: string) {
-    return repositories.lesson.findAll({
+    console.log('[YunitService.listByBahagi] Called with bahagiId:', bahagiId, 'type:', typeof bahagiId);
+    const result = await repositories.lesson.findAll({
       where: { bahagi_id: bahagiId },
       orderBy: 'lesson_order ASC, created_at ASC',
     });
+    console.log('[YunitService.listByBahagi] Repository returned:', result.length, 'lessons');
+    if (result.length > 0) {
+      console.log('[YunitService.listByBahagi] First lesson:', result[0]);
+    }
+    return result;
   }
 
   /**

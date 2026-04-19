@@ -145,10 +145,16 @@ class BahagiAPI extends APIClient {
     className?: string;
     subject?: string;
     image_url?: string;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<APIResponse> {
     // Use teacher endpoint for creating
     return this.post('/create-bahagi', {
       title: data.title,
+      quarter: data.quarter,
+      week_number: data.week_number,
+      module_number: data.module_number,
       teacherId: data.teacher_id,
       classId: data.classId || data.class_name,
       className: data.className || data.class_name
@@ -167,6 +173,11 @@ class BahagiAPI extends APIClient {
       image_url: string;
       is_archived: boolean;
       is_published: boolean;
+      quarter: string;
+      week_number: number;
+      module_number: string;
+      iconPath: string;
+      iconType: string;
     }>
   ): Promise<APIResponse> {
     return this.put('/update-bahagi', { id: bahagiId, ...data });
