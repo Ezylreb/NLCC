@@ -348,14 +348,14 @@ class AssessmentAPI extends APIClient {
       questions: any[];
     }>
   ): Promise<APIResponse> {
-    return this.patch(`/assessments/${assessmentId}`, data);
+    return this.patch(`/assessments?id=${assessmentId}`, data);
   }
 
   /**
    * Delete assessment
    */
   async deleteAssessment(assessmentId: number): Promise<APIResponse> {
-    return this.delete(`/assessments/${assessmentId}`);
+    return this.delete(`/assessments?id=${assessmentId}`);
   }
 
   /**

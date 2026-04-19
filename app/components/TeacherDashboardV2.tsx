@@ -11,6 +11,7 @@ import { CreateBahagiForm } from './TeacherComponents/CreateBahagiForm';
 import { CreateLessonForm } from './TeacherComponents/CreateLessonForm';
 import { CreateYunitForm } from './TeacherComponents/CreateYunitForm';
 import { CreateAssessmentForm } from './TeacherComponents/CreateAssessmentForm';
+import { EditAssessmentV2Form } from './TeacherComponents/EditAssessmentV2Form';
 
 interface TeacherDashboardV2Props {
     onLogout: () => void;
@@ -64,6 +65,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const [showLessonForm, setShowLessonForm] = useState(false);
     const [showYunitForm, setShowYunitForm] = useState(false);
     const [showAssessmentForm, setShowAssessmentForm] = useState(false);
+    const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
     const [selectedBahagiId, setSelectedBahagiId] = useState<number | null>(null);
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -535,8 +537,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
     // Handle editing assessment
     const handleEditAssessment = (lessonId: string, assessmentId: string) => {
-        alert('Edit assessment modal will be implemented');
-        // TODO: Show edit assessment modal
+        setEditingAssessmentId(assessmentId);
     };
 
     // Handle deleting assessment
@@ -739,6 +740,32 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                     onSubmit={handleAssessmentSubmit}
                     bahagiId={selectedBahagiId}
                     bahagiTitle={classBahagi.find(b => b.id === selectedBahagiId)?.title || ''}
+                />
+            )}
+
+            {/* Edit Assessment Modal */}
+            {editingAssessmentId && user?.id && (
+                <EditAssessmentV2Form
+                    assessmentId={editingAssessmentId}
+                    userId={user.id}
+                    onClose={() => setEditingAssessmentId(null)}
+                    onSuccess={async () => {
+                        setEditingAssessmentId(null);
+                        // Refresh the class bahagi data
+                        if (selectedClassId && selectedClassName) {
+                            setIsLoadingBahagi(true);
+                            try {
+                                const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
+                                if (bahagiResult?.success) {
+                                    setClassBahagi(bahagiResult.data || []);
+                                }
+                            } catch (err) {
+                                console.error('Error refreshing bahagi:', err);
+                            } finally {
+                                setIsLoadingBahagi(false);
+                            }
+                        }
+                    }}
                 />
             )}
 

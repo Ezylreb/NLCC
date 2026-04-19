@@ -30,6 +30,7 @@ interface EnhancedBahagiCardProps {
     userId: string;
     expanded?: boolean;
     onToggleExpand?: (id: number) => void;
+    isDraggable?: boolean;
 }
 
 export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
@@ -54,7 +55,8 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     onIconChange,
     userId,
     expanded = false,
-    onToggleExpand
+    onToggleExpand,
+    isDraggable = false
 }) => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -77,6 +79,17 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         onClick={() => onToggleExpand?.(id)}
                         className="w-full flex items-center gap-4 hover:gap-5 transition"
                     >
+                        {/* Drag Handle */}
+                        {isDraggable && (
+                            <div className="flex-shrink-0">
+                                <span className="text-slate-500 hover:text-slate-400 cursor-grab active:cursor-grabbing text-2xl leading-none" 
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    ⋮⋮
+                                </span>
+                            </div>
+                        )}
+                        
                         {/* Icon Display */}
                         <div className="relative flex-shrink-0">
                             <div className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-purple-500/30 bg-slate-700 shadow-md hover:shadow-lg transition">

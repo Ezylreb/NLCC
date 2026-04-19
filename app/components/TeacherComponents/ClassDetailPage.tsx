@@ -74,6 +74,29 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const [showStudentsView, setShowStudentsView] = useState(false);
     const [draggedYunitId, setDraggedYunitId] = useState<string | null>(null);
     const [draggedOverYunitId, setDraggedOverYunitId] = useState<string | null>(null);
+    const [draggedBahagiId, setDraggedBahagiId] = useState<number | null>(null);
+    const [draggedOverBahagiId, setDraggedOverBahagiId] = useState<number | null>(null);
+    
+    // Filtering state
+    const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
+    const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+    const [selectedModule, setSelectedModule] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState<string>('');
+    
+    // Collapsed quarters state
+    const [collapsedQuarters, setCollapsedQuarters] = useState<Set<string>>(new Set());
+    
+    const toggleQuarterCollapse = (quarter: string) => {
+        setCollapsedQuarters(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(quarter)) {
+                newSet.delete(quarter);
+            } else {
+                newSet.add(quarter);
+            }
+            return newSet;
+        });
+    };
 
     // Debug: Log when bahagi prop changes
     useEffect(() => {
@@ -514,6 +537,138 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         }
     };
 
+    // Drag and Drop handlers for Bahagi
+    const handleBahagiDragStart = (bahagiId: number) => {
+        setDraggedBahagiId(bahagiId);
+    };
+
+    const handleBahagiDragOver = (e: React.DragEvent, bahagiId: number) => {
+        e.preventDefault();
+        setDraggedOverBahagiId(bahagiId);
+    };
+
+    const handleBahagiDrop = (e: React.DragEvent, targetBahagiId: number) => {
+        e.preventDefault();
+        if (draggedBahagiId === null || draggedBahagiId === targetBahagiId) return;
+
+        // Reorder bahagi array
+        const draggedIndex = filteredBahagi.findIndex(b => b.id === draggedBahagiId);
+        const targetIndex = filteredBahagi.findIndex(b => b.id === targetBahagiId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        const newBahagi = [...filteredBahagi];
+        const [draggedItem] = newBahagi.splice(draggedIndex, 1);
+        newBahagi.splice(targetIndex, 0, draggedItem);
+
+        // Update order property for each bahagi
+        const updatedBahagi = newBahagi.map((b, index) => ({
+            ...b,
+            display_order: index + 1
+        }));
+
+        // TODO: Save new order to database
+        console.log('New bahagi order:', updatedBahagi.map(b => ({ id: b.id, title: b.title, order: b.display_order })));
+        
+        // Call refresh to update the parent component
+        if (onRefreshBahagi) {
+            onRefreshBahagi();
+        }
+    };
+
+    const handleBahagiDragEnd = () => {
+        setDraggedBahagiId(null);
+        setDraggedOverBahagiId(null);
+    };
+
+    // Helper function to extract quarter number from quarter string
+    const getQuarterNumber = (quarter?: string): number => {
+        if (!quarter) return 999; // Put items without quarter at the end
+        const match = quarter.match(/first|1st|one/i);
+        if (match) return 1;
+        const match2 = quarter.match(/second|2nd|two/i);
+        if (match2) return 2;
+        const match3 = quarter.match(/third|3rd|three/i);
+        if (match3) return 3;
+        const match4 = quarter.match(/fourth|4th|four/i);
+        if (match4) return 4;
+        // Try to extract number directly
+        const numMatch = quarter.match(/\d+/);
+        if (numMatch) return parseInt(numMatch[0]);
+        return 999; // Default for unrecognized patterns
+    };
+
+    // Sort bahagi by quarter, then week, then module
+    const sortedBahagi = [...bahagi].sort((a, b) => {
+        // First sort by quarter
+        const quarterA = getQuarterNumber(a.quarter);
+        const quarterB = getQuarterNumber(b.quarter);
+        if (quarterA !== quarterB) return quarterA - quarterB;
+        
+        // Then sort by week number
+        const weekA = a.week_number || 999;
+        const weekB = b.week_number || 999;
+        if (weekA !== weekB) return weekA - weekB;
+        
+        // Finally sort by module number (extract number if possible)
+        const moduleA = a.module_number ? (parseInt(a.module_number.match(/\d+/)?.[0] || '999')) : 999;
+        const moduleB = b.module_number ? (parseInt(b.module_number.match(/\d+/)?.[0] || '999')) : 999;
+        return moduleA - moduleB;
+    });
+
+    // Filter bahagi based on selected filters and search term
+    const filteredBahagi = sortedBahagi.filter(b => {
+        // Filter by dropdowns
+        if (selectedQuarter && b.quarter !== selectedQuarter) return false;
+        if (selectedWeek !== null && b.week_number !== selectedWeek) return false;
+        if (selectedModule && b.module_number !== selectedModule) return false;
+        
+        // Filter by search term
+        if (searchTerm) {
+            const search = searchTerm.toLowerCase();
+            const matchesTitle = b.title?.toLowerCase().includes(search);
+            const matchesDescription = b.description?.toLowerCase().includes(search);
+            const matchesQuarter = b.quarter?.toLowerCase().includes(search);
+            const matchesWeek = b.week_number?.toString().includes(search);
+            const matchesModule = b.module_number?.toLowerCase().includes(search);
+            
+            if (!matchesTitle && !matchesDescription && !matchesQuarter && !matchesWeek && !matchesModule) {
+                return false;
+            }
+        }
+        
+        return true;
+    });
+
+    // Get unique filter values from bahagi
+    const quarters = Array.from(new Set(bahagi.map(b => b.quarter).filter(Boolean)));
+    const weeks = Array.from(new Set(bahagi.map(b => b.week_number).filter(Boolean))).sort((a, b) => a - b);
+    const modules = Array.from(new Set(bahagi.map(b => b.module_number).filter(Boolean)));
+
+    // Group filtered bahagi by quarter
+    const bahagiByQuarter: Record<string, typeof filteredBahagi> = {};
+    filteredBahagi.forEach(b => {
+        const quarter = b.quarter || 'No Quarter';
+        if (!bahagiByQuarter[quarter]) {
+            bahagiByQuarter[quarter] = [];
+        }
+        bahagiByQuarter[quarter].push(b);
+    });
+
+    // Get ordered quarters (First, Second, Third, Fourth, then others)
+    const orderedQuarters = Object.keys(bahagiByQuarter).sort((a, b) => {
+        const numA = getQuarterNumber(a);
+        const numB = getQuarterNumber(b);
+        return numA - numB;
+    });
+
+    const clearFilters = () => {
+        setSelectedQuarter(null);
+        setSelectedWeek(null);
+        setSelectedModule(null);
+        setSearchTerm('');
+    };
+
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-700">
             {/* Header with Back Button */}
@@ -575,9 +730,94 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                 <div className="flex items-center justify-between">
                     <h3 className="text-2xl font-black text-white">📚 Bahagi (Lesson Sections)</h3>
                     <span className="text-xs font-black text-slate-500 uppercase tracking-widest bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800">
-                        {bahagi.length} Bahagi{bahagi.length !== 1 ? 's' : ''}
+                        {filteredBahagi.length} of {bahagi.length} Bahagi{bahagi.length !== 1 ? 's' : ''}
                     </span>
                 </div>
+
+                {/* Filters */}
+                {bahagi.length > 0 && (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Filter & Search:</span>
+                            <button
+                                onClick={clearFilters}
+                                className="text-xs font-bold text-brand-purple hover:text-brand-purple/80 transition-colors"
+                            >
+                                Clear All
+                            </button>
+                        </div>
+                        
+                        {/* Search Bar */}
+                        <div className="mb-3">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search by title, description, quarter, week, or module..."
+                                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-brand-purple focus:border-brand-purple outline-none transition-all placeholder-slate-500"
+                            />
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-4">
+                            {/* Quarter Filter Dropdown */}
+                            {quarters.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-400 font-bold">Quarter:</label>
+                                    <select
+                                        value={selectedQuarter || ''}
+                                        onChange={(e) => setSelectedQuarter(e.target.value || null)}
+                                        className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all hover:border-slate-600"
+                                    >
+                                        <option value="">All Quarters</option>
+                                        {quarters.map(quarter => (
+                                            <option key={quarter} value={quarter}>
+                                                {quarter}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Week Filter Dropdown */}
+                            {weeks.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-400 font-bold">Week:</label>
+                                    <select
+                                        value={selectedWeek || ''}
+                                        onChange={(e) => setSelectedWeek(e.target.value ? Number(e.target.value) : null)}
+                                        className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all hover:border-slate-600"
+                                    >
+                                        <option value="">All Weeks</option>
+                                        {weeks.map(week => (
+                                            <option key={week} value={week}>
+                                                Week {week}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Module Filter Dropdown */}
+                            {modules.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-400 font-bold">Module:</label>
+                                    <select
+                                        value={selectedModule || ''}
+                                        onChange={(e) => setSelectedModule(e.target.value || null)}
+                                        className="bg-slate-800 border border-slate-700 text-white text-sm rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all hover:border-slate-600"
+                                    >
+                                        <option value="">All Modules</option>
+                                        {modules.map(module => (
+                                            <option key={module} value={module}>
+                                                {module}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {isLoadingBahagi ? (
                     <div className="flex items-center justify-center py-12">
@@ -586,10 +826,43 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                             <p className="text-slate-400 text-sm">Loading bahagi...</p>
                         </div>
                     </div>
-                ) : bahagi.length > 0 ? (
-                    <div className="space-y-4">
-                        {bahagi.map((b) => (
-                            <div key={b.id}>
+                ) : filteredBahagi.length > 0 ? (
+                    <div className="space-y-6">
+                        {orderedQuarters.map((quarter) => (
+                            <div key={quarter} className="space-y-4">
+                                {/* Quarter Header */}
+                                <button
+                                    onClick={() => toggleQuarterCollapse(quarter)}
+                                    className="w-full flex items-center gap-3 hover:bg-slate-800/30 rounded-lg p-3 -m-3 transition-all group"
+                                >
+                                    <div className="h-[2px] flex-shrink-0 w-12 bg-gradient-to-r from-brand-purple to-transparent"></div>
+                                    <h3 className="text-lg font-black text-white uppercase tracking-wide">
+                                        {quarter === 'No Quarter' ? 'Uncategorized' : quarter}
+                                    </h3>
+                                    <div className="h-[2px] flex-1 bg-gradient-to-r from-brand-purple/50 to-transparent"></div>
+                                    <span className="text-xs font-black text-slate-500 bg-slate-900 px-3 py-1 rounded">
+                                        {bahagiByQuarter[quarter].length} {bahagiByQuarter[quarter].length === 1 ? 'lesson' : 'lessons'}
+                                    </span>
+                                    <div className="text-2xl text-slate-500 group-hover:text-brand-purple transition-colors">
+                                        {collapsedQuarters.has(quarter) ? '▶' : '▼'}
+                                    </div>
+                                </button>
+
+                                {/* Bahagi Cards for this Quarter */}
+                                {!collapsedQuarters.has(quarter) && bahagiByQuarter[quarter].map((b) => (
+                                    <div 
+                                        key={b.id}
+                                        draggable
+                                        onDragStart={() => handleBahagiDragStart(b.id)}
+                                        onDragOver={(e) => handleBahagiDragOver(e, b.id)}
+                                        onDrop={(e) => handleBahagiDrop(e, b.id)}
+                                        onDragEnd={handleBahagiDragEnd}
+                                        className={`transition-all ${
+                                            draggedBahagiId === b.id ? 'opacity-50 scale-95' : ''
+                                        } ${
+                                            draggedOverBahagiId === b.id && draggedBahagiId !== b.id ? 'border-2 border-brand-purple rounded-xl' : ''
+                                        }`}
+                                    >
                                 <EnhancedBahagiCardV2
                                     id={b.id}
                                     title={b.title}
@@ -609,6 +882,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     onDelete={() => handleDeleteBahagi(b.id)}
                                     onAddYunit={() => handleCreateYunit(b)}
                                     userId={teacherId || ''}
+                                    isDraggable={true}
                                 />
                                 
                                 {/* Yunits and Assessments Section */}
@@ -772,6 +1046,19 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                 )}
                             </div>
                         ))}
+                    </div>
+                ))}
+            </div>
+        ) : bahagi.length > 0 ? (
+            <div className="text-center py-12">
+                        <div className="text-5xl mb-4">🔍</div>
+                        <p className="text-slate-400 font-bold mb-2">No bahagi match your filters</p>
+                        <button
+                            onClick={clearFilters}
+                            className="text-sm text-brand-purple hover:text-brand-purple/80 font-bold transition-colors"
+                        >
+                            Clear filters to see all {bahagi.length} bahagi
+                        </button>
                     </div>
                 ) : (
                     <div className="text-center py-16">
