@@ -36,6 +36,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     };
 
     const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+    const [visitedTabs, setVisitedTabs] = useState<Record<TabType, boolean>>(() => {
+        const initialTab = getInitialTab();
+        return {
+            lessons: initialTab === 'lessons',
+            leaders: initialTab === 'leaders',
+            missions: initialTab === 'missions',
+            store: initialTab === 'store',
+            avatar: initialTab === 'avatar',
+            profile: initialTab === 'profile',
+        };
+    });
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [userProfile, setUserProfile] = useState<any>(null);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -58,6 +69,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     // Save active tab to localStorage when it changes
     useEffect(() => {
         localStorage.setItem('studentActiveTab', activeTab);
+    }, [activeTab]);
+
+    useEffect(() => {
+        setVisitedTabs((prev) => ({
+            ...prev,
+            [activeTab]: true,
+        }));
     }, [activeTab]);
 
     const tabs = [
@@ -249,51 +267,44 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
             {/* Main Content */}
             <div className="flex-1 overflow-y-auto relative z-10">
-                <AnimatePresence mode="wait">
-                    {activeTab === 'lessons' && (
-                        <motion.div
-                            key="lessons"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="w-full h-full"
-                        >
-                            <MagAralPage
-                                studentId={user?.id || ''}
-                                studentName={`${user?.firstName} ${user?.lastName}`}
-                                onNavigate={(view) => {
-                                    // Navigation handler for MagAralPage
-                                }}
-                            />
-                        </motion.div>
-                    )}
+                {visitedTabs.lessons && (
+                    <div className={activeTab === 'lessons' ? 'w-full h-full' : 'hidden'}>
+                        <MagAralPage
+                            studentId={user?.id || ''}
+                            studentName={`${user?.firstName} ${user?.lastName}`}
+                            onNavigate={(view) => {
+                                // Navigation handler for MagAralPage
+                            }}
+                        />
+                    </div>
+                )}
 
-                    {activeTab === 'leaders' && (
-                        <motion.div key="leaders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentLeaderboard />
-                        </motion.div>
-                    )}
+                {visitedTabs.leaders && (
+                    <div className={activeTab === 'leaders' ? 'w-full' : 'hidden'}>
+                        <StudentLeaderboard />
+                    </div>
+                )}
 
-                    {activeTab === 'missions' && (
-                        <motion.div key="missions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentMissions />
-                        </motion.div>
-                    )}
+                {visitedTabs.missions && (
+                    <div className={activeTab === 'missions' ? 'w-full' : 'hidden'}>
+                        <StudentMissions />
+                    </div>
+                )}
 
-                    {activeTab === 'store' && (
-                        <motion.div key="store" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentShop />
-                        </motion.div>
-                    )}
+                {visitedTabs.store && (
+                    <div className={activeTab === 'store' ? 'w-full' : 'hidden'}>
+                        <StudentShop />
+                    </div>
+                )}
 
-                    {activeTab === 'avatar' && (
-                        <motion.div key="avatar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentAvatarCustomization />
-                        </motion.div>
-                    )}
+                {visitedTabs.avatar && (
+                    <div className={activeTab === 'avatar' ? 'w-full' : 'hidden'}>
+                        <StudentAvatarCustomization />
+                    </div>
+                )}
 
-                    {activeTab === 'profile' && (
-                        <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
+                {visitedTabs.profile && (
+                    <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={activeTab === 'profile' ? 'p-8' : 'hidden'}>
                             <h1 className="text-4xl font-black text-white mb-8">← Profile</h1>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl items-stretch">
                                 {/* Left Side - Profile Information */}
@@ -492,7 +503,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             </div>
                         </motion.div>
                     )}
-                </AnimatePresence>
             </div>
 
             {/* Logout Modal */}

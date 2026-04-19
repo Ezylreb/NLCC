@@ -114,30 +114,40 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
   useEffect(() => {
     if (!lessons || lessons.length === 0 || !onYunitsCached) return;
 
+    let isCancelled = false;
+
     const preFetchAllYunits = async () => {
-      // Fetch yunits for all lessons in parallel
-      const preFetchPromises = lessons.map(async (lesson) => {
+      // Avoid exhausting browser/network resources by prefetching sequentially.
+      for (const lesson of lessons) {
+        if (isCancelled) {
+          return;
+        }
+
         try {
           const response = await fetch(`/api/student/yunits-progress?bahagiId=${lesson.id}&studentId=${studentId}`);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
           const data = await response.json();
           
-          if (data.success) {
+          if (data.success && data.data) {
             // Cache this data in parent component - ensure string key
             onYunitsCached(String(lesson.id), data);
-            return { lessonId: lesson.id, data };
           }
         } catch (err) {
           console.error(`Failed to pre-fetch yunits for lesson ${lesson.id}:`, err);
         }
-        return null;
-      });
-
-      // Wait for all pre-fetches to complete
-      await Promise.all(preFetchPromises);
+      }
     };
 
     // Start pre-fetching immediately for instant caching
     preFetchAllYunits();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [lessons, studentId, onYunitsCached]);
 
   if (isLoading) {

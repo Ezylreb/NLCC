@@ -32,6 +32,13 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   studentName,
   onNavigate
 }) => {
+  const getStoredValue = (key: string): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+    return null;
+  };
+
   // Cache for lessons data to avoid re-fetching
   const [lessonsCache, setLessonsCache] = useState<any>(null);
   const [classesCache, setClassesCache] = useState<any>(null);
@@ -39,8 +46,11 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
 
   // Initialize view from localStorage or default
   const getInitialView = (): ViewType => {
-    // Don't restore view on mount - let teacher check determine it
-    return 'classes'; // Temporary, will be updated after teacher check
+    const savedView = getStoredValue('magAralView');
+    if (savedView && ['lessons', 'classes', 'bahagis', 'yunits', 'lessonContent', 'assessment', 'adaptiveQuiz'].includes(savedView)) {
+      return savedView as ViewType;
+    }
+    return 'classes';
   };
 
   const getInitialClassId = (): string | null => {
@@ -88,8 +98,8 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
             }
           }
           
-          // Always show classes view first
-          setCurrentView('classes');
+          const savedView = getInitialView();
+          setCurrentView(savedView);
         } else {
           setCurrentView('classes'); // Fallback to classes view
         }
@@ -107,9 +117,9 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   }, [studentId]);
   
   const [selectedClassId, setSelectedClassId] = useState<string | null>(getInitialClassId);
-  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
-  const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(null);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(() => getStoredValue('magAralClassTeacherId'));
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(() => getStoredValue('magAralClassName'));
+  const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(() => getStoredValue('magAralTeacherName'));
   const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(getInitialBahagiId);
   const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(getInitialYunitId);
 
@@ -141,6 +151,52 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
       localStorage.removeItem('magAralYunitId');
     }
   }, [selectedYunitId]);
+
+  useEffect(() => {
+    if (selectedClassTeacherId) {
+      localStorage.setItem('magAralClassTeacherId', selectedClassTeacherId);
+    } else {
+      localStorage.removeItem('magAralClassTeacherId');
+    }
+  }, [selectedClassTeacherId]);
+
+  useEffect(() => {
+    if (selectedClassName) {
+      localStorage.setItem('magAralClassName', selectedClassName);
+    } else {
+      localStorage.removeItem('magAralClassName');
+    }
+  }, [selectedClassName]);
+
+  useEffect(() => {
+    if (selectedTeacherName) {
+      localStorage.setItem('magAralTeacherName', selectedTeacherName);
+    } else {
+      localStorage.removeItem('magAralTeacherName');
+    }
+  }, [selectedTeacherName]);
+
+  useEffect(() => {
+    if (!teacherInfo?.isAssigned) {
+      return;
+    }
+
+    if (!selectedClassId && teacherInfo.classId) {
+      setSelectedClassId(teacherInfo.classId);
+    }
+
+    if (!selectedClassTeacherId && teacherInfo.teacherId) {
+      setSelectedClassTeacherId(teacherInfo.teacherId);
+    }
+
+    if (!selectedClassName && teacherInfo.className) {
+      setSelectedClassName(teacherInfo.className);
+    }
+
+    if (!selectedTeacherName && teacherInfo.teacherName) {
+      setSelectedTeacherName(teacherInfo.teacherName);
+    }
+  }, [teacherInfo, selectedClassId, selectedClassTeacherId, selectedClassName, selectedTeacherName]);
 
   // Reward modal state
   const [showRewardModal, setShowRewardModal] = useState(false);
