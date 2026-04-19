@@ -5,6 +5,13 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+async function ensureRewardBadgesColumn() {
+  await query(`
+    ALTER TABLE classes
+    ADD COLUMN IF NOT EXISTS reward_badges JSONB DEFAULT '[]'::jsonb
+  `);
+}
+
 /**
  * GET /api/teacher/classes/[id]
  * Fetch a single class by ID
@@ -14,6 +21,8 @@ export async function GET(
   context: RouteContext
 ) {
   try {
+    await ensureRewardBadgesColumn();
+
     const { id } = await context.params;
     const { searchParams } = new URL(request.url);
     const teacherId = searchParams.get('teacherId');
@@ -32,6 +41,7 @@ export async function GET(
         c.name,
         c.teacher_id,
         c.is_archived,
+        COALESCE(c.reward_badges, '[]'::jsonb) as reward_badges,
         c.created_at,
         c.updated_at,
         (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id)::INT as student_count,
@@ -78,9 +88,11 @@ export async function PATCH(
   context: RouteContext
 ) {
   try {
+    await ensureRewardBadgesColumn();
+
     const { id } = await context.params;
     const body = await request.json();
-    const { name, is_archived, teacherId } = body;
+    const { name, is_archived, reward_badges, teacherId } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -119,6 +131,11 @@ export async function PATCH(
       values.push(is_archived);
     }
 
+    if (reward_badges !== undefined) {
+      updates.push(`reward_badges = $${paramIndex++}::jsonb`);
+      values.push(JSON.stringify(reward_badges));
+    }
+
     if (updates.length === 0) {
       return NextResponse.json(
         { success: false, error: 'No fields to update' },
@@ -133,7 +150,7 @@ export async function PATCH(
       UPDATE classes
       SET ${updates.join(', ')}
       WHERE id = $${paramIndex}
-      RETURNING id, name, teacher_id, is_archived, created_at, updated_at
+      RETURNING id, name, teacher_id, is_archived, COALESCE(reward_badges, '[]'::jsonb) as reward_badges, created_at, updated_at
     `;
 
     const result = await query(updateQuery, values);

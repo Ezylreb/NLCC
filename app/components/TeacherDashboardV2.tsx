@@ -369,7 +369,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             console.log('[handleBahagiSubmit] Response:', response);
 
-            if ((response as any).bahagi || response.success || response.data) {
+            if (response.success || response.data) {
                 setShowBahagiForm(false);
                 // Refresh bahagi list to show the newly created one
                 await handleRefreshBahagi();
