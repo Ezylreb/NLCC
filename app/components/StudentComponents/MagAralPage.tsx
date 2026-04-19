@@ -104,6 +104,9 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   }, [studentId]);
   
   const [selectedClassId, setSelectedClassId] = useState<string | null>(getInitialClassId);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
+  const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(null);
   const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(getInitialBahagiId);
   const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(getInitialYunitId);
 
@@ -140,8 +143,11 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [rewardData, setRewardData] = useState<any>(null);
 
-  const handleSelectClass = (classId: string) => {
+  const handleSelectClass = (classId: string, teacherId: string, className: string, teacherName: string) => {
     setSelectedClassId(classId);
+    setSelectedClassTeacherId(teacherId);
+    setSelectedClassName(className);
+    setSelectedTeacherName(teacherName);
     setCurrentView('lessons');
   };
 
@@ -194,6 +200,9 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     if (currentView === 'lessons') {
       setCurrentView('classes');
       setSelectedClassId(null);
+      setSelectedClassTeacherId(null);
+      setSelectedClassName(null);
+      setSelectedTeacherName(null);
     } else if (currentView === 'yunits') {
       // Refresh TeacherLessonsView when going back from yunits
       setLessonsViewKey(prev => prev + 1);
@@ -227,32 +236,24 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   return (
     <>
       {/* Teacher Lessons View - shown when student has a teacher assigned */}
-      {currentView === 'lessons' && teacherInfo?.isAssigned && teacherInfo?.teacherId && (
+      {currentView === 'lessons' && selectedClassTeacherId && (
         <TeacherLessonsView
           key={lessonsViewKey}
           studentId={studentId}
           studentName={studentName}
-          teacherId={teacherInfo.teacherId}
-          teacherName={teacherInfo.teacherName || 'Your Teacher'}
-          className={teacherInfo.className || 'Your Class'}
+          teacherId={selectedClassTeacherId}
+          teacherName={selectedTeacherName || 'Your Teacher'}
+          className={selectedClassName || 'Your Class'}
           onSelectLesson={handleSelectLesson}
           onStartQuiz={handleStartQuiz}
           onBack={() => setCurrentView('classes')}
         />
       )}
 
-      {/* Debug info - remove later */}
-      {currentView === 'lessons' && !teacherInfo?.isAssigned && (
+      {currentView === 'lessons' && !selectedClassTeacherId && (
         <div className="p-8 text-center">
-          <p className="text-red-400">No teacher assigned to this student</p>
-          <p className="text-slate-400 mt-2">Teacher Info: {JSON.stringify(teacherInfo)}</p>
-        </div>
-      )}
-
-      {currentView === 'lessons' && teacherInfo?.isAssigned && !teacherInfo?.teacherId && (
-        <div className="p-8 text-center">
-          <p className="text-red-400">Teacher ID missing</p>
-          <p className="text-slate-400 mt-2">Teacher Info: {JSON.stringify(teacherInfo)}</p>
+          <p className="text-red-400">Walang napiling klase</p>
+          <button onClick={() => setCurrentView('classes')} className="mt-4 px-4 py-2 bg-brand-purple rounded-lg text-white">Bumalik sa mga Klase</button>
         </div>
       )}
 

@@ -83,6 +83,16 @@ export async function POST(request: Request) {
     
     const userId = insertRes.rows[0].id;
 
+    // Enroll student in the assigned class
+    try {
+      await query(
+        'INSERT INTO class_enrollments (class_id, student_id) VALUES ($1, $2) ON CONFLICT (class_id, student_id) DO NOTHING',
+        [classId, userId]
+      );
+    } catch (enrollErr) {
+      console.warn('Could not create class enrollment:', enrollErr);
+    }
+
     // Create default preferences
     await query(
       'INSERT INTO preferences (user_id, dark_mode, sound_effects, learning_language, daily_goal) VALUES ($1, $2, $3, $4, $5)',

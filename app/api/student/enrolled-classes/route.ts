@@ -26,33 +26,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get student's class_name (grade level) first
-    const studentResult = await query(
-      `SELECT class_name FROM users WHERE id = $1`,
-      [studentId]
-    );
-
-    const studentClassName = studentResult.rows[0]?.class_name;
-
-    // Get enrolled classes for this student
+    // Get the class assigned to this student by admin (users.class_id)
     const result = await query(
-      `SELECT DISTINCT 
+      `SELECT 
         c.id,
         c.name,
         t.id as teacher_id,
         t.first_name || ' ' || t.last_name as teacher_name,
         t.email as teacher_email,
         COUNT(DISTINCT b.id) as bahagi_count
-      FROM classes c
-      JOIN class_enrollments ce ON c.id = ce.class_id
+      FROM users u
+      JOIN classes c ON u.class_id = c.id
       JOIN users t ON c.teacher_id = t.id
       LEFT JOIN bahagi b ON b.teacher_id = c.teacher_id 
         AND b.is_open = true
-        AND b.class_name = $2
-      WHERE ce.student_id = $1
+        AND b.class_name = c.name
+      WHERE u.id = $1
+        AND u.class_id IS NOT NULL
       GROUP BY c.id, c.name, t.id, t.first_name, t.last_name, t.email
       ORDER BY c.name`,
-      [studentId, studentClassName]
+      [studentId]
     );
 
     const classes = result.rows.map((row: any) => ({

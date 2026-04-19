@@ -106,29 +106,12 @@ export async function PATCH(
 
     // If this is a student and has been assigned to a class, manage enrollment
     if (role === 'USER' && class_id && teacher_id) {
-      // Check if already enrolled in this class
-      const existingEnrollment = await query(
-        'SELECT id, class_id FROM class_enrollments WHERE student_id = $1',
-        [id]
+      // Clean up: delete all existing enrollments for this student, then insert the correct one
+      await query('DELETE FROM class_enrollments WHERE student_id = $1', [id]);
+      await query(
+        'INSERT INTO class_enrollments (class_id, student_id) VALUES ($1, $2)',
+        [class_id, id]
       );
-
-      if (existingEnrollment.rows.length > 0) {
-        const currentClassId = existingEnrollment.rows[0].class_id;
-        
-        // If class changed, update the enrollment
-        if (currentClassId.toString() !== class_id.toString()) {
-          await query(
-            'UPDATE class_enrollments SET class_id = $1 WHERE student_id = $2',
-            [class_id, id]
-          );
-        }
-      } else {
-        // Create new enrollment
-        await query(
-          'INSERT INTO class_enrollments (class_id, student_id) VALUES ($1, $2)',
-          [class_id, id]
-        );
-      }
     } else if (role === 'USER' && !class_id) {
       // If class was removed, delete enrollment
       await query(
@@ -150,7 +133,7 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Admin Update User Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 

@@ -228,8 +228,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             } else {
                 setError(response.error || 'Failed to update user');
             }
-        } catch (err) {
-            setError('Connection error. Please try again.');
+        } catch (err: any) {
+            console.error('Error updating user:', err);
+            setError(err.message || 'Connection error. Please try again.');
         } finally {
             setIsLoading(false);
         }

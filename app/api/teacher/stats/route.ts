@@ -47,8 +47,8 @@ export async function GET(request: Request) {
               c.teacher_id,
               c.is_archived,
               c.created_at,
-              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id)::INT as student_count,
-              (SELECT COUNT(*) FROM bahagi WHERE class_name = c.name)::INT as lesson_count
+              (SELECT COUNT(*) FROM users u WHERE u.class_id = c.id AND u.role = 'USER')::INT as student_count,
+              (SELECT COUNT(*) FROM bahagi WHERE class_name = c.name AND teacher_id = c.teacher_id)::INT as lesson_count
           FROM classes c
           WHERE c.teacher_id = $1
           ORDER BY c.is_archived ASC, c.created_at DESC
