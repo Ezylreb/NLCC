@@ -369,7 +369,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             console.log('[handleBahagiSubmit] Response:', response);
 
-            if (response.bahagi || response.success || response.data) {
+            if (response.success || response.data) {
                 setShowBahagiForm(false);
                 // Refresh bahagi list to show the newly created one
                 await handleRefreshBahagi();
@@ -502,8 +502,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 assessment_type: assessmentType,
                 points: totalPoints,
                 questions: data.questions,
-                total_questions: data.questions?.length || 0,
-                teacher_id: user?.id
+                total_questions: data.questions?.length || 0
             });
 
             if (response.success) {
