@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 
+async function ensureRewardBadgesColumn() {
+  await query(`
+    ALTER TABLE classes
+    ADD COLUMN IF NOT EXISTS reward_badges JSONB DEFAULT '[]'::jsonb
+  `);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -17,6 +24,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      await ensureRewardBadgesColumn();
+
       // First, ensure the classes table exists
       await query(`
         CREATE TABLE IF NOT EXISTS classes (
@@ -24,6 +33,7 @@ export async function POST(request: NextRequest) {
           name VARCHAR(255) NOT NULL,
           teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           is_archived BOOLEAN DEFAULT FALSE,
+          reward_badges JSONB DEFAULT '[]'::jsonb,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         )
@@ -51,9 +61,9 @@ export async function POST(request: NextRequest) {
 
       // Create the class
       const result = await query(
-        `INSERT INTO classes (name, teacher_id, is_archived, created_at, updated_at)
-         VALUES ($1, $2, false, NOW(), NOW())
-         RETURNING id, name, teacher_id, is_archived, created_at, updated_at`,
+        `INSERT INTO classes (name, teacher_id, is_archived, reward_badges, created_at, updated_at)
+         VALUES ($1, $2, false, '[]'::jsonb, NOW(), NOW())
+         RETURNING id, name, teacher_id, is_archived, reward_badges, created_at, updated_at`,
         [name, finalTeacherId]
       );
 
@@ -96,7 +106,8 @@ export async function POST(request: NextRequest) {
             student_count: 0,
             lesson_count: 0,
             progress: 0,
-            is_archived: classData.is_archived
+            is_archived: classData.is_archived,
+            reward_badges: classData.reward_badges || []
           }
         }
       });

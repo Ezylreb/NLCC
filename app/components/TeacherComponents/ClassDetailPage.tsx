@@ -10,6 +10,33 @@ import { EditYunitForm } from './EditYunitForm';
 import { EditAssessmentV2Form } from './EditAssessmentV2Form';
 import { ManageClassStudents } from './ManageClassStudents';
 
+type RewardThresholdType = 'xp' | 'completion';
+type ClassManagementView = 'bahagi' | 'students' | 'rewards';
+
+interface RewardBadgeConfig {
+    id: string;
+    icon: string;
+    name: string;
+    thresholdType: RewardThresholdType;
+    requiredValue: number;
+}
+
+const BADGE_ICON_OPTIONS = ['🥇', '🥈', '🥉', '🏆', '⭐', '🌟', '🎖️', '🏅', '💎', '🚀', '🎯', '📚'];
+
+const DEFAULT_REWARD_BADGES: RewardBadgeConfig[] = [
+    { id: 'gold', icon: '🥇', name: 'Gold', thresholdType: 'xp', requiredValue: 500 },
+    { id: 'silver', icon: '🥈', name: 'Silver', thresholdType: 'xp', requiredValue: 300 },
+    { id: 'bronze', icon: '🥉', name: 'Bronze', thresholdType: 'xp', requiredValue: 150 }
+];
+
+const normalizeRewardBadge = (badge: any, index: number): RewardBadgeConfig => ({
+    id: typeof badge?.id === 'string' && badge.id.trim() ? badge.id : `badge-${index + 1}`,
+    icon: typeof badge?.icon === 'string' && badge.icon.trim() ? badge.icon : BADGE_ICON_OPTIONS[0],
+    name: typeof badge?.name === 'string' && badge.name.trim() ? badge.name : `Badge ${index + 1}`,
+    thresholdType: badge?.thresholdType === 'completion' ? 'completion' : 'xp',
+    requiredValue: Number.isFinite(Number(badge?.requiredValue)) ? Number(badge.requiredValue) : 0
+});
+
 interface ClassDetailPageProps {
     classId: string;
     className: string;
@@ -71,11 +98,14 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const [isEditingBahagi, setIsEditingBahagi] = useState(false);
     const [isEditingYunit, setIsEditingYunit] = useState(false);
     const [isEditingAssessment, setIsEditingAssessment] = useState(false);
-    const [showStudentsView, setShowStudentsView] = useState(false);
+    const [activeView, setActiveView] = useState<ClassManagementView>('bahagi');
     const [draggedYunitId, setDraggedYunitId] = useState<string | null>(null);
     const [draggedOverYunitId, setDraggedOverYunitId] = useState<string | null>(null);
     const [draggedBahagiId, setDraggedBahagiId] = useState<number | null>(null);
     const [draggedOverBahagiId, setDraggedOverBahagiId] = useState<number | null>(null);
+    const [rewardBadges, setRewardBadges] = useState<RewardBadgeConfig[]>(DEFAULT_REWARD_BADGES);
+    const [isLoadingRewardBadges, setIsLoadingRewardBadges] = useState(false);
+    const [isSavingRewardBadges, setIsSavingRewardBadges] = useState(false);
     
     // Filtering state
     const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
@@ -120,6 +150,114 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     useEffect(() => {
         console.log('[ClassDetailPage] expandedBahagiId changed to:', expandedBahagiId);
     }, [expandedBahagiId]);
+
+    useEffect(() => {
+        const loadRewardBadges = async () => {
+            if (!classId || classId === 'class-all') {
+                setRewardBadges(DEFAULT_REWARD_BADGES);
+                return;
+            }
+
+            setIsLoadingRewardBadges(true);
+            try {
+                const response = await apiClient.class.fetchById(classId);
+                if (response.success && response.data) {
+                    const incomingBadges = Array.isArray((response.data as any).reward_badges)
+                        ? (response.data as any).reward_badges
+                        : [];
+
+                    setRewardBadges(
+                        incomingBadges.length > 0
+                            ? incomingBadges.map(normalizeRewardBadge)
+                            : DEFAULT_REWARD_BADGES
+                    );
+                } else {
+                    setRewardBadges(DEFAULT_REWARD_BADGES);
+                }
+            } catch (error) {
+                console.error('Error loading reward badges:', error);
+                setRewardBadges(DEFAULT_REWARD_BADGES);
+            } finally {
+                setIsLoadingRewardBadges(false);
+            }
+        };
+
+        loadRewardBadges();
+    }, [classId]);
+
+    const updateRewardBadge = (badgeId: string, updates: Partial<RewardBadgeConfig>) => {
+        setRewardBadges(prev => prev.map(badge =>
+            badge.id === badgeId ? { ...badge, ...updates } : badge
+        ));
+    };
+
+    const handleAddRewardBadge = () => {
+        setRewardBadges(prev => ([
+            ...prev,
+            {
+                id: `badge-${Date.now()}`,
+                icon: '⭐',
+                name: `Badge ${prev.length + 1}`,
+                thresholdType: 'xp',
+                requiredValue: 0
+            }
+        ]));
+    };
+
+    const handleRemoveRewardBadge = (badgeId: string) => {
+        setRewardBadges(prev => prev.length > 1 ? prev.filter(badge => badge.id !== badgeId) : prev);
+    };
+
+    const handleResetRewardBadges = () => {
+        setRewardBadges(DEFAULT_REWARD_BADGES);
+    };
+
+    const handleOpenRewardsPage = () => {
+        setActiveView('rewards');
+    };
+
+    const handleOpenStudentsPage = () => {
+        setActiveView('students');
+    };
+
+    const handleOpenBahagiPage = () => {
+        setActiveView('bahagi');
+    };
+
+    const handleSaveRewardBadges = async () => {
+        if (!classId || classId === 'class-all') {
+            return;
+        }
+
+        setIsSavingRewardBadges(true);
+        try {
+            const payload = rewardBadges.map((badge, index) => ({
+                id: badge.id || `badge-${index + 1}`,
+                icon: badge.icon,
+                name: badge.name.trim() || `Badge ${index + 1}`,
+                thresholdType: badge.thresholdType,
+                requiredValue: badge.thresholdType === 'completion'
+                    ? Math.min(100, Math.max(0, Number(badge.requiredValue) || 0))
+                    : Math.max(0, Number(badge.requiredValue) || 0)
+            }));
+
+            const response = await apiClient.class.update(classId, {
+                reward_badges: payload
+            });
+
+            if (response.success) {
+                setRewardBadges(payload);
+                alert('✅ Reward badges saved successfully!');
+            } else {
+                alert(`❌ Error: ${response.error || 'Failed to save reward badges'}`);
+            }
+        } catch (error) {
+            console.error('Error saving reward badges:', error);
+            alert('❌ Failed to save reward badges');
+        } finally {
+            setIsSavingRewardBadges(false);
+        }
+    };
 
     // Fetch yunits for a bahagi
     const fetchYunitsForBahagi = async (bahagiId: number) => {
@@ -776,32 +914,28 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
                 <button
-                    onClick={() => setShowStudentsView(!showStudentsView)}
-                    className={`${showStudentsView ? 'bg-brand-sky hover:bg-brand-sky/80' : 'bg-slate-800 hover:bg-slate-700'} text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border ${showStudentsView ? 'border-brand-sky/30' : 'border-slate-700'}`}
+                    onClick={handleOpenStudentsPage}
+                    className={`${activeView === 'students' ? 'bg-brand-sky hover:bg-brand-sky/80 border-brand-sky/30' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'} text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border`}
                 >
                     <span>👥</span> View Students
                 </button>
-                {!showStudentsView && (
-                    <>
-                        <button
-                            onClick={onCreateBahagi}
-                            className="bg-brand-purple hover:bg-brand-purple/80 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-purple-500/20 flex items-center gap-2"
-                        >
-                            <span>📚</span> Add Bahagi
-                        </button>
-                        <button
-                            disabled
-                            className="bg-brand-sky/30 text-brand-sky px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest disabled:opacity-50 flex items-center gap-2"
-                            title="Coming soon"
-                        >
-                            <span>⭐</span> Add Rewards
-                        </button>
-                    </>
-                )}
+                <button
+                    onClick={handleOpenBahagiPage}
+                    className={`${activeView === 'bahagi' ? 'bg-brand-purple hover:bg-brand-purple/80 border-brand-purple/30' : 'bg-slate-800 hover:bg-slate-700 border-slate-700'} text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border`}
+                >
+                    <span>📚</span> Bahagi Page
+                </button>
+                <button
+                    onClick={handleOpenRewardsPage}
+                    className={`${activeView === 'rewards' ? 'bg-amber-500 text-slate-950 border-amber-300/40' : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-700'} px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 border`}
+                    title="Manage class reward badges"
+                >
+                    <span>⭐</span> Add Rewards
+                </button>
             </div>
 
             {/* Students Management Section */}
-            {showStudentsView && (
+            {activeView === 'students' && (
                 <div className="animate-in fade-in duration-500">
                     <ManageClassStudents
                         classId={classId}
@@ -811,8 +945,149 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                 </div>
             )}
 
+            {activeView === 'rewards' && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-500 rounded-3xl border border-amber-400/20 bg-linear-to-br from-slate-950 via-slate-900 to-amber-950/40 p-6 shadow-2xl shadow-amber-950/20">
+                    <div className="flex flex-col gap-4 border-b border-amber-300/10 pb-5 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-amber-300">Badge Rewards</p>
+                            <h3 className="mt-2 text-3xl font-black text-white">Configure unlockable class badges</h3>
+                            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                                Set the badge icon, badge name, and the rule students must hit to unlock it. You can use XP or completion percentage for each card.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                onClick={handleAddRewardBadge}
+                                className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-200 transition-colors hover:bg-amber-400/20"
+                            >
+                                + Add Badge Card
+                            </button>
+                            <button
+                                onClick={handleResetRewardBadges}
+                                className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+                            >
+                                Reset Defaults
+                            </button>
+                            <button
+                                onClick={handleSaveRewardBadges}
+                                disabled={isSavingRewardBadges || isLoadingRewardBadges}
+                                className="rounded-xl bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {isSavingRewardBadges ? 'Saving...' : 'Save Badges'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {isLoadingRewardBadges ? (
+                        <div className="flex items-center justify-center py-10">
+                            <div className="text-center">
+                                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-amber-300"></div>
+                                <p className="mt-3 text-sm text-slate-400">Loading reward badges...</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+                            {rewardBadges.map((badge, index) => (
+                                <div
+                                    key={badge.id}
+                                    className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg shadow-black/20"
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-400/10 text-3xl">
+                                                {badge.icon}
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">Badge {index + 1}</p>
+                                                <p className="text-lg font-black text-white">{badge.name || `Badge ${index + 1}`}</p>
+                                                <p className="text-xs font-bold text-slate-400">
+                                                    Unlock at {badge.requiredValue}{badge.thresholdType === 'completion' ? '% completion' : ' XP'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveRewardBadge(badge.id)}
+                                            disabled={rewardBadges.length === 1}
+                                            className="rounded-lg border border-rose-400/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-rose-300 transition-colors hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-5 space-y-4">
+                                        <div>
+                                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
+                                                Select Badge Icon
+                                            </label>
+                                            <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+                                                {BADGE_ICON_OPTIONS.map((icon) => (
+                                                    <button
+                                                        key={`${badge.id}-${icon}`}
+                                                        type="button"
+                                                        onClick={() => updateRewardBadge(badge.id, { icon })}
+                                                        className={`flex h-11 items-center justify-center rounded-xl border text-xl transition-all ${badge.icon === icon ? 'border-amber-300 bg-amber-300/20 shadow-lg shadow-amber-500/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500'}`}
+                                                    >
+                                                        {icon}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid gap-4 md:grid-cols-2">
+                                            <div>
+                                                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
+                                                    Badge Name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={badge.name}
+                                                    onChange={(e) => updateRewardBadge(badge.id, { name: e.target.value })}
+                                                    placeholder="Gold Badge"
+                                                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-semibold text-white outline-none transition-all focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
+                                                    Unlock Rule
+                                                </label>
+                                                <select
+                                                    value={badge.thresholdType}
+                                                    onChange={(e) => updateRewardBadge(badge.id, { thresholdType: e.target.value as RewardThresholdType })}
+                                                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-semibold text-white outline-none transition-all focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
+                                                >
+                                                    <option value="xp">Required XP</option>
+                                                    <option value="completion">Completion Percentage</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-500">
+                                                {badge.thresholdType === 'completion' ? 'Required Percentage' : 'Required XP'}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={badge.thresholdType === 'completion' ? 100 : undefined}
+                                                value={badge.requiredValue}
+                                                onChange={(e) => updateRewardBadge(badge.id, {
+                                                    requiredValue: badge.thresholdType === 'completion'
+                                                        ? Math.min(100, Math.max(0, Number(e.target.value) || 0))
+                                                        : Math.max(0, Number(e.target.value) || 0)
+                                                })}
+                                                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-semibold text-white outline-none transition-all focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Bahagi Section */}
-            {!showStudentsView && (
+            {activeView === 'bahagi' && (
             <div className="flex flex-col gap-6">
                 <div className="flex items-center justify-between">
                     <h3 className="text-2xl font-black text-white">📚 Bahagi (Lesson Sections)</h3>
@@ -922,11 +1197,11 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     onClick={() => toggleQuarterCollapse(quarter)}
                                     className="w-full flex items-center gap-3 hover:bg-slate-800/30 rounded-lg p-3 -m-3 transition-all group"
                                 >
-                                    <div className="h-[2px] flex-shrink-0 w-12 bg-gradient-to-r from-brand-purple to-transparent"></div>
+                                    <div className="h-0.5 shrink-0 w-12 bg-linear-to-r from-brand-purple to-transparent"></div>
                                     <h3 className="text-lg font-black text-white uppercase tracking-wide">
                                         {quarter === 'No Quarter' ? 'Uncategorized' : quarter}
                                     </h3>
-                                    <div className="h-[2px] flex-1 bg-gradient-to-r from-brand-purple/50 to-transparent"></div>
+                                    <div className="h-0.5 flex-1 bg-linear-to-r from-brand-purple/50 to-transparent"></div>
                                     <span className="text-xs font-black text-slate-500 bg-slate-900 px-3 py-1 rounded">
                                         {bahagiByQuarter[quarter].length} {bahagiByQuarter[quarter].length === 1 ? 'lesson' : 'lessons'}
                                     </span>
