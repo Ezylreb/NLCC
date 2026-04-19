@@ -54,6 +54,8 @@ export async function POST(
     );
 
     // Emit assessment submitted event (async handlers will process rewards, achievements, etc.)
+    const assessmentType = assessment.assessment_type || assessment.type || 'multiple-choice';
+
     const submissionEvent: AssessmentSubmittedEvent = {
       type: EventType.ASSESSMENT_SUBMITTED,
       timestamp: new Date(),
@@ -64,7 +66,7 @@ export async function POST(
       isCorrect: validation.isCorrect,
       pointsEarned: validation.pointsEarned,
       attemptNumber,
-      assessmentType: assessment.assessment_type,
+      assessmentType,
       metadata: {
         feedback: validation.feedback,
         partialCredit: validation.partialCredit,

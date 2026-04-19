@@ -69,6 +69,8 @@ export interface BahagiAssessment {
   assessment_type?: string;
   correct_answers?: Record<string, any>;
   description?: string;
+  questions?: any[];
+  instructions?: string;
 }
 
 export interface YunitAnswer {

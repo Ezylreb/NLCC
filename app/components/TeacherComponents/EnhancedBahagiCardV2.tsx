@@ -14,6 +14,9 @@ interface EnhancedBahagiCardProps {
     iconPath?: string;
     iconType?: string;
     description?: string;
+    quarter?: string | null;
+    week_number?: number | null;
+    module_number?: string | null;
     isOpen?: boolean;
     isArchived?: boolean;
     isPublished?: boolean;
@@ -30,6 +33,7 @@ interface EnhancedBahagiCardProps {
     userId: string;
     expanded?: boolean;
     onToggleExpand?: (id: number) => void;
+    isDraggable?: boolean;
 }
 
 export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
@@ -39,6 +43,9 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     iconPath,
     iconType = 'default',
     description,
+    quarter,
+    week_number,
+    module_number,
     isOpen = true,
     isArchived = false,
     isPublished = false,
@@ -102,6 +109,25 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                                 <p className="text-sm text-slate-400 line-clamp-1">
                                     {description}
                                 </p>
+                            )}
+                            {(quarter || week_number || module_number) && (
+                                <div className="flex flex-wrap gap-2 mt-2 text-[10px] font-black uppercase tracking-wide">
+                                    {quarter && (
+                                        <span className="bg-indigo-900/30 text-indigo-400 px-2 py-1 rounded">
+                                            {quarter}
+                                        </span>
+                                    )}
+                                    {week_number && (
+                                        <span className="bg-cyan-900/30 text-cyan-400 px-2 py-1 rounded">
+                                            Week {week_number}
+                                        </span>
+                                    )}
+                                    {module_number && (
+                                        <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded">
+                                            {module_number}
+                                        </span>
+                                    )}
+                                </div>
                             )}
                             <div className="flex flex-wrap gap-2 mt-2 text-xs">
                                 {isPublished ? (

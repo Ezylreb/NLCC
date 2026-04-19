@@ -73,7 +73,7 @@ export class AssessmentService {
         }))
       : [];
 
-    const explicitCorrect = normalizedOptions.find((option) => option.is_correct);
+    const explicitCorrect = normalizedOptions.find((option: any) => option.is_correct);
 
     return {
       ...question,
@@ -83,7 +83,7 @@ export class AssessmentService {
       type: question?.type ?? this.normalizeQuestionTypeForClient(question?.question_type),
       question_order: question?.question_order ?? questionIndex,
       correct_answer: question?.correct_answer ?? question?.correctAnswer ?? (explicitCorrect?.option_text || ''),
-      correctAnswer: question?.correctAnswer ?? normalizedOptions.findIndex((option) => option.is_correct),
+      correctAnswer: question?.correctAnswer ?? normalizedOptions.findIndex((option: any) => option.is_correct),
       options: normalizedOptions,
     };
   }
@@ -100,7 +100,7 @@ export class AssessmentService {
         }))
       : [];
 
-    const correctOptionIndex = normalizedOptions.findIndex((option) => option.is_correct);
+    const correctOptionIndex = normalizedOptions.findIndex((option: any) => option.is_correct);
 
     return {
       ...question,
@@ -380,15 +380,20 @@ export class AssessmentService {
       }
 
       case 'scramble-word': {
+        const correctData = assessment.correct_answers?.answer ?? assessment.correct_answers?.word ?? null;
+        const scrambleWords = Array.isArray(assessment.questions?.[0]?.scrambleWords)
+          ? assessment.questions[0].scrambleWords
+          : [];
+
         // correctAnswer is an array of words in correct order
         // studentAnswer is also an array of words in student's order
         if (Array.isArray(correctData) && Array.isArray(studentAnswer)) {
           const correctArr = correctData.map((w: string) => String(w).toLowerCase().trim());
           const studentArr = studentAnswer.map((w: string) => String(w).toLowerCase().trim());
           isCorrect = JSON.stringify(studentArr) === JSON.stringify(correctArr);
-        } else if (question.scrambleWords?.length && Array.isArray(studentAnswer)) {
+        } else if (scrambleWords.length && Array.isArray(studentAnswer)) {
           // Fallback: use scrambleWords order as correct answer
-          const correctArr = question.scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').toLowerCase().trim());
+          const correctArr = scrambleWords.map((w: any) => (typeof w === 'string' ? w : w.text || '').toLowerCase().trim());
           const studentArr = studentAnswer.map((w: string) => String(w).toLowerCase().trim());
           isCorrect = JSON.stringify(studentArr) === JSON.stringify(correctArr);
         } else {

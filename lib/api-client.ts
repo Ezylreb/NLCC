@@ -328,6 +328,9 @@ class AssessmentAPI extends APIClient {
     bahagi_id: number;
     title: string;
     description?: string;
+    type?: string;
+    assessment_type?: string;
+    points?: number;
     total_questions?: number;
     time_limit?: number;
     questions?: any[];
@@ -343,6 +346,10 @@ class AssessmentAPI extends APIClient {
     data: Partial<{
       title: string;
       description: string;
+      instructions: string;
+      type: string;
+      assessment_type: string;
+      points: number;
       total_questions: number;
       time_limit: number;
       questions: any[];

@@ -336,10 +336,8 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           yunitId={selectedYunitId}
           bahagiId={selectedBahagiId}
           studentId={studentId}
-          cachedYunits={yunitsCache[selectedBahagiId.toString()]}
           onComplete={handleLessonComplete}
           onNextYunit={handleNextYunit}
-          onLessonCompleted={handleLessonCompleted}
           onBack={goBack}
         />
       )}
