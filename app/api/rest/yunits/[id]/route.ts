@@ -4,20 +4,32 @@
  */
 
 import { NextResponse } from 'next/server';
-import YunitService from '@/lib/services/YunitService';
+import { query } from '@/lib/db';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
-    const yunit = await YunitService.getWithAssessments(id);
+    // Fetch yunit with bahagi icon information
+    const result = await query(
+      `SELECT 
+        l.*,
+        b.icon_path as bahagi_icon_path,
+        b.icon_type as bahagi_icon_type
+       FROM lesson l
+       LEFT JOIN bahagi b ON l.bahagi_id = b.id
+       WHERE l.id = $1`,
+      [id]
+    );
 
-    if (!yunit) {
+    if (!result.rows || result.rows.length === 0) {
       return NextResponse.json(
         { error: 'Yunit not found' },
         { status: 404 }
       );
     }
+
+    const yunit = result.rows[0];
 
     return NextResponse.json({ success: true, data: yunit });
   } catch (error: any) {

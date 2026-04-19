@@ -229,9 +229,10 @@ class YunitAPI extends APIClient {
   async create(data: {
     bahagi_id: number;
     title: string;
-    description: string;
+    subtitle: string;
     discussion?: string;
     media_url?: string;
+    audio_url?: string;
     order?: number;
   }): Promise<APIResponse> {
     return this.post('/yunits', data);
@@ -244,27 +245,29 @@ class YunitAPI extends APIClient {
     yunitId: number,
     data: Partial<{
       title: string;
-      description: string;
+      subtitle: string;
       discussion: string;
       media_url: string;
+      audio_url: string;
       order: number;
+      lesson_order: number;
     }>
   ): Promise<APIResponse> {
-    return this.patch(`/yunits/${yunitId}`, data);
+    return this.patch(`/yunits?id=${yunitId}`, data);
   }
 
   /**
    * Delete yunit
    */
   async deleteYunit(yunitId: number): Promise<APIResponse> {
-    return this.delete(`/yunits/${yunitId}`);
+    return this.delete(`/yunits?id=${yunitId}`);
   }
 
   /**
    * Archive yunit
    */
   async archive(yunitId: number): Promise<APIResponse> {
-    return this.patch(`/yunits/${yunitId}`, { is_archived: true });
+    return this.patch(`/yunits?id=${yunitId}`, { is_archived: true });
   }
 
   /**
@@ -1005,7 +1008,9 @@ class StudentService extends APIClient {
    * Get teacher lessons (bahagi) for student
    */
   async getTeacherLessons(studentId: string, teacherId: string): Promise<APIResponse> {
-    return this.get(`/teacher-lessons?studentId=${studentId}&teacherId=${teacherId}`);
+    // Add timestamp to prevent caching of stale progress data
+    const timestamp = Date.now();
+    return this.get(`/teacher-lessons?studentId=${studentId}&teacherId=${teacherId}&_t=${timestamp}`);
   }
 
   /**

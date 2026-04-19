@@ -2,17 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { apiClient } from '@/lib/api-client';
 
 interface Yunit {
   id: string | number;
   title: string;
-  content?: string;
-  isPassed: boolean;
-  score: number;
-  xpEarned: number;
-  coinsEarned: number;
-  assessmentCount: number;
+  subtitle?: string;
+  discussion?: string;
+  media_url?: string;
+  audio_url?: string;
+  completed: boolean;
+  xp_earned: number;
+  coins_earned: number;
+  assessment_count: number;
+  isLocked: boolean;
+  completion_date?: string;
 }
 
 interface YunitViewProps {
@@ -36,14 +39,21 @@ export const YunitView: React.FC<YunitViewProps> = ({
     const fetchYunits = async () => {
       try {
         setIsLoading(true);
-        const response = await apiClient.yunit.fetchByBahagi(Number(bahagiId));
+        console.log('[YunitView] Fetching yunits with progress for bahagiId:', bahagiId, 'studentId:', studentId);
         
-        if (response.data?.yunits) {
-          setYunits(response.data.yunits);
-        } else if (response.error) {
-          throw new Error(response.error);
+        const response = await fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`);
+        const data = await response.json();
+        
+        console.log('[YunitView] API response:', data);
+        
+        if (data.success && data.data) {
+          setYunits(data.data);
+          console.log('[YunitView] Loaded', data.data.length, 'yunits with lock status');
+        } else {
+          throw new Error(data.error || 'Failed to fetch yunits');
         }
       } catch (err: any) {
+        console.error('[YunitView] Error fetching yunits:', err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -75,58 +85,118 @@ export const YunitView: React.FC<YunitViewProps> = ({
           ← Back to Phases
         </button>
         <h2 className="text-3xl font-black text-white">Lessons</h2>
-        <p className="text-slate-500 text-sm mt-2">Select a lesson to start learning</p>
+        <p className="text-slate-500 text-sm mt-2">Complete lessons in order to unlock the next one</p>
       </div>
 
-      {/* Yunits List */}
+      {/* Yunits Grid */}
       {yunits.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-5xl mb-4">📭</div>
           <p className="text-slate-400">No lessons available</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {yunits.map((yunit, idx) => (
-            <motion.button
+            <motion.div
               key={yunit.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.05 }}
-              onClick={() => onStartAssessment(yunit.id)}
-              className="w-full text-left p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-brand-purple hover:bg-slate-700 transition-all group"
+              className="relative"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-xl">
-                      {yunit.isPassed ? '✅' : '📖'}
-                    </span>
-                    <h3 className="font-bold text-white group-hover:text-brand-purple transition-colors flex-1">
-                      {yunit.title}
-                    </h3>
+              <button
+                onClick={() => !yunit.isLocked && onStartAssessment(yunit.id)}
+                disabled={yunit.isLocked}
+                className={`w-full h-full p-6 rounded-2xl border-2 transition-all text-left relative overflow-hidden group ${
+                  yunit.isLocked
+                    ? 'bg-slate-900/50 border-slate-800 cursor-not-allowed opacity-60'
+                    : yunit.completed
+                    ? 'bg-gradient-to-br from-green-900/20 to-emerald-900/20 border-green-700 hover:border-green-500 hover:shadow-lg hover:shadow-green-500/20'
+                    : 'bg-slate-800 border-slate-700 hover:border-brand-purple hover:shadow-lg hover:shadow-brand-purple/20'
+                }`}
+              >
+                {/* Lock Overlay */}
+                {yunit.isLocked && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-2xl z-10">
+                    <div className="text-center">
+                      <div className="text-5xl mb-2">🔒</div>
+                      <p className="text-sm text-slate-400 font-bold">Complete previous lesson</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Card Content */}
+                <div className="space-y-4">
+                  {/* Header */}
+                  <div className="flex items-start gap-3">
+                    <div className="text-3xl flex-shrink-0">
+                      {yunit.completed ? '✅' : yunit.isLocked ? '🔒' : '📖'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-black text-lg leading-tight mb-1 ${
+                        yunit.isLocked ? 'text-slate-500' : 'text-white group-hover:text-brand-purple'
+                      }`}>
+                        {yunit.title}
+                      </h3>
+                      {yunit.subtitle && (
+                        <p className="text-xs text-slate-400 line-clamp-2">{yunit.subtitle}</p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Status Info */}
-                  <div className="flex items-center gap-4 text-xs text-slate-400 ml-8">
-                    <span>📝 {yunit.assessmentCount} assessment{yunit.assessmentCount !== 1 ? 's' : ''}</span>
-                    
-                    {yunit.isPassed && (
-                      <>
-                        <span>⭐ {yunit.score}%</span>
-                        <span className="text-yellow-400">⭐ +{yunit.xpEarned} XP</span>
-                        <span className="text-yellow-500">🪙 +{yunit.coinsEarned}</span>
-                      </>
+                  {/* Progress Info */}
+                  <div className="space-y-2">
+                    {yunit.completed ? (
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-lg font-bold">
+                          ✓ Completed
+                        </span>
+                        {yunit.xp_earned > 0 && (
+                          <span className="text-yellow-400 font-bold">
+                            ⭐ +{yunit.xp_earned} XP
+                          </span>
+                        )}
+                        {yunit.coins_earned > 0 && (
+                          <span className="text-yellow-500 font-bold">
+                            🪙 +{yunit.coins_earned}
+                          </span>
+                        )}
+                      </div>
+                    ) : !yunit.isLocked ? (
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1.5 bg-brand-purple/20 text-brand-purple rounded-lg font-bold text-xs">
+                          Ready to Start
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {/* Assessment Count */}
+                    {yunit.assessment_count > 0 && !yunit.isLocked && (
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <span>📝 {yunit.assessment_count} assessment{yunit.assessment_count !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+
+                    {/* Media Indicators */}
+                    {!yunit.isLocked && (yunit.media_url || yunit.audio_url) && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        {yunit.media_url && <span>📸 Image</span>}
+                        {yunit.audio_url && <span>🎵 Audio</span>}
+                      </div>
                     )}
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-lg text-brand-purple group-hover:translate-x-1 transition-transform">
-                    →
-                  </span>
+                  {/* Start Arrow */}
+                  {!yunit.isLocked && !yunit.completed && (
+                    <div className="flex justify-end">
+                      <span className="text-brand-purple group-hover:translate-x-1 transition-transform text-xl">
+                        →
+                      </span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </motion.button>
+              </button>
+            </motion.div>
           ))}
         </div>
       )}

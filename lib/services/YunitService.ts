@@ -16,6 +16,7 @@ export class YunitService {
     subtitle?: string;
     discussion?: string;
     media_url?: string;
+    audio_url?: string;
   }): Promise<Lesson> {
     return repositories.lesson.create({
       ...data,
@@ -44,7 +45,7 @@ export class YunitService {
   static async listByBahagi(bahagiId: string) {
     return repositories.lesson.findAll({
       where: { bahagi_id: bahagiId },
-      orderBy: 'created_at DESC',
+      orderBy: 'lesson_order ASC, created_at ASC',
     });
   }
 

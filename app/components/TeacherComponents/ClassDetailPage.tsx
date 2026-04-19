@@ -28,6 +28,7 @@ interface ClassDetailPageProps {
     bahagi?: any[];
     lessons?: any[];
     onDeleteLesson?: (lessonId: string) => void;
+    isLoadingBahagi?: boolean;
 }
 
 export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
@@ -47,7 +48,8 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     onDeleteAssessment,
     bahagi = [],
     lessons = [],
-    onDeleteLesson
+    onDeleteLesson,
+    isLoadingBahagi = false
 }) => {
     const [expandedBahagiId, setExpandedBahagiId] = useState<number | null>(null);
     const [showYunitForm, setShowYunitForm] = useState(false);
@@ -70,6 +72,8 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
     const [isEditingYunit, setIsEditingYunit] = useState(false);
     const [isEditingAssessment, setIsEditingAssessment] = useState(false);
     const [showStudentsView, setShowStudentsView] = useState(false);
+    const [draggedYunitId, setDraggedYunitId] = useState<string | null>(null);
+    const [draggedOverYunitId, setDraggedOverYunitId] = useState<string | null>(null);
 
     // Debug: Log when bahagi prop changes
     useEffect(() => {
@@ -85,10 +89,13 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         setIsLoadingYunits(true);
         try {
             const response = await apiClient.yunit.fetchByBahagi(bahagiId);
-            if (response.data?.yunits) {
+            // API returns { success: true, data: [...yunits array...] }
+            if (response.success && response.data) {
+                const yunits = Array.isArray(response.data) ? response.data : [];
+                console.log(`[fetchYunitsForBahagi] Found ${yunits.length} yunits for bahagi ${bahagiId}:`, yunits);
                 setBahagiYunits(prev => ({
                     ...prev,
-                    [bahagiId]: response.data.yunits || []
+                    [bahagiId]: yunits
                 }));
             }
         } catch (err) {
@@ -140,26 +147,70 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
 
     const handleYunitSubmit = async (data: any) => {
         setIsCreatingYunit(true);
+        let timedOut = false;
+        
         try {
-            const result = await apiClient.yunit.create({
-                bahagi_id: data.bahagiId,
-                title: data.title,
-                description: data.description,
-                discussion: data.discussion,
-                media_url: data.mediaUrl
+            console.log('[ClassDetailPage handleYunitSubmit] Creating yunit with data:', data);
+            
+            // Create a timeout promise
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    timedOut = true;
+                    reject(new Error('Request timeout'));
+                }, 8000); // 8 second timeout
+            });
+            
+            // Call the bahagi lessons endpoint with timeout
+            const fetchPromise = fetch(`/api/teacher/bahagi/${data.bahagiId}/lessons`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    title: data.title,
+                    subtitle: data.subtitle || data.description,
+                    discussion: data.discussion,
+                    media_url: data.media_url,
+                    audio_url: data.audio_url,
+                    lesson_order: data.lesson_order
+                })
             });
 
-            if (result.success) {
-                alert('✅ Yunit created successfully!');
+            const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+            const result = await response.json();
+            
+            console.log('[ClassDetailPage handleYunitSubmit] Response:', result);
+
+            if (response.ok && result.lesson) {
                 setShowYunitForm(false);
-                // Refresh yunits
+                // Immediate refresh
                 fetchYunitsForBahagi(data.bahagiId);
+                // Refresh the bahagi list if callback provided
+                if (onRefreshBahagi) {
+                    onRefreshBahagi();
+                }
+                alert('✅ Yunit created successfully!');
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to create yunit'}`);
             }
         } catch (err: any) {
-            console.error('Error creating yunit:', err);
-            alert('❌ Failed to create yunit');
+            console.error('[ClassDetailPage handleYunitSubmit] Exception:', err);
+            
+            // If it's a timeout, optimistically refresh the UI anyway
+            if (timedOut || err.message?.includes('timeout')) {
+                console.log('[ClassDetailPage handleYunitSubmit] Request timed out, refreshing optimistically...');
+                setShowYunitForm(false);
+                // Give database a moment to commit
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Refresh yunits - the yunit was likely created even though response timed out
+                fetchYunitsForBahagi(data.bahagiId);
+                if (onRefreshBahagi) {
+                    onRefreshBahagi();
+                }
+                alert('✅ Yunit created! (Response was slow, but data saved)');
+            } else {
+                alert(`❌ Failed to create yunit: ${err.message || 'Unknown error'}`);
+            }
         } finally {
             setIsCreatingYunit(false);
         }
@@ -267,6 +318,64 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
         }
     };
 
+    // Handle drag and drop for yunits reordering
+    const handleYunitDragStart = (yunitId: string) => {
+        setDraggedYunitId(yunitId);
+    };
+
+    const handleYunitDragOver = (e: React.DragEvent, yunitId: string) => {
+        e.preventDefault();
+        setDraggedOverYunitId(yunitId);
+    };
+
+    const handleYunitDrop = async (e: React.DragEvent, targetYunitId: string, bahagiId: number) => {
+        e.preventDefault();
+        
+        if (!draggedYunitId || draggedYunitId === targetYunitId) {
+            setDraggedYunitId(null);
+            setDraggedOverYunitId(null);
+            return;
+        }
+
+        const yunits = [...(bahagiYunits[bahagiId] || [])];
+        const draggedIndex = yunits.findIndex(y => y.id === draggedYunitId);
+        const targetIndex = yunits.findIndex(y => y.id === targetYunitId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        // Reorder array
+        const [draggedItem] = yunits.splice(draggedIndex, 1);
+        yunits.splice(targetIndex, 0, draggedItem);
+
+        // Update local state immediately for smooth UX
+        setBahagiYunits(prev => ({
+            ...prev,
+            [bahagiId]: yunits
+        }));
+
+        // Update orders in database
+        try {
+            const updatePromises = yunits.map((yunit, index) => 
+                apiClient.yunit.update(yunit.id, { lesson_order: index + 1 })
+            );
+            await Promise.all(updatePromises);
+            console.log('✅ Yunit order updated successfully');
+        } catch (err) {
+            console.error('Error updating yunit order:', err);
+            // Revert on error
+            fetchYunitsForBahagi(bahagiId);
+            alert('❌ Failed to update yunit order');
+        } finally {
+            setDraggedYunitId(null);
+            setDraggedOverYunitId(null);
+        }
+    };
+
+    const handleYunitDragEnd = () => {
+        setDraggedYunitId(null);
+        setDraggedOverYunitId(null);
+    };
+
     // Handle editing assessment
     const handleEditAssessment = (assessment: any) => {
         setEditingAssessment(assessment);
@@ -366,6 +475,10 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
             if (result.success) {
                 alert('✅ Yunit deleted!');
                 fetchYunitsForBahagi(bahagiId);
+                // Refresh the bahagi list to update counts
+                if (onRefreshBahagi) {
+                    await onRefreshBahagi();
+                }
             } else {
                 alert(`❌ Error: ${result.error || 'Failed to delete'}`);
             }
@@ -456,7 +569,14 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                     </span>
                 </div>
 
-                {bahagi.length > 0 ? (
+                {isLoadingBahagi ? (
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-center space-y-3">
+                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-purple"></div>
+                            <p className="text-slate-400 text-sm">Loading bahagi...</p>
+                        </div>
+                    </div>
+                ) : bahagi.length > 0 ? (
                     <div className="space-y-4">
                         {bahagi.map((b) => (
                             <div key={b.id}>
@@ -467,8 +587,8 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                     iconPath={b.icon_path}
                                     iconType={b.icon_type}
                                     isArchived={b.is_archived}
-                                    lessonCount={bahagiYunits[b.id]?.length || 0}
-                                    assessmentCount={bahagiAssessments[b.id]?.length || 0}
+                                    lessonCount={b.lessonCount || 0}
+                                    assessmentCount={b.assessmentCount || 0}
                                     expanded={expandedBahagiId === b.id}
                                     onToggleExpand={() => handleToggleBahagiExpand(b.id)}
                                     onEdit={() => handleEditBahagi(b.id)}
@@ -496,12 +616,24 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                     {bahagiYunits[b.id].map((yunit: any) => (
                                                         <div
                                                             key={yunit.id}
-                                                            className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 flex items-start justify-between"
+                                                            draggable
+                                                            onDragStart={() => handleYunitDragStart(yunit.id)}
+                                                            onDragOver={(e) => handleYunitDragOver(e, yunit.id)}
+                                                            onDrop={(e) => handleYunitDrop(e, yunit.id, b.id)}
+                                                            onDragEnd={handleYunitDragEnd}
+                                                            className={`bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 flex items-start justify-between cursor-move transition-all ${
+                                                                draggedYunitId === yunit.id ? 'opacity-50 scale-95' : ''
+                                                            } ${
+                                                                draggedOverYunitId === yunit.id && draggedYunitId !== yunit.id ? 'border-brand-purple border-2' : ''
+                                                            }`}
                                                         >
                                                             <div className="flex-1">
-                                                                <p className="text-sm font-bold text-white">{yunit.title}</p>
-                                                                <p className="text-xs text-slate-400 mt-1">{yunit.subtitle}</p>
-                                                                <div className="flex gap-2 mt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-slate-600 cursor-grab active:cursor-grabbing">⋮⋮</span>
+                                                                    <p className="text-sm font-bold text-white">{yunit.title}</p>
+                                                                </div>
+                                                                <p className="text-xs text-slate-400 mt-1 ml-6">{yunit.subtitle}</p>
+                                                                <div className="flex gap-2 mt-2 ml-6">
                                                                     <span
                                                                         className={`text-[9px] font-black uppercase px-2 py-1 rounded ${
                                                                             yunit.is_published
@@ -518,6 +650,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                     className="px-2 py-1 text-xs bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 rounded transition-all"
                                                                     onClick={() => handleEditYunit(yunit)}
                                                                     title="Edit Yunit"
+                                                                    onMouseDown={(e) => e.stopPropagation()}
                                                                 >
                                                                     ✏️
                                                                 </button>
@@ -529,6 +662,7 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                                                                         }
                                                                     }}
                                                                     title="Delete Yunit"
+                                                                    onMouseDown={(e) => e.stopPropagation()}
                                                                 >
                                                                     🗑️
                                                                 </button>

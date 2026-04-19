@@ -115,7 +115,6 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const permanent = searchParams.get('permanent') === 'true';
 
     if (!id) {
       return NextResponse.json(
@@ -124,8 +123,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Archive (soft delete) by default
-    const result = permanent ? await YunitService.delete(id) : await YunitService.archive(id);
+    console.log(`[DELETE /api/rest/yunits] Deleting yunit ${id}`);
+
+    // Delete permanently (lesson table doesn't have is_archived column)
+    const result = await YunitService.delete(id);
 
     if (!result) {
       return NextResponse.json(
@@ -134,9 +135,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    console.log(`[DELETE /api/rest/yunits] Yunit ${id} deleted successfully`);
+
     return NextResponse.json({
       success: true,
-      message: permanent ? 'Yunit deleted permanently' : 'Yunit archived',
+      message: 'Yunit deleted successfully',
     });
   } catch (error: any) {
     console.error('[DELETE /api/rest/yunits]', error);

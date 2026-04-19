@@ -60,6 +60,7 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
         setError(null);
         
         console.log('📚 Fetching teacher lessons for:', { studentId, teacherId });
+        console.log('📚 Timestamp:', new Date().toISOString());
         const result = await apiClient.student.getTeacherLessons(studentId, teacherId);
 
         console.log('📚 Teacher lessons response:', result);
@@ -71,6 +72,12 @@ export const TeacherLessonsView: React.FC<TeacherLessonsViewProps> = ({
         // Handle both response formats (wrapped in data or direct)
         const data = result.data || result;
         console.log('📚 Lesson titles received:', data.lessons?.map((l: any) => ({ id: l.id, title: l.title })));
+        console.log('📚 Progress data:', data.lessons?.map((l: any) => ({ 
+          title: l.title, 
+          passedYunits: l.passedYunits, 
+          totalYunits: l.totalYunits,
+          progress: `${l.passedYunits}/${l.totalYunits}` 
+        })));
         setLessons(data.lessons || []);
         setCompletedCount(data.completedLessons || 0);
 

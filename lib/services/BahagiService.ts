@@ -42,61 +42,75 @@ export class BahagiService {
   }
 
   /**
-   * List all Bahagis for a teacher
+   * List all Bahagis for a teacher with efficient counting
    */
   static async listByTeacher(teacherId: string, className?: string) {
-    const where: Record<string, any> = { teacher_id: teacherId };
+    // Build WHERE clause
+    const conditions = ['b.teacher_id = $1'];
+    const params: any[] = [teacherId];
+    
     if (className) {
-      where.class_name = className;
+      conditions.push('b.class_name = $2');
+      params.push(className);
     }
 
-    const bahagis = await repositories.bahagi.findAll({ where, orderBy: 'created_at DESC' });
+    const whereClause = conditions.join(' AND ');
 
-    // Enrich with child counts - wrapped in try/catch to prevent failures
-    return Promise.all(
-      bahagis.map(async (bahagi) => {
-        let lessonCount = 0;
-        let assessmentCount = 0;
-        let totalXP = 0;
+    // Single efficient query with JOINs to get counts
+    const query = `
+      SELECT 
+        b.*,
+        COALESCE(COUNT(DISTINCT l.id), 0)::int as "lessonCount",
+        COALESCE(COUNT(DISTINCT ba.id), 0)::int as "assessmentCount",
+        0 as "totalXP"
+      FROM bahagi b
+      LEFT JOIN lesson l ON b.id = l.bahagi_id
+      LEFT JOIN bahagi_assessment ba ON b.id = ba.bahagi_id
+      WHERE ${whereClause}
+      GROUP BY b.id
+      ORDER BY b.created_at DESC
+    `;
 
-        try {
-          const yunits = await repositories.lesson.raw(
-            'SELECT COUNT(*) as count FROM lesson WHERE bahagi_id = $1',
-            [bahagi.id]
-          );
-          lessonCount = parseInt((yunits[0] as any)?.count || 0);
-        } catch (err) {
-          console.error(`Error counting lessons for bahagi ${bahagi.id}:`, err);
-        }
+    try {
+      const result = await repositories.bahagi.raw(query, params);
+      return result;
+    } catch (err) {
+      console.error('Error fetching bahagi with counts:', err);
+      // Fallback to basic query and count separately
+      const where: Record<string, any> = { teacher_id: teacherId };
+      if (className) {
+        where.class_name = className;
+      }
+      const bahagis = await repositories.bahagi.findAll({ where, orderBy: 'created_at DESC' });
+      
+      // Try to get counts for each bahagi (less efficient but works)
+      const bahagisWithCounts = await Promise.all(
+        bahagis.map(async (b) => {
+          try {
+            // Get lesson count
+            const lessonCountResult = await repositories.bahagi.raw(
+              'SELECT COUNT(*) as count FROM lesson WHERE bahagi_id = $1',
+              [b.id]
+            );
+            const lessonCount = parseInt(lessonCountResult[0]?.count || '0');
 
-        try {
-          const assessments = await repositories.assessment.raw(
-            'SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1',
-            [bahagi.id]
-          );
-          assessmentCount = parseInt((assessments[0] as any)?.count || 0);
-        } catch (err) {
-          console.error(`Error counting assessments for bahagi ${bahagi.id}:`, err);
-        }
+            // Get assessment count
+            const assessmentCountResult = await repositories.bahagi.raw(
+              'SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1',
+              [b.id]
+            );
+            const assessmentCount = parseInt(assessmentCountResult[0]?.count || '0');
 
-        try {
-          const rewards = await repositories.reward.raw(
-            'SELECT SUM(xp_earned) as total FROM student_rewards WHERE assessment_id IN (SELECT id FROM bahagi_assessment WHERE bahagi_id = $1)',
-            [bahagi.id]
-          );
-          totalXP = parseInt((rewards[0] as any)?.total || 0);
-        } catch (err) {
-          console.error(`Error counting rewards for bahagi ${bahagi.id}:`, err);
-        }
-
-        return {
-          ...bahagi,
-          lessonCount,
-          assessmentCount,
-          totalXP,
-        };
-      })
-    );
+            return { ...b, lessonCount, assessmentCount, totalXP: 0 };
+          } catch (countErr) {
+            console.error(`Error counting for bahagi ${b.id}:`, countErr);
+            return { ...b, lessonCount: 0, assessmentCount: 0, totalXP: 0 };
+          }
+        })
+      );
+      
+      return bahagisWithCounts;
+    }
   }
 
   /**

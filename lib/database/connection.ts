@@ -27,7 +27,8 @@ export function initializeConnectionPool(): Pool {
     ssl: connectionString?.includes('supabase') ? { rejectUnauthorized: false } : false,
     max: 20, // Maximum connection pool size
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000, // Increased to 10 seconds for complex queries
+    query_timeout: 15000, // Query timeout set to 15 seconds
   });
 
   connectionPool.on('error', (err) => {

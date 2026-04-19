@@ -39,6 +39,8 @@ export interface Lesson {
   subtitle?: string;
   discussion?: string;
   media_url?: string;
+  audio_url?: string;
+  lesson_order?: number;
   is_published: boolean;
   is_archived: boolean;
   created_at: Date;

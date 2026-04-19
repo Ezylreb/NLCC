@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 interface EditYunitFormProps {
   isOpen: boolean;
@@ -21,7 +21,20 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
   const [description, setDescription] = useState(yunit?.subtitle || '');
   const [discussion, setDiscussion] = useState(yunit?.discussion || '');
   const [mediaUrl, setMediaUrl] = useState(yunit?.media_url || '');
+  const [audioUrl, setAudioUrl] = useState(yunit?.audio_url || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // Update form fields when yunit changes
+  useEffect(() => {
+    if (yunit) {
+      setTitle(yunit.title || '');
+      setDescription(yunit.subtitle || '');
+      setDiscussion(yunit.discussion || '');
+      setMediaUrl(yunit.media_url || '');
+      setAudioUrl(yunit.audio_url || '');
+    }
+  }, [yunit]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,9 +46,10 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
     onSubmit({
       id: yunit.id,
       title,
-      description,
+      subtitle: description,
       discussion,
-      mediaUrl,
+      media_url: mediaUrl,
+      audio_url: audioUrl,
       isPublished: yunit.is_published
     });
   };
@@ -47,6 +61,17 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
     const reader = new FileReader();
     reader.onloadend = () => {
       setMediaUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAudioUrl(reader.result as string);
     };
     reader.readAsDataURL(file);
   };
@@ -142,6 +167,46 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
                 <div className="space-y-2">
                   <div className="text-4xl">📁</div>
                   <p className="text-sm text-slate-400 font-bold">Click to upload</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+              Audio Upload
+            </label>
+            <div
+              className="border-2 border-dashed border-slate-700 rounded-xl p-6 text-center cursor-pointer hover:border-brand-sky/50 transition-all"
+              onClick={() => audioInputRef.current?.click()}
+            >
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={handleAudioUpload}
+                className="hidden"
+              />
+              {audioUrl ? (
+                <div className="space-y-2">
+                  <div className="text-4xl">🎵</div>
+                  <p className="text-sm text-brand-sky font-bold">Audio selected</p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAudioUrl('');
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-400"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-4xl">🎤</div>
+                  <p className="text-sm text-slate-400 font-bold">Click to upload audio</p>
+                  <p className="text-xs text-slate-600">Supports: MP3, WAV, OGG</p>
                 </div>
               )}
             </div>
