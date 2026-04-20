@@ -1476,8 +1476,12 @@ export const ClassDetailPage: React.FC<ClassDetailPageProps> = ({
                         setEditingAssessment(null);
                     }}
                     onSuccess={() => {
+                        const bahagiId = Number(editingAssessment?.bahagi_id);
                         setShowEditAssessmentForm(false);
-                        // Refresh if needed
+                        setEditingAssessment(null);
+                        if (Number.isFinite(bahagiId) && bahagiId > 0) {
+                            fetchAssessmentsForBahagi(bahagiId);
+                        }
                     }}
                     userId={teacherId || ''}
                 />

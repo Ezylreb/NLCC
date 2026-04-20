@@ -1,21 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { query } from '@/lib/db';
 import { NextRequest, NextResponse } from "next/server";
-
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!url || !key) {
-    return null;
-  }
-  
-  return createClient(url, key);
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const timeframe = searchParams.get("timeframe") || "all";
     const studentId = request.headers.get("x-student-id");
 
     if (!studentId) {
@@ -25,58 +12,74 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
-    
-    if (!supabase) {
-      const mockLeaderboard = [
-        { rank: 1, name: 'Maria Santos', xp: 4850, badge: '🥇', id: 'mock-1' },
-        { rank: 2, name: 'Juan dela Cruz', xp: 4620, badge: '🥈', id: 'mock-2' },
-        { rank: 3, name: 'Anna Reyes', xp: 4395, badge: '🥉', id: 'mock-3' },
-      ];
-      return NextResponse.json({
-        success: true,
-        data: mockLeaderboard,
-        timeframe,
-      });
-    }
-    
-    let query = supabase
-      .from("users")
-      .select(
-        "id, full_name, avatar_url, activity_logs!inner(xp_earned, created_at)"
-      )
-      .eq("role", "student")
-      .order("xp_earned", { ascending: false });
+    const currentStudentResult = await query(
+      `SELECT COALESCE(
+          NULLIF(TRIM(c.name), ''),
+          NULLIF(TRIM(ec.class_name), ''),
+          NULLIF(TRIM(u.class_name), '')
+        ) AS grade_level
+       FROM users u
+       LEFT JOIN classes c ON c.id = u.class_id
+       LEFT JOIN (
+         SELECT ce.student_id, MAX(c2.name) AS class_name
+         FROM class_enrollments ce
+         LEFT JOIN classes c2 ON c2.id = ce.class_id
+         GROUP BY ce.student_id
+       ) ec ON ec.student_id = u.id
+       WHERE u.id = $1 AND (u.role = 'student' OR u.role = 'USER')
+       LIMIT 1`,
+      [studentId]
+    );
 
-    // Filter by timeframe
-    if (timeframe !== "all") {
-      const now = new Date();
-      let startDate = new Date();
+    const currentGradeLevel = currentStudentResult.rows[0]?.grade_level;
 
-      if (timeframe === "week") {
-        startDate.setDate(now.getDate() - 7);
-      } else if (timeframe === "month") {
-        startDate.setMonth(now.getMonth() - 1);
-      }
-
-      query = query.gte("activity_logs.created_at", startDate.toISOString());
-    }
-
-    const { data: leaderboardData, error } = await query.limit(50);
-
-    if (error) {
+    if (!currentGradeLevel) {
       return NextResponse.json(
-        { error: "Failed to fetch leaderboard" },
-        { status: 500 }
+        { error: "Current student's grade level was not found" },
+        { status: 404 }
       );
     }
 
-    // Transform data to include rankings and aggregated XP
-    const leaderboard = leaderboardData.map((student: any, index: number) => {
-      const totalXp = student.activity_logs.reduce(
-        (sum: number, log: any) => sum + (log.xp_earned || 0),
-        0
-      );
+    const leaderboardResult = await query(
+      `WITH student_scope AS (
+         SELECT
+           s.id,
+           s.teacher_id,
+           COALESCE(NULLIF(TRIM(CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, ''))), ''), NULLIF(TRIM(s.email), ''), 'Student') AS name,
+           COALESCE(
+             NULLIF(TRIM(c.name), ''),
+             NULLIF(TRIM(ec.class_name), ''),
+             NULLIF(TRIM(s.class_name), '')
+           ) AS grade_level
+         FROM users s
+         LEFT JOIN classes c ON c.id = s.class_id
+         LEFT JOIN (
+           SELECT ce.student_id, MAX(c2.name) AS class_name
+           FROM class_enrollments ce
+           LEFT JOIN classes c2 ON c2.id = ce.class_id
+           GROUP BY ce.student_id
+         ) ec ON ec.student_id = s.id
+         WHERE (s.role = 'student' OR s.role = 'USER')
+       )
+       SELECT
+         ss.id,
+         ss.name,
+         COALESCE(COUNT(l.id), 0) * 10 AS total_xp,
+         ss.grade_level
+       FROM student_scope ss
+       LEFT JOIN bahagi b
+         ON b.teacher_id = ss.teacher_id
+        AND b.is_open = true
+        AND b.class_name = ss.grade_level
+       LEFT JOIN lesson l ON l.bahagi_id = b.id
+       WHERE ss.grade_level = $1
+       GROUP BY ss.id, ss.name, ss.grade_level
+       ORDER BY total_xp DESC, ss.name ASC`,
+      [currentGradeLevel]
+    );
+
+    const leaderboard = leaderboardResult.rows.map((student: any, index: number) => {
+      const totalXp = Number(student.total_xp) || 0;
 
       let badge = "";
       if (index === 0) badge = "🥇";
@@ -86,10 +89,9 @@ export async function GET(request: NextRequest) {
       return {
         rank: index + 1,
         id: student.id,
-        name: student.full_name || "Student",
+        name: student.name || "Student",
         xp: totalXp,
         badge,
-        avatarUrl: student.avatar_url,
         isCurrentStudent: student.id === studentId,
       };
     });
@@ -97,7 +99,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: leaderboard,
-      timeframe,
+      gradeLevel: currentGradeLevel,
     });
   } catch (error) {
     console.error("Leaderboard error:", error);

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
+import { useQuizAudio } from './useQuizAudio';
 
 interface Question {
   id?: string;
@@ -30,6 +31,8 @@ interface AssessmentScreenProps {
   onComplete: (result: any) => void;
   onBack: () => void;
 }
+
+const assessmentCache = new Map<string, Assessment>();
 
 export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   studentId,
@@ -62,12 +65,23 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   // Scramble word state
   const [scramblePool, setScramblePool] = useState<string[]>([]);
   const [scrambleSelected, setScrambleSelected] = useState<string[]>([]);
+  const {
+    ensureBackgroundPlayback,
+    playCorrectSound,
+    playWrongSound,
+    playCompletionSound,
+    playLoseSound,
+    registerQuestionAudio,
+  } = useQuizAudio();
+
+  const hasPlayedLoseSoundRef = useRef(false);
 
   const isAudioQuestion = (type: string) =>
     type === 'audio' || type === 'media-audio';
 
   const startRecording = useCallback(async () => {
     try {
+      ensureBackgroundPlayback();
       setMicError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -96,7 +110,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     } catch {
       setMicError('Hindi ma-access ang mikropono. Pakisuri ang pahintulot.');
     }
-  }, []);
+  }, [ensureBackgroundPlayback]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -154,12 +168,27 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
 
   useEffect(() => {
     const fetchAssessment = async () => {
+      const cacheKey = String(yunitId);
+      const cachedAssessment = assessmentCache.get(cacheKey);
+
+      if (cachedAssessment) {
+        setAssessment(cachedAssessment);
+        setAnswers(new Array(cachedAssessment.questions?.length || 0).fill(null));
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
-        const response = await apiClient.assessment.fetch({ yunit_id: Number(yunitId) });
+        const response = await apiClient.assessment.fetch({
+          yunit_id: Number(yunitId),
+          student_view: true,
+          first_only: true,
+        });
         
         if (response.data?.assessments?.length > 0) {
           const assessmentData = response.data.assessments[0];
+          assessmentCache.set(cacheKey, assessmentData);
           setAssessment(assessmentData);
           setAnswers(new Array(assessmentData.questions?.length || 0).fill(null));
         } else if (response.error) {
@@ -174,6 +203,17 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
 
     fetchAssessment();
   }, [studentId, yunitId]);
+
+  useEffect(() => {
+    if (lives === 0 && !hasPlayedLoseSoundRef.current) {
+      playLoseSound();
+      hasPlayedLoseSoundRef.current = true;
+    }
+
+    if (lives > 0) {
+      hasPlayedLoseSoundRef.current = false;
+    }
+  }, [lives, playLoseSound]);
 
   if (isLoading) {
     return (
@@ -204,10 +244,12 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   const totalQuestions = assessment.questions.length;
 
   const handleAnswerSelect = (answer: any) => {
+    ensureBackgroundPlayback();
     setSelectedAnswer(answer);
   };
 
   const handleSubmitAnswer = () => {
+    ensureBackgroundPlayback();
     if (selectedAnswer === null && selectedAnswer !== 0) {
       alert('Please select an answer');
       return;
@@ -217,6 +259,12 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     const correct = checkAnswer(currentQuestion, selectedAnswer);
     setIsCorrect(correct);
     setShowResult(true);
+
+    if (correct) {
+      playCorrectSound();
+    } else {
+      playWrongSound();
+    }
 
     // Update answers
     const newAnswers = [...answers];
@@ -235,6 +283,8 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   const checkAnswer = (question: Question, answer: any): boolean => {
     if (question.type === 'multiple-choice') {
       return answer === question.correctAnswer;
+    } else if (question.type === 'short-answer') {
+      return String(answer ?? '').trim().length > 0;
     } else if (question.type === 'matching') {
       return question.pairs?.every((pair: any, idx: number) => answer?.[idx] === pair.correctMatch) ?? false;
     } else if (question.type === 'scramble' || question.type === 'scramble-word') {
@@ -284,6 +334,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       });
 
       if (result.success) {
+        playCompletionSound();
         onComplete(result);
       } else {
         throw new Error(result.error || 'Failed to submit assessment');
@@ -374,7 +425,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${((currentQuestionIdx + 1) / totalQuestions) * 100}%` }}
-            className="h-full bg-gradient-to-r from-brand-purple to-brand-sky"
+            className="h-full bg-linear-to-r from-brand-purple to-brand-sky"
           />
         </div>
       </div>
@@ -409,7 +460,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                     className="max-w-full max-h-64 rounded-lg"
                   />
                 ) : (
-                  <audio controls className="w-full">
+                  <audio ref={registerQuestionAudio} controls className="w-full">
                     <source
                       src={currentQuestion.questionMedia.preview}
                       type={currentQuestion.questionMedia.type}
@@ -481,9 +532,9 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
               {(currentQuestion.type === 'scramble' || currentQuestion.type === 'scramble-word') && (
                 <div className="space-y-5">
                   {/* Selected words (answer area) */}
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-[60px]">
+                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-15">
                     <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-wider">Iyong sagot:</p>
-                    <div className="flex flex-wrap gap-2 min-h-[40px]">
+                    <div className="flex flex-wrap gap-2 min-h-10">
                       {scrambleSelected.length === 0 && (
                         <p className="text-slate-600 text-sm italic">Pindutin ang mga salita sa ibaba para ayusin...</p>
                       )}
@@ -699,6 +750,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
               if (!showResult) {
                 handleSubmitAnswer();
               } else {
+                ensureBackgroundPlayback();
                 handleContinue();
               }
             }}

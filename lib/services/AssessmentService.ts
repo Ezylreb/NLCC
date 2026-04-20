@@ -22,7 +22,7 @@ export class AssessmentService {
     return typeMap[type || 'multiple-choice'] || 'multiple-choice';
   }
 
-  private static transformAssessment(row: Record<string, any>): any {
+  private static transformAssessment(row: Record<string, any>, options?: { studentView?: boolean }): any {
     const content = typeof row.content === 'string'
       ? (() => {
           try {
@@ -34,7 +34,7 @@ export class AssessmentService {
       : row.content;
 
     const questions = Array.isArray(content?.questions)
-      ? content.questions.map((question: any, questionIndex: number) => this.normalizeQuestionForClient(question, questionIndex))
+      ? content.questions.map((question: any, questionIndex: number) => this.normalizeQuestionForClient(question, questionIndex, options))
       : [];
     const computedPoints = content?.totalPoints
       ?? row.points
@@ -48,8 +48,49 @@ export class AssessmentService {
       instructions: content?.instructions || row.description || '',
       description: content?.instructions || row.description || '',
       questions,
+      correct_answers: questions[0] ? this.buildCorrectAnswers(questions[0]) : undefined,
       points: computedPoints,
       reward: computedPoints,
+    };
+  }
+
+  private static buildCorrectAnswers(question: any) {
+    const normalizedType = this.normalizeType(question?.type || question?.question_type);
+
+    if (normalizedType === 'short-answer') {
+      return {
+        answer: typeof question?.correctAnswer === 'string'
+          ? question.correctAnswer.trim()
+          : typeof question?.correct_answer === 'string'
+            ? question.correct_answer.trim()
+            : '',
+      };
+    }
+
+    if (normalizedType === 'checkbox') {
+      return {
+        answers: Array.isArray(question?.correctAnswer)
+          ? question.correctAnswer
+          : Array.isArray(question?.correct_answer)
+            ? question.correct_answer
+            : [],
+      };
+    }
+
+    if (normalizedType === 'matching') {
+      return {
+        pairs: question?.correctAnswer ?? question?.correct_answer ?? {},
+      };
+    }
+
+    if (normalizedType === 'scramble-word') {
+      return {
+        answer: question?.correctAnswer ?? question?.correct_answer ?? [],
+      };
+    }
+
+    return {
+      answer: question?.correctAnswer ?? question?.correct_answer ?? 0,
     };
   }
 
@@ -62,30 +103,70 @@ export class AssessmentService {
     return typeMap[type || ''] || type || 'multiple-choice';
   }
 
-  private static normalizeQuestionForClient(question: any, questionIndex: number): any {
+  private static normalizeQuestionForClient(question: any, questionIndex: number, options?: { studentView?: boolean }): any {
+    const normalizedType = this.normalizeQuestionTypeForClient(question?.question_type ?? question?.type);
     const normalizedOptions = Array.isArray(question?.options)
-      ? question.options.map((option: any, optionIndex: number) => ({
-          ...option,
-          option_text: option?.option_text ?? option?.text ?? '',
-          text: option?.text ?? option?.option_text ?? '',
-          is_correct: option?.is_correct ?? optionIndex === Number(question?.correctAnswer ?? -1),
-          option_order: option?.option_order ?? optionIndex,
-        }))
+      ? question.options.map((option: any, optionIndex: number) => {
+          const baseOption = {
+            option_text: option?.option_text ?? option?.text ?? '',
+            text: option?.text ?? option?.option_text ?? '',
+            option_order: option?.option_order ?? optionIndex,
+          };
+
+          if (options?.studentView) {
+            return baseOption;
+          }
+
+          return {
+            ...option,
+            ...baseOption,
+            is_correct: option?.is_correct ?? optionIndex === Number(question?.correctAnswer ?? -1),
+          };
+        })
       : [];
 
     const explicitCorrect = normalizedOptions.find((option: any) => option.is_correct);
+    let normalizedCorrectAnswer: any;
 
-    return {
+    if (normalizedType === 'short-answer') {
+      normalizedCorrectAnswer = typeof question?.correctAnswer === 'string'
+        ? question.correctAnswer
+        : typeof question?.correct_answer === 'string'
+          ? question.correct_answer
+          : '';
+    } else if (normalizedType === 'checkbox') {
+      normalizedCorrectAnswer = Array.isArray(question?.correctAnswer)
+        ? question.correctAnswer
+        : Array.isArray(question?.correct_answer)
+          ? question.correct_answer
+          : normalizedOptions
+              .map((option: any, optionIndex: number) => option.is_correct ? optionIndex : -1)
+              .filter((optionIndex: number) => optionIndex >= 0);
+    } else if (normalizedType === 'multiple-choice') {
+      normalizedCorrectAnswer = typeof question?.correctAnswer === 'number'
+        ? question.correctAnswer
+        : normalizedOptions.findIndex((option: any) => option.is_correct);
+    } else {
+      normalizedCorrectAnswer = question?.correctAnswer ?? question?.correct_answer ?? '';
+    }
+
+    const normalizedQuestion = {
       ...question,
       question_text: question?.question_text ?? question?.question ?? '',
       question: question?.question ?? question?.question_text ?? '',
-      question_type: this.normalizeQuestionTypeForClient(question?.question_type ?? question?.type),
-      type: question?.type ?? this.normalizeQuestionTypeForClient(question?.question_type),
+      question_type: normalizedType,
+      type: question?.type ?? normalizedType,
       question_order: question?.question_order ?? questionIndex,
       correct_answer: question?.correct_answer ?? question?.correctAnswer ?? (explicitCorrect?.option_text || ''),
-      correctAnswer: question?.correctAnswer ?? normalizedOptions.findIndex((option: any) => option.is_correct),
+      correctAnswer: normalizedCorrectAnswer,
       options: normalizedOptions,
     };
+
+    if (options?.studentView) {
+      delete normalizedQuestion.correct_answer;
+    }
+
+    return normalizedQuestion;
   }
 
   private static normalizeQuestionForStorage(question: any, questionIndex: number): any {
@@ -101,6 +182,9 @@ export class AssessmentService {
       : [];
 
     const correctOptionIndex = normalizedOptions.findIndex((option: any) => option.is_correct);
+    const normalizedShortAnswer = normalizedType === 'short-answer'
+      ? String(question?.correctAnswer ?? question?.correct_answer ?? '').trim()
+      : undefined;
 
     return {
       ...question,
@@ -110,8 +194,12 @@ export class AssessmentService {
       question_text: question?.question_text ?? question?.question ?? '',
       question_order: question?.question_order ?? questionIndex,
       options: normalizedOptions,
-      correctAnswer: question?.correctAnswer ?? (correctOptionIndex >= 0 ? correctOptionIndex : undefined),
-      correct_answer: question?.correct_answer ?? question?.correctAnswer ?? '',
+      correctAnswer: normalizedType === 'short-answer'
+        ? normalizedShortAnswer
+        : question?.correctAnswer ?? (correctOptionIndex >= 0 ? correctOptionIndex : undefined),
+      correct_answer: normalizedType === 'short-answer'
+        ? normalizedShortAnswer
+        : question?.correct_answer ?? question?.correctAnswer ?? '',
     };
   }
 
@@ -228,7 +316,7 @@ export class AssessmentService {
   /**
    * List assessments for a Bahagi
    */
-  static async listByBahagi(bahagiId: string | number) {
+  static async listByBahagi(bahagiId: string | number, options?: { studentView?: boolean }) {
     // Convert to number if string (bahagi_id is INTEGER in DB)
     const bahagiIdNum = typeof bahagiId === 'string' ? parseInt(bahagiId, 10) : bahagiId;
     const result = await repositories.assessment.raw(`
@@ -238,13 +326,13 @@ export class AssessmentService {
       ORDER BY assessment_order ASC, created_at DESC
     `, [bahagiIdNum]);
 
-    return result.map((row) => this.transformAssessment(row));
+    return result.map((row) => this.transformAssessment(row, options));
   }
 
   /**
    * List assessments for a Yunit (Lesson)
    */
-  static async listByYunit(yunitId: string) {
+  static async listByYunit(yunitId: string, options?: { studentView?: boolean; firstOnly?: boolean }) {
     const result = await repositories.assessment.raw(`
       SELECT id, bahagi_id, lesson_id, title, type, content, assessment_order, is_published, is_archived, created_at, updated_at
       FROM bahagi_assessment
@@ -252,7 +340,8 @@ export class AssessmentService {
       ORDER BY assessment_order ASC, created_at DESC
     `, [yunitId]);
 
-    return result.map((row) => this.transformAssessment(row));
+    const rows = options?.firstOnly ? result.slice(0, 1) : result;
+    return rows.map((row) => this.transformAssessment(row, options));
   }
 
   /**
@@ -319,12 +408,11 @@ export class AssessmentService {
       }
 
       case 'short-answer': {
-        const normalized = String(studentAnswer).toLowerCase().trim();
-        const correctNormalized = String(assessment.correct_answers?.answer).toLowerCase().trim();
-        isCorrect = normalized === correctNormalized;
+        const normalized = String(studentAnswer ?? '').trim();
+        isCorrect = normalized.length > 0;
         pointsEarned = isCorrect ? assessment.points : 0;
-        correctAnswer = assessment.correct_answers?.answer;
-        feedback = isCorrect ? 'Correct!' : `Expected: ${correctAnswer}`;
+        correctAnswer = assessment.correct_answers?.answer ?? 'Any non-empty answer';
+        feedback = isCorrect ? 'Correct!' : 'Please type an answer to continue.';
         break;
       }
 

@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
     const bahagiId = searchParams.get('bahagiId');
     const yunitId = searchParams.get('yunitId');
     const published = searchParams.get('published');
+    const studentView = searchParams.get('studentView') === 'true';
+    const firstOnly = searchParams.get('firstOnly') === 'true';
 
     if (!bahagiId && !yunitId) {
       return NextResponse.json(
@@ -58,9 +60,9 @@ export async function GET(request: NextRequest) {
 
     let assessments: any[];
     if (yunitId) {
-      assessments = await AssessmentService.listByYunit(yunitId);
+      assessments = await AssessmentService.listByYunit(yunitId, { studentView, firstOnly });
     } else {
-      assessments = await AssessmentService.listByBahagi(bahagiId!);
+      assessments = await AssessmentService.listByBahagi(bahagiId!, { studentView });
     }
 
     // Filter by status
@@ -89,6 +91,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const minimal = searchParams.get('minimal') === 'true';
 
     if (!id) {
       return NextResponse.json(
@@ -113,6 +116,16 @@ export async function PATCH(request: NextRequest) {
         { error: 'Assessment not found' },
         { status: 404 }
       );
+    }
+
+    if (minimal) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          id: (assessment as any).id,
+          title: (assessment as any).title,
+        },
+      });
     }
 
     return NextResponse.json({ success: true, data: assessment });

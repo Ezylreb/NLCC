@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useQuizAudio } from './useQuizAudio';
 
 interface QuizQuestion {
   id: string;
@@ -25,6 +26,8 @@ interface AdaptiveQuizScreenProps {
   onComplete: (result: any) => void;
   onBack: () => void;
 }
+
+const adaptiveQuizCache = new Map<string, QuizQuestion[]>();
 
 // Extract display text from an option that may be a string or {text, media} object
 const optionText = (opt: any): string => {
@@ -75,12 +78,24 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
   // Scramble word state
   const [scramblePool, setScramblePool] = useState<string[]>([]); // available words (shuffled)
   const [scrambleSelected, setScrambleSelected] = useState<string[]>([]); // user's arranged order
+  const {
+    ensureBackgroundPlayback,
+    playCorrectSound,
+    playWrongSound,
+    playCompletionSound,
+    playLoseSound,
+    registerQuestionAudio,
+  } = useQuizAudio();
+
+  const hasPlayedLoseSoundRef = useRef(false);
+  const hasPlayedCompletionSoundRef = useRef(false);
 
   const isAudioQuestion = (type: string) =>
     type === 'audio' || type === 'media-audio';
 
   const startRecording = useCallback(async () => {
     try {
+      ensureBackgroundPlayback();
       setMicError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -109,7 +124,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
     } catch {
       setMicError('Hindi ma-access ang mikropono. Pakisuri ang pahintulot.');
     }
-  }, []);
+  }, [ensureBackgroundPlayback]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -169,12 +184,22 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
   // Fetch questions
   useEffect(() => {
     const fetchQuiz = async () => {
+      const cacheKey = `${studentId}:${bahagiId}`;
+      const cachedQuestions = adaptiveQuizCache.get(cacheKey);
+
+      if (cachedQuestions?.length) {
+        setQuestions(cachedQuestions);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         const res = await fetch(`/api/student/adaptive-quiz?bahagiId=${bahagiId}&studentId=${studentId}`);
         const data = await res.json();
 
         if (data.success && data.questions?.length > 0) {
+          adaptiveQuizCache.set(cacheKey, data.questions);
           setQuestions(data.questions);
         } else {
           setError('Walang available na quiz para sa bahaging ito.');
@@ -187,6 +212,28 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
     };
     fetchQuiz();
   }, [bahagiId, studentId]);
+
+  useEffect(() => {
+    if (lives === 0 && !quizComplete && !hasPlayedLoseSoundRef.current) {
+      playLoseSound();
+      hasPlayedLoseSoundRef.current = true;
+    }
+
+    if (lives > 0) {
+      hasPlayedLoseSoundRef.current = false;
+    }
+  }, [lives, playLoseSound, quizComplete]);
+
+  useEffect(() => {
+    if (quizComplete && !hasPlayedCompletionSoundRef.current) {
+      playCompletionSound();
+      hasPlayedCompletionSoundRef.current = true;
+    }
+
+    if (!quizComplete) {
+      hasPlayedCompletionSoundRef.current = false;
+    }
+  }, [playCompletionSound, quizComplete]);
 
   const currentQuestion = questions[currentIdx];
   const totalQuestions = questions.length;
@@ -208,7 +255,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
       }
       return false;
     } else if (type === 'short-answer') {
-      return String(answer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
+      return String(answer ?? '').trim().length > 0;
     } else if (type === 'matching') {
       return question.pairs?.every((pair: any, idx: number) =>
         answer?.[idx]?.toLowerCase() === pair.correctMatch?.toLowerCase()
@@ -240,8 +287,8 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
     if (type === 'multiple-choice' && question.options && typeof correct === 'number') {
       const correctText = question.options[correct];
       if (correctText) return `Hint: Nagsisimula sa "${correctText.charAt(0).toUpperCase()}..."`;
-    } else if (type === 'short-answer' && typeof correct === 'string') {
-      return `Hint: Nagsisimula sa "${correct.charAt(0).toUpperCase()}${correct.length > 2 ? correct.charAt(1) : ''}..."`;
+    } else if (type === 'short-answer') {
+      return 'Hint: Maglagay ng sagot sa kahon upang maituring na tama.';
     } else if ((type === 'scramble' || type === 'scramble-word') && (Array.isArray(correct) || question.scrambleWords)) {
       const words = Array.isArray(correct) ? correct : question.scrambleWords?.map((w: any) => typeof w === 'string' ? w : w.text) || [];
       if (words.length > 0) return `Hint: Ang unang salita ay "${words[0]}"`;
@@ -253,12 +300,19 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
   };
 
   const handleSubmitAnswer = () => {
+    ensureBackgroundPlayback();
     if (selectedAnswer === null && selectedAnswer !== 0) return;
     if (!currentQuestion) return;
 
     const correct = checkAnswer(currentQuestion, selectedAnswer);
     setIsCorrect(correct);
     setShowResult(true);
+
+    if (correct) {
+      playCorrectSound();
+    } else {
+      playWrongSound();
+    }
 
     if (correct) {
       setCorrectCount(prev => prev + 1);
@@ -558,7 +612,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                     className="max-w-full max-h-64 rounded-xl border border-slate-700"
                   />
                 ) : currentQuestion.questionMedia.type?.startsWith('audio') ? (
-                  <audio controls className="w-full">
+                  <audio ref={registerQuestionAudio} controls className="w-full">
                     <source src={currentQuestion.questionMedia.preview || currentQuestion.questionMedia.url} type={currentQuestion.questionMedia.type} />
                   </audio>
                 ) : null}
@@ -573,7 +627,11 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                   {currentQuestion.options.map((option: any, idx: number) => (
                     <motion.button
                       key={idx}
-                      onClick={() => !showResult && setSelectedAnswer(idx)}
+                      onClick={() => {
+                        if (showResult) return;
+                        ensureBackgroundPlayback();
+                        setSelectedAnswer(idx);
+                      }}
                       whileHover={!showResult ? { scale: 1.01 } : {}}
                       whileTap={!showResult ? { scale: 0.99 } : {}}
                       className={`w-full p-4 rounded-xl text-left font-semibold transition-all border-2 ${
@@ -613,7 +671,10 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                 <input
                   type="text"
                   value={selectedAnswer || ''}
-                  onChange={(e) => setSelectedAnswer(e.target.value)}
+                  onChange={(e) => {
+                    ensureBackgroundPlayback();
+                    setSelectedAnswer(e.target.value);
+                  }}
                   placeholder="I-type ang iyong sagot..."
                   disabled={showResult}
                   className="w-full p-4 bg-slate-800 border-2 border-slate-700 text-white rounded-xl font-semibold text-lg focus:border-purple-500 outline-none transition-colors"
@@ -624,9 +685,9 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
               {(currentQuestion.type === 'scramble' || currentQuestion.type === 'scramble-word') && (
                 <div className="space-y-5">
                   {/* Selected words (answer area) */}
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-[60px]">
+                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-15">
                     <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-wider">Iyong sagot:</p>
-                    <div className="flex flex-wrap gap-2 min-h-[40px]">
+                    <div className="flex flex-wrap gap-2 min-h-10">
                       {scrambleSelected.length === 0 && (
                         <p className="text-slate-600 text-sm italic">Pindutin ang mga salita sa ibaba para ayusin...</p>
                       )}
@@ -638,6 +699,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                           exit={{ scale: 0.8, opacity: 0 }}
                           onClick={() => {
                             if (showResult) return;
+                            ensureBackgroundPlayback();
                             // Move word back to pool
                             setScrambleSelected(prev => prev.filter((_, i) => i !== idx));
                             setScramblePool(prev => [...prev, word]);
@@ -671,6 +733,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                         whileTap={{ scale: 0.95 }}
                         onClick={() => {
                           if (showResult) return;
+                          ensureBackgroundPlayback();
                           // Move word to selected
                           const newSelected = [...scrambleSelected, word];
                           setScramblePool(prev => prev.filter((_, i) => i !== idx));
@@ -703,6 +766,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                       <select
                         value={selectedAnswer?.[idx] || ''}
                         onChange={(e) => {
+                          ensureBackgroundPlayback();
                           const newAnswer = [...(selectedAnswer || Array(currentQuestion.pairs!.length).fill(''))];
                           newAnswer[idx] = e.target.value;
                           setSelectedAnswer(newAnswer);
@@ -730,6 +794,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                         key={idx}
                         onClick={() => {
                           if (showResult) return;
+                          ensureBackgroundPlayback();
                           const current = Array.isArray(selectedAnswer) ? [...selectedAnswer] : [];
                           if (current.includes(idx)) {
                             setSelectedAnswer(current.filter(i => i !== idx));

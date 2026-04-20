@@ -16,9 +16,13 @@ interface ShopItem {
     image_url?: string;
 }
 
-export const StudentShop: React.FC = () => {
+interface StudentShopProps {
+    userId: string;
+}
+
+export const StudentShop: React.FC<StudentShopProps> = ({ userId }) => {
     const [items, setItems] = useState<ShopItem[]>([]);
-    const [coins, setCoins] = useState(340);
+    const [coins, setCoins] = useState(0);
     const [activeCategory, setActiveCategory] = useState<'all' | 'avatar' | 'power-up' | 'cosmetic' | 'background'>('all');
     const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -34,14 +38,95 @@ export const StudentShop: React.FC = () => {
         }
     };
 
+    const getMockItems = (): ShopItem[] => [
+        {
+            id: '1',
+            name: 'Cool Cap',
+            description: 'Astig na sumbrero para sa iyong avatar',
+            price: 50,
+            category: 'avatar',
+            icon: '🧢',
+            rarity: 'common',
+            owned: false,
+        },
+        {
+            id: '2',
+            name: 'Energy Boost',
+            description: 'Dagdag lakas para sa mas mabilis na pag-aaral',
+            price: 100,
+            category: 'power-up',
+            icon: '⚡',
+            rarity: 'rare',
+            owned: false,
+        },
+        {
+            id: '3',
+            name: 'Dragon Wings',
+            description: 'Mga pakpak ng dragon para sa iyong avatar',
+            price: 300,
+            category: 'cosmetic',
+            icon: '🐉',
+            rarity: 'epic',
+            owned: false,
+        },
+        {
+            id: '4',
+            name: 'Golden Crown',
+            description: 'Kampanya para sa mga kampeon sa paaralan',
+            price: 500,
+            category: 'background',
+            icon: '👑',
+            rarity: 'legendary',
+            owned: false,
+        },
+        {
+            id: '5',
+            name: 'Gamer Outfit',
+            description: 'Maganda at cool na damit para sa gamers',
+            price: 200,
+            category: 'avatar',
+            icon: '🕹️',
+            rarity: 'uncommon',
+            owned: false,
+        },
+        {
+            id: '6',
+            name: 'Pixel Background',
+            description: 'Retro na pixel art background',
+            price: 80,
+            category: 'background',
+            icon: '🎮',
+            rarity: 'common',
+            owned: false,
+        },
+        {
+            id: '7',
+            name: 'Rainbow Aura',
+            description: 'Mystical na rainbow effect',
+            price: 350,
+            category: 'cosmetic',
+            icon: '🌈',
+            rarity: 'epic',
+            owned: false,
+        },
+        {
+            id: '8',
+            name: 'XP Boost +25%',
+            description: '1 oras ng 25% XP multiplier',
+            price: 120,
+            category: 'power-up',
+            icon: '⚡',
+            rarity: 'uncommon',
+            owned: false,
+        },
+    ];
+
     useEffect(() => {
-        // Fetch shop items and coins
         const fetchShopData = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
-                
-                // Fetch items
+
                 const itemsResult = await apiClient.student.getShopItems();
                 if (itemsResult.success && itemsResult.data) {
                     const enrichedItems = itemsResult.data.map((item: any) => ({
@@ -53,14 +138,22 @@ export const StudentShop: React.FC = () => {
                     setError('Failed to load shop items');
                     setItems(getMockItems());
                 }
-                
-                // Fetch coins/stats
-                const statsResult = await apiClient.student.getStats();
-                if (statsResult.success && statsResult.data) {
-                    setCoins(statsResult.data.coins || 340);
+
+                const statsResponse = await fetch('/api/student/stats', {
+                    headers: {
+                        'x-student-id': userId,
+                    },
+                    cache: 'no-store',
+                });
+
+                if (statsResponse.ok) {
+                    const statsResult = await statsResponse.json();
+                    if (statsResult.success && statsResult.data) {
+                        setCoins(Number(statsResult.data.coins) || 0);
+                    }
                 }
-            } catch (error) {
-                console.error('Failed to fetch shop data:', error);
+            } catch (fetchError) {
+                console.error('Failed to fetch shop data:', fetchError);
                 setError('Failed to load shop. Showing mock data.');
                 setItems(getMockItems());
             } finally {
@@ -69,8 +162,9 @@ export const StudentShop: React.FC = () => {
         };
 
         fetchShopData();
+    }, [userId]);
 
-        // Add escape key handler to close modal
+    useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && selectedItem) {
                 setSelectedItem(null);
@@ -78,96 +172,11 @@ export const StudentShop: React.FC = () => {
         };
 
         window.addEventListener('keydown', handleEscape);
-        
-        // Cleanup: close modal when component unmounts or tab changes
+
         return () => {
             window.removeEventListener('keydown', handleEscape);
-            setSelectedItem(null);
         };
-    }, []);
-
-    const getMockItems = (): ShopItem[] => [
-        {
-            id: '1',
-            name: 'Purple Hair',
-            description: 'Gawing purpre ang buhok mo',
-            price: 150,
-            category: 'avatar',
-            icon: '💜',
-            rarity: 'common',
-            owned: false
-        },
-        {
-            id: '2',
-            name: 'Cool Sunglasses',
-            description: 'Magiging mas cool sa mga sunglasses',
-            price: 100,
-            category: 'cosmetic',
-            icon: '😎',
-            rarity: 'common',
-            owned: false
-        },
-        {
-            id: '3',
-            name: 'Dragon Wings',
-            description: 'Mga pakpak ng dragon para sa iyong avatar',
-            price: 300,
-            category: 'cosmetic',
-            icon: '🐉',
-            rarity: 'epic',
-            owned: false
-        },
-        {
-            id: '4',
-            name: 'Golden Crown',
-            description: 'Kampanya para sa mga kampeon sa paaralan',
-            price: 500,
-            category: 'background',
-            icon: '👑',
-            rarity: 'legendary',
-            owned: false
-        },
-        {
-            id: '5',
-            name: 'Gamer Outfit',
-            description: 'Maganda at cool na damit para sa gamers',
-            price: 200,
-            category: 'avatar',
-            icon: '🕹️',
-            rarity: 'uncommon',
-            owned: false
-        },
-        {
-            id: '6',
-            name: 'Pixel Background',
-            description: 'Retro na pixel art background',
-            price: 80,
-            category: 'background',
-            icon: '🎮',
-            rarity: 'common',
-            owned: false
-        },
-        {
-            id: '7',
-            name: 'Rainbow Aura',
-            description: 'Mystical na rainbow effect',
-            price: 350,
-            category: 'cosmetic',
-            icon: '🌈',
-            rarity: 'epic',
-            owned: false
-        },
-        {
-            id: '8',
-            name: 'XP Boost +25%',
-            description: '1 oras ng 25% XP multiplier',
-            price: 120,
-            category: 'power-up',
-            icon: '⚡',
-            rarity: 'uncommon',
-            owned: false
-        }
-    ];
+    }, [selectedItem]);
 
     const getRarityColor = (rarity: string) => {
         switch (rarity) {
@@ -272,11 +281,11 @@ export const StudentShop: React.FC = () => {
                                 className={`cursor-pointer p-4 rounded-xl border-2 transition-all ${
                                     item.owned
                                         ? 'bg-green-500/10 border-green-500/40'
-                                        : 'bg-gradient-to-b from-white/10 to-white/5 border-white/20 hover:border-brand-purple/50'
+                                        : 'bg-linear-to-b from-white/10 to-white/5 border-white/20 hover:border-brand-purple/50'
                                 }`}
                             >
                                 {/* Rarity Border */}
-                                <div className={`absolute inset-0 rounded-xl bg-gradient-to-b ${getRarityColor(item.rarity)} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                                    <div className={`absolute inset-0 rounded-xl bg-linear-to-b ${getRarityColor(item.rarity)} opacity-0 group-hover:opacity-10 transition-opacity`} />
 
                                 {/* Item Icon */}
                                 <div className="text-5xl mb-3 text-center">{item.icon}</div>
@@ -287,7 +296,7 @@ export const StudentShop: React.FC = () => {
 
                                 {/* Rarity Badge */}
                                 <div className="flex justify-center mb-3">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded bg-gradient-to-r ${getRarityColor(item.rarity)} text-white`}>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded bg-linear-to-r ${getRarityColor(item.rarity)} text-white`}>
                                         {getRarityLabel(item.rarity)}
                                     </span>
                                 </div>

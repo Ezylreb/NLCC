@@ -54,14 +54,20 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
   const [isLoading, setIsLoading] = useState(!cachedData); // Don't show loading if we have cached data
   const [error, setError] = useState<string | null>(null);
   const [totalXp, setTotalXp] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
+  const getLessonProgressPercentage = (lesson: Lesson) => {
+    const totalItems = (lesson.totalYunits || 0) + (lesson.totalAssessments || 0);
+    const completedItems = (lesson.passedYunits || 0) + (lesson.completedAssessments || 0);
+    return totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  };
+
+  const completedCount = lessons.filter((lesson) => getLessonProgressPercentage(lesson) === 100).length;
+  const inProgressCount = lessons.filter((lesson) => lesson.isUnlocked && getLessonProgressPercentage(lesson) < 100).length;
 
   // Use cached data immediately if available
   useEffect(() => {
     if (cachedData) {
       const data = cachedData.data || cachedData;
       setLessons(data.lessons || []);
-      setCompletedCount(data.completedLessons || 0);
       
       const total = (data.lessons || []).reduce((sum: number, lesson: any) => {
         return sum + (lesson.xpReward * lesson.totalYunits);
@@ -92,7 +98,6 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
         // Handle both response formats (wrapped in data or direct)
         const data = result.data || result;
         setLessons(data.lessons || []);
-        setCompletedCount(data.completedLessons || 0);
 
         // Calculate total XP available
         const total = (data.lessons || []).reduce((sum: number, lesson: any) => {
@@ -258,7 +263,7 @@ const TeacherLessonsViewComponent: React.FC<TeacherLessonsViewProps> = ({
           {[
             { label: 'Total Lessons', value: lessons.length, icon: '📖' },
             { label: 'Completed', value: completedCount, icon: '✅' },
-            { label: 'In Progress', value: lessons.length - completedCount, icon: '⏳' },
+            { label: 'In Progress', value: inProgressCount, icon: '⏳' },
             { label: 'Available XP', value: totalXp, icon: '⚡' }
           ].map((stat, idx) => (
             <motion.div

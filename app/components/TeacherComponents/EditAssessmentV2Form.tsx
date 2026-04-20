@@ -171,6 +171,54 @@ const readFileAsPreview = (file: File, callback: (preview: MediaPreview) => void
     reader.readAsDataURL(file);
 };
 
+const serializeMediaPreview = (media: MediaPreview | null) => {
+    if (!media) return null;
+
+    return {
+        name: media.name,
+        type: media.type,
+        preview: media.preview,
+        isExisting: media.isExisting,
+    };
+};
+
+const serializeQuestionForSave = (question: EditorQuestion) => {
+    const baseQuestion: any = {
+        type: question.type,
+        question: question.question,
+        questionMedia: serializeMediaPreview(question.questionMedia),
+        correctAnswer: question.type === 'short-answer' && typeof question.correctAnswer === 'string'
+            ? question.correctAnswer.trim()
+            : question.correctAnswer,
+        xp: parseInt(question.xp, 10) || 0,
+        coins: parseInt(question.coins, 10) || 0,
+    };
+
+    if (question.type === 'multiple-choice' || question.type === 'checkbox' || question.type === 'matching') {
+        baseQuestion.options = question.options.map((option) => ({
+            text: option.text,
+            media: serializeMediaPreview(option.media),
+            match: option.match,
+            matchMedia: serializeMediaPreview(option.matchMedia || null),
+        }));
+    }
+
+    if (question.type === 'scramble' || question.type === 'scramble-word') {
+        baseQuestion.scrambleWords = Array.isArray(question.scrambleWords) ? question.scrambleWords : [];
+        if (baseQuestion.scrambleWords.length) {
+            baseQuestion.correctAnswer = baseQuestion.scrambleWords
+                .map((word: any) => (typeof word === 'string' ? word : word.text || '').trim())
+                .filter((word: string) => word.length > 0);
+        }
+    }
+
+    if (question.type === 'media-audio') {
+        baseQuestion.correctAnswer = question.correctAnswer;
+    }
+
+    return baseQuestion;
+};
+
 export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
     assessmentId,
     onClose,
@@ -250,6 +298,18 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
         });
     };
 
+    const handleRemoveQuestionMedia = (qIndex: number) => {
+        handleUpdateQuestion(qIndex, 'questionMedia', null);
+    };
+
+    const handleRemoveOptionMedia = (qIndex: number, oIndex: number) => {
+        handleUpdateOption(qIndex, oIndex, 'media', null);
+    };
+
+    const handleRemoveAudioReference = (qIndex: number) => {
+        handleUpdateQuestion(qIndex, 'correctAnswer', null);
+    };
+
     const handleSave = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!title.trim()) {
@@ -266,22 +326,8 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
         setError('');
 
         try {
-            const normalizedQuestions = questions.map((question) => ({
-                ...question,
-                xp: parseInt(question.xp, 10) || 0,
-                coins: parseInt(question.coins, 10) || 0,
-            }));
+            const normalizedQuestions = questions.map(serializeQuestionForSave);
             const totalPoints = normalizedQuestions.reduce((sum, question) => sum + (Number(question.xp) || 0), 0);
-
-            const payloadQuestions = normalizedQuestions.map((question) => {
-                const mapped: any = { ...question };
-                if ((question.type === 'scramble' || question.type === 'scramble-word') && question.scrambleWords?.length) {
-                    mapped.correctAnswer = question.scrambleWords
-                        .map((word: any) => (typeof word === 'string' ? word : word.text || '').trim())
-                        .filter((word: string) => word.length > 0);
-                }
-                return mapped;
-            });
 
             const response = await apiClient.assessment.update(Number(assessmentId), {
                 title,
@@ -290,7 +336,9 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                 type: normalizedQuestions[0]?.type || 'multiple-choice',
                 points: totalPoints,
                 total_questions: normalizedQuestions.length,
-                questions: payloadQuestions,
+                questions: normalizedQuestions,
+            }, {
+                minimalResponse: true,
             });
 
             if (!response.success) {
@@ -410,7 +458,16 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                     />
                                     {question.questionMedia && (
                                         <div className="space-y-2">
-                                            <p className="text-xs text-slate-200 font-semibold">Preview:</p>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-xs text-slate-200 font-semibold">Preview:</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveQuestionMedia(qIdx)}
+                                                    className="text-[10px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                >
+                                                    {question.questionMedia.isExisting ? 'Remove Existing Media' : 'Remove Media'}
+                                                </button>
+                                            </div>
                                             {question.questionMedia.type?.startsWith('image') ? (
                                                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-2 w-fit">
                                                     <img src={question.questionMedia.preview} alt="Question preview" className="h-32 w-auto rounded object-cover" />
@@ -456,7 +513,16 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                 />
                                                 {option.media && (
                                                     <div className="space-y-2">
-                                                        <p className="text-[8px] text-slate-300 font-semibold">Preview:</p>
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <p className="text-[8px] text-slate-300 font-semibold">Preview:</p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveOptionMedia(qIdx, oIdx)}
+                                                                className="text-[9px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                            >
+                                                                {option.media.isExisting ? 'Remove Existing Media' : 'Remove Media'}
+                                                            </button>
+                                                        </div>
                                                         {option.media.type?.startsWith('image') ? (
                                                             <div className="bg-slate-700 border border-slate-600 rounded p-2 w-fit">
                                                                 <img src={option.media.preview} alt="Option preview" className="h-20 w-auto rounded object-cover" />
@@ -557,11 +623,23 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                             className="w-full bg-slate-900 border border-slate-800 text-slate-400 px-4 py-3 rounded-lg text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-purple file:text-white"
                                         />
                                         {typeof question.correctAnswer === 'object' && question.correctAnswer?.preview && (
-                                            <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 w-fit">
-                                                <audio controls className="h-8 w-64">
-                                                    <source src={question.correctAnswer.preview} type={question.correctAnswer.type} />
-                                                </audio>
-                                                <p className="text-[8px] text-slate-400 font-semibold">{question.correctAnswer.name}</p>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-[8px] text-slate-300 font-semibold">Preview:</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveAudioReference(qIdx)}
+                                                        className="text-[9px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                    >
+                                                        {question.correctAnswer.isExisting ? 'Remove Existing Audio' : 'Remove Audio'}
+                                                    </button>
+                                                </div>
+                                                <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 w-fit">
+                                                    <audio controls className="h-8 w-64">
+                                                        <source src={question.correctAnswer.preview} type={question.correctAnswer.type} />
+                                                    </audio>
+                                                    <p className="text-[8px] text-slate-400 font-semibold">{question.correctAnswer.name}</p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

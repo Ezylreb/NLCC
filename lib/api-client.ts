@@ -307,11 +307,15 @@ class AssessmentAPI extends APIClient {
   async fetch(filters?: {
     yunit_id?: number;
     bahagi_id?: number;
+    student_view?: boolean;
+    first_only?: boolean;
   }): Promise<APIResponse> {
     const query = new URLSearchParams();
     if (filters?.yunit_id) query.append('yunitId', String(filters.yunit_id));
     if (filters?.bahagi_id)
       query.append('bahagiId', String(filters.bahagi_id));
+    if (filters?.student_view) query.append('studentView', 'true');
+    if (filters?.first_only) query.append('firstOnly', 'true');
 
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/assessments${queryStr}`);
@@ -321,7 +325,20 @@ class AssessmentAPI extends APIClient {
    * Fetch single assessment by ID
    */
   async fetchById(assessmentId: number): Promise<APIResponse> {
-    return this.get(`/assessments/${assessmentId}`);
+    const response = await fetch(`/api/rest/assessments/${assessmentId}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch assessment');
+    }
+
+    return await response.json();
   }
 
   /**
@@ -357,9 +374,13 @@ class AssessmentAPI extends APIClient {
       total_questions: number;
       time_limit: number;
       questions: any[];
-    }>
+    }>,
+    options?: {
+      minimalResponse?: boolean;
+    }
   ): Promise<APIResponse> {
-    return this.patch(`/assessments?id=${assessmentId}`, data);
+    const query = options?.minimalResponse ? `?id=${assessmentId}&minimal=true` : `?id=${assessmentId}`;
+    return this.patch(`/assessments${query}`, data);
   }
 
   /**
