@@ -3,17 +3,15 @@
  * Replaces: /api/teacher/manage-yunit, /api/teacher/create-yunit, /api/teacher/update-yunit, etc.
  * 
  * Endpoints:
- */
-
-// Allow large request bodies for base64 audio/image uploads
-export const maxDuration = 60;
-
  * POST   /api/rest/yunits - Create yunit
  * GET    /api/rest/yunits - List yunits (filtered by bahagi)
  * GET    /api/rest/yunits/:id - Get specific yunit
  * PATCH  /api/rest/yunits/:id - Update yunit
  * DELETE /api/rest/yunits/:id - Archive/delete yunit
  */
+
+// Allow large request bodies for base64 audio/image uploads
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import YunitService from '@/lib/services/YunitService';

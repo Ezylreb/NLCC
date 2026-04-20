@@ -109,6 +109,7 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(null);
   const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(getInitialBahagiId);
   const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(getInitialYunitId);
+  const [pendingNextYunitId, setPendingNextYunitId] = useState<string | number | null>(null);
 
   // Save navigation state to localStorage whenever it changes
   useEffect(() => {
@@ -167,7 +168,16 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   };
 
   const handleLessonComplete = () => {
-    // Move from lesson content to assessment (called after last yunit)
+    // Move from lesson content to assessment (called after last yunit with no assessment)
+    // Go back to yunits view with celebration already shown
+    setYunitViewKey(prev => prev + 1);
+    setCurrentView('yunits');
+  };
+
+  const handleShowAssessment = (yunitId: string | number, nextYunitId?: string | number) => {
+    // Show assessment for the current yunit, remembering where to go next
+    setSelectedYunitId(yunitId);
+    setPendingNextYunitId(nextYunitId || null);
     setCurrentView('assessment');
   };
 
@@ -189,9 +199,21 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   const handleCloseReward = () => {
     setShowRewardModal(false);
     if (rewardData?.success && rewardData?.progress?.is_passed) {
-      // Refresh YunitView when returning after assessment completion
+      // If there's a pending next yunit, navigate to it
+      if (pendingNextYunitId) {
+        setSelectedYunitId(pendingNextYunitId);
+        setPendingNextYunitId(null);
+        setCurrentView('lessonContent');
+      } else {
+        // Refresh YunitView when returning after assessment completion
+        setYunitViewKey(prev => prev + 1);
+        // Go back to yunits view after successful completion
+        setCurrentView('yunits');
+      }
+    } else {
+      // Failed assessment - go back to yunits view
+      setPendingNextYunitId(null);
       setYunitViewKey(prev => prev + 1);
-      // Go back to yunits view after successful completion
       setCurrentView('yunits');
     }
   };
@@ -286,6 +308,7 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           studentId={studentId}
           onComplete={handleLessonComplete}
           onNextYunit={handleNextYunit}
+          onShowAssessment={handleShowAssessment}
           onBack={goBack}
         />
       )}

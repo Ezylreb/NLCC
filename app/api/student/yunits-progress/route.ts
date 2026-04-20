@@ -16,14 +16,7 @@ export async function GET(request: NextRequest) {
 
     console.log('[GET /api/student/yunits-progress] Fetching for bahagiId:', bahagiId, 'studentId:', studentId);
 
-    // First, get the assessment count for this bahagi (one query)
-    const assessmentCountResult = await query(
-      `SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1`,
-      [bahagiId]
-    );
-    const assessmentCount = parseInt(assessmentCountResult.rows[0]?.count || 0);
-
-    // Get all lessons for this bahagi with student progress (optimized - no subquery)
+    // Get all lessons for this bahagi with student progress and per-yunit assessment count
     const result = await query(
       `SELECT 
         l.id,
@@ -37,13 +30,21 @@ export async function GET(request: NextRequest) {
         COALESCE(lp.completed, false) as completed,
         COALESCE(lp.xp_earned, 0) as xp_earned,
         COALESCE(lp.coins_earned, 0) as coins_earned,
-        lp.completion_date
+        lp.completion_date,
+        (SELECT COUNT(*) FROM bahagi_assessment ba WHERE ba.lesson_id = l.id)::INT as yunit_assessment_count
        FROM lesson l
        LEFT JOIN lesson_progress lp ON l.id = lp.lesson_id AND lp.student_id = $2
        WHERE l.bahagi_id = $1
        ORDER BY l.lesson_order ASC, l.created_at ASC`,
       [bahagiId, studentId || null]
     );
+
+    // Count bahagi-level assessments (not linked to a specific yunit)
+    const bahagiAssessmentResult = await query(
+      `SELECT COUNT(*) as count FROM bahagi_assessment WHERE bahagi_id = $1 AND lesson_id IS NULL`,
+      [bahagiId]
+    );
+    const bahagiAssessmentCount = parseInt(bahagiAssessmentResult.rows[0]?.count || 0);
 
     console.log('[GET /api/student/yunits-progress] Found', result.rows.length, 'lessons');
 
@@ -60,6 +61,11 @@ export async function GET(request: NextRequest) {
         const previousLesson = result.rows[index - 1];
         isLocked = !previousLesson.completed;
       }
+
+      // Per-yunit assessment count + bahagi-level assessments on the last yunit
+      const isLastYunit = index === result.rows.length - 1;
+      const assessmentCount = (parseInt(lesson.yunit_assessment_count) || 0) + 
+        (isLastYunit ? bahagiAssessmentCount : 0);
 
       return {
         id: lesson.id,

@@ -156,12 +156,27 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     const fetchAssessment = async () => {
       try {
         setIsLoading(true);
-        const response = await apiClient.assessment.fetch({ yunit_id: Number(yunitId) });
         
-        if (response.data?.assessments?.length > 0) {
-          const assessmentData = response.data.assessments[0];
-          setAssessment(assessmentData);
-          setAnswers(new Array(assessmentData.questions?.length || 0).fill(null));
+        // Try fetching assessment by yunit_id first
+        let response = await apiClient.assessment.fetch({ yunit_id: Number(yunitId) });
+        
+        // Handle both response formats: { data: [...] } or { data: { assessments: [...] } }
+        let assessments = response.data?.assessments || response.data;
+        if (!Array.isArray(assessments)) assessments = [];
+        
+        // If no yunit-level assessment found, fall back to bahagi-level
+        if (assessments.length === 0 && bahagiId) {
+          response = await apiClient.assessment.fetch({ bahagi_id: Number(bahagiId) });
+          assessments = response.data?.assessments || response.data;
+          if (!Array.isArray(assessments)) assessments = [];
+        }
+
+        if (assessments.length > 0) {
+          const assessmentData = assessments[0];
+          // Extract questions from content if needed
+          const questions = assessmentData.questions || assessmentData.content?.questions || [];
+          setAssessment({ ...assessmentData, questions });
+          setAnswers(new Array(questions.length || 0).fill(null));
         } else if (response.error) {
           throw new Error(response.error);
         }
@@ -173,7 +188,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     };
 
     fetchAssessment();
-  }, [studentId, yunitId]);
+  }, [studentId, yunitId, bahagiId]);
 
   if (isLoading) {
     return (

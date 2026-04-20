@@ -14,6 +14,7 @@ interface LessonContentViewProps {
   studentId: string;
   onComplete: () => void;
   onNextYunit: (yunitId: string | number) => void;
+  onShowAssessment: (yunitId: string | number, nextYunitId?: string | number) => void;
   onBack: () => void;
 }
 
@@ -28,6 +29,7 @@ interface LessonData {
   bahagi_icon_type?: string;
   completed?: boolean;
   isLocked?: boolean;
+  assessment_count?: number;
 }
 
 export const LessonContentView: React.FC<LessonContentViewProps> = ({
@@ -36,6 +38,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
   studentId,
   onComplete,
   onNextYunit,
+  onShowAssessment,
   onBack
 }) => {
   const [lesson, setLesson] = useState<LessonData | null>(null);
@@ -347,6 +350,14 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
       // Mark final lesson as complete
       await markLessonComplete(yunitId);
       
+      // Check if this yunit has an assessment
+      const currentYunit = allYunits[currentIndex];
+      if (currentYunit?.assessment_count && currentYunit.assessment_count > 0) {
+        setShowLoading(false);
+        onShowAssessment(currentYunit.id);
+        return;
+      }
+      
       // Show loading for 1.5 seconds, then show celebration
       setTimeout(() => {
         setShowLoading(false);
@@ -392,8 +403,14 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
           // Mark current lesson as complete
           await markLessonComplete(yunitId);
           
+          const currentYunit = allYunits[currentIndex];
           const nextYunit = allYunits[currentIndex + 1];
-          if (nextYunit) {
+          
+          // Check if current yunit has an assessment
+          if (currentYunit?.assessment_count && currentYunit.assessment_count > 0) {
+            setShowPagyamaninPage(false);
+            onShowAssessment(currentYunit.id, nextYunit?.id);
+          } else if (nextYunit) {
             setShowPagyamaninPage(false);
             onNextYunit(nextYunit.id);
           } else {
@@ -416,8 +433,14 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
           // Mark current lesson as complete
           await markLessonComplete(yunitId);
           
+          const currentYunit = allYunits[currentIndex];
           const nextYunit = allYunits[currentIndex + 1];
-          if (nextYunit) {
+          
+          // Check if current yunit has an assessment
+          if (currentYunit?.assessment_count && currentYunit.assessment_count > 0) {
+            setShowInteractivePage(false);
+            onShowAssessment(currentYunit.id, nextYunit?.id);
+          } else if (nextYunit) {
             setShowInteractivePage(false);
             onNextYunit(nextYunit.id);
           } else {
@@ -738,8 +761,12 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
                       setShowPagyamaninPage(true);
                     } else {
                       await markLessonComplete(yunitId);
+                      const currentYunit = allYunits[currentIndex];
                       const nextYunit = allYunits[currentIndex + 1];
-                      if (nextYunit) {
+                      // If current yunit has an assessment, show it before moving on
+                      if (currentYunit?.assessment_count && currentYunit.assessment_count > 0) {
+                        onShowAssessment(currentYunit.id, nextYunit?.id);
+                      } else if (nextYunit) {
                         onNextYunit(nextYunit.id);
                       }
                     }

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Get assessments for this yunit
     const assessmentResult = await query(
       `SELECT * FROM bahagi_assessment
-       WHERE yunit_id = $1
+       WHERE lesson_id = $1
        ORDER BY assessment_order ASC`,
       [yunitId]
     );

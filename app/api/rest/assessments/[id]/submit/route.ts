@@ -18,11 +18,17 @@ export async function POST(
     const body = await request.json();
 
     const {
-      yunitId,
-      studentId,
+      yunitId: yId,
+      yunit_id: yId2,
+      studentId: sId,
+      student_id: sId2,
       studentAnswer,
+      answers,
       attemptNumber = 1,
     } = body;
+
+    const yunitId = yId || yId2;
+    const studentId = sId || sId2;
 
     if (!yunitId || !studentId) {
       return NextResponse.json(
