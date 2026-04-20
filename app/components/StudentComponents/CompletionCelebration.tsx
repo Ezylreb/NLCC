@@ -6,11 +6,15 @@ import { motion } from 'framer-motion';
 interface CompletionCelebrationProps {
   onContinue: () => void;
   message?: string;
+  xpEarned?: number;
+  coinsEarned?: number;
 }
 
 export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
   onContinue,
-  message = "Mahusay! Natapos mo na ang aralin!"
+  message = "Mahusay! Natapos mo na ang aralin!",
+  xpEarned = 0,
+  coinsEarned = 0,
 }) => {
   const [showCelebration, setShowCelebration] = useState(false);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
@@ -19,8 +23,7 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
     // Show celebration after a brief delay
     const timer = setTimeout(() => setShowCelebration(true), 300);
 
-    // Play success audio (you can add yay.wav or success.mp3 to public/audio/)
-    const audio = new Audio('/audio/yay.wav');
+    const audio = new Audio('/audio/success.wav');
     audioRef.current = audio;
     audio.play().catch(err => console.log('Audio play failed:', err));
 
@@ -49,7 +52,7 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-purple-900/95 via-blue-900/95 to-pink-900/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-linear-to-br from-purple-900/95 via-blue-900/95 to-pink-900/95 backdrop-blur-sm">
       {/* Confetti */}
       {confetti.map((item) => (
         <motion.div
@@ -125,11 +128,11 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
           >
             <div className="bg-yellow-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-yellow-400">
               <div className="text-4xl mb-2">🏆</div>
-              <div className="text-yellow-400 font-black text-lg">+10 XP</div>
+              <div className="text-yellow-400 font-black text-lg">+{xpEarned} XP</div>
             </div>
             <div className="bg-blue-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-blue-400">
               <div className="text-4xl mb-2">🪙</div>
-              <div className="text-blue-400 font-black text-lg">+5 Coins</div>
+              <div className="text-blue-400 font-black text-lg">+{coinsEarned} Coins</div>
             </div>
           </motion.div>
 
@@ -139,7 +142,7 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5 }}
             onClick={onContinue}
-            className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl font-black text-xl shadow-2xl transition-all hover:scale-105"
+            className="px-8 py-4 bg-linear-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl font-black text-xl shadow-2xl transition-all hover:scale-105"
           >
             Magpatuloy
           </motion.button>

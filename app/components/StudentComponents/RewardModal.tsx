@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface RewardModalProps {
@@ -22,6 +22,27 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   message,
   onClose
 }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !isPassed) {
+      return;
+    }
+
+    const audio = new Audio('/audio/success.wav');
+    audioRef.current = audio;
+    audio.play().catch(() => {
+      // Ignore autoplay restrictions until the next user interaction.
+    });
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, [isOpen, isPassed]);
+
   if (!isOpen) return null;
 
   return (
@@ -32,8 +53,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         exit={{ scale: 0, opacity: 0 }}
         className={`relative p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-6 ${
           isPassed
-            ? 'bg-gradient-to-b from-green-900 to-slate-900 border-2 border-green-500'
-            : 'bg-gradient-to-b from-orange-900 to-slate-900 border-2 border-orange-500'
+            ? 'bg-linear-to-b from-green-900 to-slate-900 border-2 border-green-500'
+            : 'bg-linear-to-b from-orange-900 to-slate-900 border-2 border-orange-500'
         }`}
       >
         {/* Celebration Animation */}
@@ -86,8 +107,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
             <div
               className={`h-full ${
                 isPassed
-                  ? 'bg-gradient-to-r from-green-500 to-green-400'
-                  : 'bg-gradient-to-r from-orange-500 to-orange-400'
+                  ? 'bg-linear-to-r from-green-500 to-green-400'
+                  : 'bg-linear-to-r from-orange-500 to-orange-400'
               }`}
               style={{ width: `${scorePercentage}%` }}
             />

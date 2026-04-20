@@ -41,7 +41,23 @@ export async function GET(request: NextRequest) {
     }
 
     const leaderboardResult = await query(
-      `WITH student_scope AS (
+      `WITH enrolled_classes AS (
+         SELECT ce.student_id, MAX(c2.name) AS class_name
+         FROM class_enrollments ce
+         LEFT JOIN classes c2 ON c2.id = ce.class_id
+         GROUP BY ce.student_id
+       ),
+       open_bahagi_yunits AS (
+         SELECT
+           b.teacher_id,
+           b.class_name,
+           COUNT(l.id) AS total_yunits
+         FROM bahagi b
+         LEFT JOIN lesson l ON l.bahagi_id = b.id
+         WHERE b.is_open = true
+         GROUP BY b.teacher_id, b.class_name
+       ),
+       student_scope AS (
          SELECT
            s.id,
            s.teacher_id,
@@ -53,32 +69,33 @@ export async function GET(request: NextRequest) {
            ) AS grade_level
          FROM users s
          LEFT JOIN classes c ON c.id = s.class_id
-         LEFT JOIN (
-           SELECT ce.student_id, MAX(c2.name) AS class_name
-           FROM class_enrollments ce
-           LEFT JOIN classes c2 ON c2.id = ce.class_id
-           GROUP BY ce.student_id
-         ) ec ON ec.student_id = s.id
+         LEFT JOIN enrolled_classes ec ON ec.student_id = s.id
          WHERE (s.role = 'student' OR s.role = 'USER')
        )
        SELECT
          ss.id,
          ss.name,
-         COALESCE(COUNT(l.id), 0) * 10 AS total_xp,
-         ss.grade_level
+         ss.grade_level,
+         COALESCE(oby.total_yunits, 0) * 10 AS total_xp
        FROM student_scope ss
-       LEFT JOIN bahagi b
-         ON b.teacher_id = ss.teacher_id
-        AND b.is_open = true
-        AND b.class_name = ss.grade_level
-       LEFT JOIN lesson l ON l.bahagi_id = b.id
+       LEFT JOIN open_bahagi_yunits oby
+         ON oby.teacher_id = ss.teacher_id
+        AND oby.class_name = ss.grade_level
        WHERE ss.grade_level = $1
-       GROUP BY ss.id, ss.name, ss.grade_level
        ORDER BY total_xp DESC, ss.name ASC`,
       [currentGradeLevel]
     );
 
-    const leaderboard = leaderboardResult.rows.map((student: any, index: number) => {
+    const students = leaderboardResult.rows;
+    const leaderboard = students
+      .sort((a: any, b: any) => {
+        if (b.total_xp !== a.total_xp) {
+          return b.total_xp - a.total_xp;
+        }
+
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      })
+      .map((student: any, index: number) => {
       const totalXp = Number(student.total_xp) || 0;
 
       let badge = "";

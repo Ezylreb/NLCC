@@ -141,7 +141,7 @@ export const StudentLeaderboard: React.FC<StudentLeaderboardProps> = ({ studentI
                                     </div>
                                     <div className="text-right">
                                         <div className="text-2xl font-black text-brand-purple">{student.xp}</div>
-                                        <p className="text-xs text-slate-400">Total XP</p>
+                                        <p className="text-xs text-slate-400">Available XP</p>
                                     </div>
                                 </div>
                             </motion.div>
@@ -177,7 +177,7 @@ export const StudentLeaderboard: React.FC<StudentLeaderboardProps> = ({ studentI
                     transition={{ delay: 0.8 }}
                     className="mt-8 p-4 bg-brand-purple/10 border border-brand-purple/30 rounded-lg text-sm text-slate-300"
                 >
-                    💡 <span className="text-brand-purple font-semibold">Tip:</span> Ang total XP dito ay batay sa available XP sa Mag-Aral page ng mga estudyanteng nasa parehong grade level.
+                    💡 <span className="text-brand-purple font-semibold">Tip:</span> Ang XP dito ay kapareho ng Available XP na nakikita sa Mag-aral page ng bawat estudyante sa parehong grade level.
                 </motion.div>
             </motion.div>
         </div>
