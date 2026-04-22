@@ -612,7 +612,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                     className="max-w-full max-h-64 rounded-xl border border-slate-700"
                   />
                 ) : currentQuestion.questionMedia.type?.startsWith('audio') ? (
-                  <audio ref={registerQuestionAudio} controls className="w-full">
+                  <audio ref={registerQuestionAudio} controls preload="none" className="w-full">
                     <source src={currentQuestion.questionMedia.preview || currentQuestion.questionMedia.url} type={currentQuestion.questionMedia.type} />
                   </audio>
                 ) : null}
@@ -924,7 +924,7 @@ export const AdaptiveQuizScreen: React.FC<AdaptiveQuizScreenProps> = ({
                           <p className="text-slate-400 text-xs">Tagal: {formatRecTime(recordingTime)}</p>
                         </div>
                       </div>
-                      <audio src={audioUrl} controls className="w-full h-10" />
+                      <audio src={audioUrl} controls preload="none" className="w-full h-10" />
                       {!showResult && (
                         <button
                           type="button"

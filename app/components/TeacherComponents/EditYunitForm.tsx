@@ -221,7 +221,7 @@ export const EditYunitForm: React.FC<EditYunitFormProps> = ({
             </div>
             {mediaUrl && (
               <div className="mt-2 flex items-center gap-2">
-                <img src={mediaUrl} alt="Cover" className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
+                <img src={mediaUrl} alt="Cover" loading="lazy" className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
                 <span className="text-xs text-slate-400">Cover image set</span>
                 <button type="button" onClick={() => setMediaUrl('')} className="text-xs text-red-400 hover:text-red-300 ml-auto">Remove</button>
               </div>

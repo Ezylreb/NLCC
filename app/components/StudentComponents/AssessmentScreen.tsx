@@ -601,7 +601,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                     className="max-w-full max-h-64 rounded-lg"
                   />
                 ) : (
-                  <audio ref={registerQuestionAudio} controls className="w-full">
+                  <audio ref={registerQuestionAudio} controls preload="none" className="w-full">
                     <source
                       src={currentQuestion.questionMedia.preview}
                       type={currentQuestion.questionMedia.type}
@@ -898,7 +898,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                           <p className="text-slate-400 text-xs">Tagal: {formatTime(recordingTime)}</p>
                         </div>
                       </div>
-                      <audio src={audioUrl} controls className="w-full h-10" />
+                      <audio src={audioUrl} controls preload="none" className="w-full h-10" />
                       {!showResult && (
                         <button
                           type="button"

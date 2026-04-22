@@ -182,6 +182,7 @@ export const DraftLessonManager: React.FC<DraftLessonProps> = ({
                 <img
                   src={formData.mediaUrl}
                   alt="Preview"
+                  loading="lazy"
                   className="h-32 rounded-lg object-cover"
                 />
               )}

@@ -317,7 +317,7 @@ export const TopicEditor: React.FC<TopicEditorProps> = ({
             <div className="grid grid-cols-3 gap-2">
               {topic.images.map((img, ii) => (
                 <div key={ii} className="relative group rounded-lg overflow-hidden bg-slate-900 border border-slate-700">
-                  <img src={img} alt={`Topic image ${ii + 1}`} className="w-full h-24 object-cover" />
+                  <img src={img} alt={`Topic image ${ii + 1}`} loading="lazy" className="w-full h-24 object-cover" />
                   <button
                     type="button"
                     onClick={() => removeImage(ii)}
