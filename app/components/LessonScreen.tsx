@@ -185,6 +185,7 @@ const LessonScreenComponent = ({ lessonId, onBack, user }: LessonScreenProps) =>
                                             <img 
                                                 src={currentItem.image} 
                                                 alt={currentItem.word || currentItem.letter}
+                                                loading="lazy"
                                                 className="w-full h-full object-contain filter drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)] relative z-10 transition-transform duration-700 group-hover:scale-110"
                                                 onError={() => {
                                                     setImageErrors(prev => ({ ...prev, [currentIndex]: true }));

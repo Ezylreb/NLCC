@@ -656,6 +656,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
                         <audio
                           ref={el => { topicAudioRefs.current[audioId] = el; }}
                           src={topic.audio}
+                          preload="none"
                           onEnded={() => setPlayingAudioId(null)}
                           className="hidden"
                         />
@@ -678,7 +679,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
                                 {/* Image */}
                                 {img && (
                                   <div className="shrink-0">
-                                    <img src={img} alt={`${topic.title || 'Topic'} image ${i + 1}`} className="w-44 md:w-52 h-auto object-contain" />
+                                    <img src={img} alt={`${topic.title || 'Topic'} image ${i + 1}`} loading="lazy" className="w-44 md:w-52 h-auto object-contain" />
                                   </div>
                                 )}
                                 {/* Callout */}
@@ -722,6 +723,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
                                         <audio
                                           ref={el => { topicAudioRefs.current[qAudioId] = el; }}
                                           src={q.audio}
+                                          preload="none"
                                           onEnded={() => setPlayingAudioId(null)}
                                           className="hidden"
                                         />
@@ -802,6 +804,7 @@ export const LessonContentView: React.FC<LessonContentViewProps> = ({
                   <img
                     src={lesson.media_url}
                     alt="Lesson media"
+                    loading="lazy"
                     className="w-full max-h-80 object-contain rounded-lg"
                   />
                 </div>

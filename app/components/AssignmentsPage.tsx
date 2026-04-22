@@ -239,7 +239,7 @@ export const AssignmentsPage: React.FC<AssignmentsPageProps> = ({ onBack, user }
                                                     </div>
                                                 )}
                                                 {proofUrl ? (
-                                                    <img src={proofUrl} alt="Submission Proof" className="w-full h-full object-cover" />
+                                                    <img src={proofUrl} alt="Submission Proof" loading="lazy" className="w-full h-full object-cover" />
                                                 ) : (
                                                     <span className="opacity-40">📸</span>
                                                 )}

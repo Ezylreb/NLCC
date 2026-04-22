@@ -425,7 +425,7 @@ export const StudentAvatarCustomization = () => {
                                     }`}
                                 >
                                     {option.src ? (
-                                        <img src={option.src} className="w-16 h-16 mx-auto object-contain" alt={option.name} />
+                                        <img src={option.src} loading="lazy" className="w-16 h-16 mx-auto object-contain" alt={option.name} />
                                     ) : (
                                         <div className="w-16 h-16 mx-auto flex items-center justify-center text-slate-400">None</div>
                                     )}
