@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
+import { LESSON_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 interface Yunit {
   id: string | number;
@@ -14,6 +15,9 @@ interface Yunit {
   xp_earned: number;
   coins_earned: number;
   assessment_count: number;
+  assessment_answered?: boolean;
+  assessment_passed?: boolean;
+  assessment_attempts?: number;
   isLocked: boolean;
   completion_date?: string;
 }
@@ -21,34 +25,57 @@ interface Yunit {
 interface YunitViewProps {
   studentId: string;
   bahagiId: string | number;
-  onStartAssessment: (yunitId: string | number) => void;
+  cachedData?: any;
+  refreshToken?: number;
+  onDataFetched?: (data: any) => void;
+  onStartAssessment: (yunitId: string | number, options?: { openAssessmentDirectly?: boolean; isRetake?: boolean; nextYunitId?: string | number | null; attemptCount?: number }) => void;
   onBack: () => void;
 }
 
-export const YunitView: React.FC<YunitViewProps> = ({
+const YunitViewComponent: React.FC<YunitViewProps> = ({
   studentId,
   bahagiId,
+  cachedData,
+  refreshToken = 0,
+  onDataFetched,
   onStartAssessment,
   onBack
 }) => {
   const [yunits, setYunits] = useState<Yunit[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!cachedData);
   const [error, setError] = useState<string | null>(null);
+  const [repeatDialogYunit, setRepeatDialogYunit] = useState<Yunit | null>(null);
+  const [repeatDialogNextYunitId, setRepeatDialogNextYunitId] = useState<string | number | null>(null);
+
+  // Use cached data immediately if available
+  useEffect(() => {
+    if (cachedData) {
+      setYunits(cachedData.data || []);
+      setIsLoading(false);
+      return;
+    }
+  }, [cachedData]);
 
   useEffect(() => {
     const fetchYunits = async () => {
       try {
-        setIsLoading(true);
-        console.log('[YunitView] Fetching yunits with progress for bahagiId:', bahagiId, 'studentId:', studentId);
+        if (!cachedData) {
+          setIsLoading(true);
+        }
+        setError(null);
         
-        const response = await fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`);
+        const response = await fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`, {
+          cache: 'no-store'
+        });
         const data = await response.json();
-        
-        console.log('[YunitView] API response:', data);
         
         if (data.success && data.data) {
           setYunits(data.data);
-          console.log('[YunitView] Loaded', data.data.length, 'yunits with lock status');
+          
+          // Cache the fetched data
+          if (onDataFetched) {
+            onDataFetched(data);
+          }
         } else {
           throw new Error(data.error || 'Failed to fetch yunits');
         }
@@ -61,14 +88,35 @@ export const YunitView: React.FC<YunitViewProps> = ({
     };
 
     fetchYunits();
-  }, [studentId, bahagiId]);
+  }, [studentId, bahagiId, refreshToken, onDataFetched]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">📖</div>
-          <p className="text-slate-400">Loading lessons...</p>
+      <div className="flex flex-col gap-6 p-6 h-full overflow-auto">
+        {/* Skeleton Header */}
+        <div className="animate-pulse">
+          <div className="h-8 bg-slate-800/50 rounded w-32 mb-4"></div>
+          <div className="h-10 bg-slate-800/50 rounded w-48 mb-2"></div>
+          <div className="h-4 bg-slate-800/50 rounded w-64"></div>
+        </div>
+
+        {/* Skeleton Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="p-6 bg-slate-800/50 border-2 border-slate-700 rounded-2xl animate-pulse">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-12 h-12 bg-slate-700/50 rounded"></div>
+                <div className="flex-1">
+                  <div className="h-6 bg-slate-700/50 rounded w-3/4 mb-2"></div>
+                  <div className="h-4 bg-slate-700/50 rounded w-1/2"></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 bg-slate-700/50 rounded w-24"></div>
+                <div className="h-4 bg-slate-700/50 rounded w-32"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -105,13 +153,27 @@ export const YunitView: React.FC<YunitViewProps> = ({
               className="relative"
             >
               <button
-                onClick={() => !yunit.isLocked && onStartAssessment(yunit.id)}
+                onClick={() => {
+                  if (yunit.isLocked) {
+                    return;
+                  }
+
+                  const nextYunitId = yunits[idx + 1]?.id ?? null;
+
+                  if (yunit.completed && yunit.assessment_answered) {
+                    setRepeatDialogYunit(yunit);
+                    setRepeatDialogNextYunitId(nextYunitId);
+                    return;
+                  }
+
+                  onStartAssessment(yunit.id, { nextYunitId });
+                }}
                 disabled={yunit.isLocked}
                 className={`w-full h-full p-6 rounded-2xl border-2 transition-all text-left relative overflow-hidden group ${
                   yunit.isLocked
                     ? 'bg-slate-900/50 border-slate-800 cursor-not-allowed opacity-60'
                     : yunit.completed
-                    ? 'bg-gradient-to-br from-green-900/20 to-emerald-900/20 border-green-700 hover:border-green-500 hover:shadow-lg hover:shadow-green-500/20'
+                    ? 'bg-linear-to-br from-green-900/20 to-emerald-900/20 border-green-700 hover:border-green-500 hover:shadow-lg hover:shadow-green-500/20'
                     : 'bg-slate-800 border-slate-700 hover:border-brand-purple hover:shadow-lg hover:shadow-brand-purple/20'
                 }`}
               >
@@ -129,7 +191,7 @@ export const YunitView: React.FC<YunitViewProps> = ({
                 <div className="space-y-4">
                   {/* Header */}
                   <div className="flex items-start gap-3">
-                    <div className="text-3xl flex-shrink-0">
+                    <div className="text-3xl shrink-0">
                       {yunit.completed ? '✅' : yunit.isLocked ? '🔒' : '📖'}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -151,14 +213,19 @@ export const YunitView: React.FC<YunitViewProps> = ({
                         <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-lg font-bold">
                           ✓ Completed
                         </span>
-                        {yunit.xp_earned > 0 && (
+                        {(yunit.xp_earned > 0 || yunit.completed) && (
                           <span className="text-yellow-400 font-bold">
-                            ⭐ +{yunit.xp_earned} XP
+                            ⭐ +{LESSON_COMPLETION_XP} XP
                           </span>
                         )}
                         {yunit.coins_earned > 0 && (
                           <span className="text-yellow-500 font-bold">
                             🪙 +{yunit.coins_earned}
+                          </span>
+                        )}
+                        {Boolean(yunit.assessment_answered) && (
+                          <span className="text-cyan-400 font-bold">
+                            📝 {yunit.assessment_attempts || 1} assessment attempt{(yunit.assessment_attempts || 1) > 1 ? 's' : ''}
                           </span>
                         )}
                       </div>
@@ -199,6 +266,80 @@ export const YunitView: React.FC<YunitViewProps> = ({
           {error}
         </div>
       )}
+
+      {repeatDialogYunit && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 space-y-5 shadow-2xl">
+            <div className="space-y-2">
+              <p className="text-xs font-black tracking-widest uppercase text-cyan-400">Yunit Tapos Na</p>
+              <h3 className="text-2xl font-black text-white">
+                Natapos mo nang sagutan ang {repeatDialogYunit.title}
+              </h3>
+              <p className="text-slate-400 text-sm">
+                Maaari mo itong ulitin para magsanay. Hindi na ito magbibigay ng panibagong XP o coins.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-4 space-y-2 text-sm">
+              <p className="text-white font-bold">Kasaysayan ng Pagsagot</p>
+              <p className="text-slate-300">
+                Kabuuang bilang ng pagsagot: <span className="font-black text-cyan-400">{repeatDialogYunit.assessment_attempts || 1}</span>
+              </p>
+              {(repeatDialogYunit.assessment_attempts || 1) > 1 && (
+                <p className="text-slate-400">
+                  Retake count: {(repeatDialogYunit.assessment_attempts || 1) - 1}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onStartAssessment(repeatDialogYunit.id, {
+                    openAssessmentDirectly: true,
+                    isRetake: true,
+                    nextYunitId: repeatDialogNextYunitId,
+                    attemptCount: repeatDialogYunit.assessment_attempts || 1,
+                  });
+                  setRepeatDialogYunit(null);
+                  setRepeatDialogNextYunitId(null);
+                }}
+                className="flex-1 rounded-xl bg-brand-purple px-4 py-3 font-bold text-white hover:opacity-90 transition-all"
+              >
+                Ulitin
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (repeatDialogNextYunitId) {
+                    onStartAssessment(repeatDialogNextYunitId, { nextYunitId: yunits.find((item) => item.id === repeatDialogNextYunitId) ? yunits[yunits.findIndex((item) => item.id === repeatDialogNextYunitId) + 1]?.id ?? null : null });
+                  }
+                  setRepeatDialogYunit(null);
+                  setRepeatDialogNextYunitId(null);
+                }}
+                disabled={!repeatDialogNextYunitId}
+                className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 font-bold text-white hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Pumunta sa sunod na Yunit
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRepeatDialogYunit(null);
+                setRepeatDialogNextYunitId(null);
+              }}
+              className="w-full text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              Isara
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+export const YunitView = memo(YunitViewComponent);

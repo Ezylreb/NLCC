@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { apiClient } from '@/lib/api-client';
 
 interface StudentRank {
     rank: number;
@@ -14,24 +13,43 @@ interface StudentRank {
     isCurrentStudent?: boolean;
 }
 
-export const StudentLeaderboard: React.FC = () => {
+interface StudentLeaderboardProps {
+    studentId: string;
+    refreshToken?: number;
+}
+
+export const StudentLeaderboard: React.FC<StudentLeaderboardProps> = ({ studentId, refreshToken = 0 }) => {
     const [leaderboard, setLeaderboard] = useState<StudentRank[]>([]);
-    const [timeframe, setTimeframe] = useState<'week' | 'month' | 'all'>('week');
+    const [gradeLevel, setGradeLevel] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Fetch leaderboard data
         const fetchLeaderboard = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
-                const result = await apiClient.student.getLeaderboard(timeframe);
+                const storedClassId = typeof window !== 'undefined'
+                    ? localStorage.getItem('magAralClassId')
+                    : null;
+
+                const leaderboardUrl = storedClassId
+                    ? `/api/student/leaderboard?classId=${encodeURIComponent(storedClassId)}`
+                    : '/api/student/leaderboard';
+
+                const response = await fetch(leaderboardUrl, {
+                    headers: {
+                        'x-student-id': studentId,
+                    },
+                    cache: 'no-store',
+                });
+
+                const result = await response.json();
                 
                 if (result.success && result.data) {
                     setLeaderboard(result.data);
+                    setGradeLevel(result.gradeLevel || '');
                 } else {
-                    // Fallback to mock data if API fails
                     const mockData: StudentRank[] = [
                     { rank: 1, name: 'Maria Santos', xp: 4850, badge: '🏆' },
                     { rank: 2, name: 'Juan dela Cruz', xp: 4620, badge: '🥈' },
@@ -69,7 +87,7 @@ export const StudentLeaderboard: React.FC = () => {
         };
 
         fetchLeaderboard();
-    }, [timeframe]);
+    }, [studentId]);
 
     const getMedalColor = (rank: number) => {
         switch (rank) {
@@ -99,24 +117,11 @@ export const StudentLeaderboard: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-4xl font-black text-white mb-2">🏆 Listahan ng Lider</h1>
-                    <p className="text-slate-400">Makita kung sino ang nangungunang estudyante</p>
-                </div>
-
-                {/* Timeframe Selector */}
-                <div className="flex gap-3 mb-8">
-                    {(['week', 'month', 'all'] as const).map((tf) => (
-                        <button
-                            key={tf}
-                            onClick={() => setTimeframe(tf)}
-                            className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                                timeframe === tf
-                                    ? 'bg-brand-purple text-white shadow-lg shadow-purple-500/40'
-                                    : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                            }`}
-                        >
-                            {tf === 'week' ? 'Lingguhan' : tf === 'month' ? 'Buwan' : 'Lahat ng Oras'}
-                        </button>
-                    ))}
+                    <p className="text-slate-400">
+                        {gradeLevel
+                            ? `Makita kung sino ang nangungunang estudyante sa klase: ${gradeLevel}`
+                            : 'Makita kung sino ang nangungunang estudyante sa inyong klase'}
+                    </p>
                 </div>
 
                 {/* Leaderboard List */}
@@ -133,10 +138,10 @@ export const StudentLeaderboard: React.FC = () => {
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: idx * 0.1 }}
-                                className={`bg-gradient-to-r ${getMedalColor(student.rank)} p-0.5 rounded-xl`}
+                                className={`bg-linear-to-r ${getMedalColor(student.rank)} p-0.5 rounded-xl`}
                             >
                                 <div className="bg-slate-900 rounded-lg p-4 flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-purple to-brand-sky flex items-center justify-center text-2xl font-black">
+                                    <div className="w-12 h-12 rounded-full bg-linear-to-br from-brand-purple to-brand-sky flex items-center justify-center text-2xl font-black">
                                         {getMedalEmoji(student.rank)}
                                     </div>
                                     <div className="flex-1">
@@ -145,7 +150,7 @@ export const StudentLeaderboard: React.FC = () => {
                                     </div>
                                     <div className="text-right">
                                         <div className="text-2xl font-black text-brand-purple">{student.xp}</div>
-                                        <p className="text-xs text-slate-400">XP Points</p>
+                                        <p className="text-xs text-slate-400">XP Achieved</p>
                                     </div>
                                 </div>
                             </motion.div>
@@ -160,7 +165,7 @@ export const StudentLeaderboard: React.FC = () => {
                                 transition={{ delay: (idx + 3) * 0.08 }}
                                 className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg p-4 flex items-center gap-4 transition-all"
                             >
-                                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-300 flex-shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-300 shrink-0">
                                     {student.rank}
                                 </div>
                                 <div className="flex-1">
@@ -181,7 +186,7 @@ export const StudentLeaderboard: React.FC = () => {
                     transition={{ delay: 0.8 }}
                     className="mt-8 p-4 bg-brand-purple/10 border border-brand-purple/30 rounded-lg text-sm text-slate-300"
                 >
-                    💡 <span className="text-brand-purple font-semibold">Tip:</span> Kumpletuhing mga leksyon at assessment upang makuha ang mas maraming XP points!
+                    💡 <span className="text-brand-purple font-semibold">Tip:</span> Ang XP dito ay ang kasalukuyang XP ng mga estudyanteng naka-enroll sa parehong klase at guro.
                 </motion.div>
             </motion.div>
         </div>

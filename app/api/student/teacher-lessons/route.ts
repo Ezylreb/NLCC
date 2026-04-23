@@ -36,9 +36,25 @@ export async function GET(request: NextRequest) {
     const studentClassName = studentResult.rows[0].class_name;
     console.log('[GET /api/student/teacher-lessons] Student class_name:', studentClassName);
 
-    // Fetch all bahagis (parts/lessons) from the teacher
-    // Filter by student's grade level (class_name) if available
-    // Only show published and non-archived bahagi
+    const columnCheck = await query(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'bahagi' AND column_name = 'is_published'
+         ) AS has_is_published,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'bahagi' AND column_name = 'is_archived'
+         ) AS has_is_archived`
+    );
+
+    const hasIsPublished = Boolean(columnCheck.rows?.[0]?.has_is_published);
+    const hasIsArchived = Boolean(columnCheck.rows?.[0]?.has_is_archived);
+    const publishedColumn = hasIsPublished ? 'b.is_published' : 'b.is_open';
+    const archivedFilter = hasIsArchived ? 'AND COALESCE(b.is_archived, false) = false' : '';
+
+    // Fetch all bahagis (parts/lessons) from the teacher.
+    // Students must only see published, non-archived bahagis.
     let bahagiQuery = `
       SELECT 
         b.id,
@@ -48,11 +64,15 @@ export async function GET(request: NextRequest) {
         b.icon_type,
         b.teacher_id,
         b.class_name,
+        b.quarter,
+        b.week_number,
+        b.module_number,
         COUNT(DISTINCT l.id) as yunit_count
       FROM bahagi b
       LEFT JOIN lesson l ON b.id = l.bahagi_id
       WHERE b.teacher_id = $1 
-        AND b.is_open = true
+        ${archivedFilter}
+        AND COALESCE(${publishedColumn}, false) = true
     `;
     
     const queryParams = [teacherId];
@@ -65,7 +85,7 @@ export async function GET(request: NextRequest) {
     }
 
     bahagiQuery += `
-      GROUP BY b.id, b.title, b.description, b.icon_path, b.icon_type, b.teacher_id, b.class_name
+      GROUP BY b.id, b.title, b.description, b.icon_path, b.icon_type, b.teacher_id, b.class_name, b.quarter, b.week_number, b.module_number
       ORDER BY b.id ASC
     `;
 
@@ -76,7 +96,15 @@ export async function GET(request: NextRequest) {
 
     const bahagis = bahagiResult.rows;
     console.log(`[GET /api/student/teacher-lessons] Found ${bahagis.length} bahagi for teacher ${teacherId}`);
-    console.log('[GET /api/student/teacher-lessons] Bahagi details:', bahagis.map((b: any) => ({ id: b.id, title: b.title, class_name: b.class_name, description: b.description?.substring(0, 30) })));
+    console.log('[GET /api/student/teacher-lessons] Bahagi details:', bahagis.map((b: any) => ({ 
+      id: b.id, 
+      title: b.title, 
+      class_name: b.class_name, 
+      quarter: b.quarter,
+      week_number: b.week_number,
+      module_number: b.module_number,
+      description: b.description?.substring(0, 30) 
+    })));
 
     // Determine which bahagis the student has COMPLETED (all yunits done)
     const bahagiCompletionMap = new Map<string, boolean>();
@@ -220,15 +248,24 @@ export async function GET(request: NextRequest) {
           title: bahagi.title || `Lesson ${bahagiIndex + 1}`,
           description: bahagi.description || '',
           imageUrl: bahagi.image_url || '/Character/NLLCTeachHalf1.png',
-          yunitCount: yunitResult?.rows?.length || 0,
+          yunitCount: totalYunits,
           yunits: yunitResult?.rows || [],
-          passedYunits: completedItems,
-          totalYunits: totalItems,
+          passedYunits: passedYunits,
+          totalYunits: totalYunits,
           isCompleted: allPassed,
           isUnlocked,
           xpReward: 10,
-          difficulty: totalYunits <= 2 ? 'beginner' : totalYunits <= 4 ? 'intermediate' : 'advanced'
+          quarter: bahagi.quarter || null,
+          week_number: bahagi.week_number || null,
+          module_number: bahagi.module_number || null
         };
+        
+        console.log(`[Bahagi ${bahagiIndex}] Lesson data:`, {
+          title: lessonData.title,
+          quarter: lessonData.quarter,
+          week_number: lessonData.week_number,
+          module_number: lessonData.module_number
+        });
         
         console.log(`[GET /api/student/teacher-lessons] Lesson ${bahagiIndex + 1} mapped:`, { id: lessonData.id, title: lessonData.title, originalTitle: bahagi.title });
         
@@ -248,7 +285,9 @@ export async function GET(request: NextRequest) {
             isCompleted: false,
             isUnlocked: bahagiIndex === 0,
             xpReward: 10,
-            difficulty: 'beginner'
+            quarter: bahagi.quarter || null,
+            week_number: bahagi.week_number || null,
+            module_number: bahagi.module_number || null
           };
         }
       })

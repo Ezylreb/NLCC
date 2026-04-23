@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { DAILY_LOGIN_XP } from '@/lib/constants/xp-rewards';
 
 export async function POST(request: Request) {
   try {
@@ -89,6 +90,38 @@ export async function POST(request: Request) {
       // Allow all users to login - role-based redirect happens on frontend
       // No portal restrictions - the system automatically redirects based on user's role in database
 
+      // Award daily login XP once per calendar day.
+      let dailyLoginXpEarned = 0;
+      try {
+        const dailyRewardResult = await query(
+          `SELECT id
+           FROM activity_logs
+           WHERE user_id = $1
+             AND type = $2
+             AND created_at::date = CURRENT_DATE
+           LIMIT 1`,
+          [user.id, 'daily-login']
+        );
+
+        if (dailyRewardResult.rows.length === 0) {
+          await query(
+            `UPDATE users
+             SET xp = COALESCE(xp, 0) + $1
+             WHERE id = $2`,
+            [DAILY_LOGIN_XP, user.id]
+          );
+
+          await query(
+            'INSERT INTO activity_logs (user_id, action, type, details) VALUES ($1, $2, $3, $4)',
+            [user.id, 'Daily Login Reward', 'daily-login', `Awarded ${DAILY_LOGIN_XP} XP for daily login`]
+          );
+
+          dailyLoginXpEarned = DAILY_LOGIN_XP;
+        }
+      } catch (err) {
+        console.warn('Could not award daily login XP:', err);
+      }
+
       // Try to log the login activity (if table exists)
       try {
         await query(
@@ -109,7 +142,8 @@ export async function POST(request: Request) {
           role: user.role,
           class_name: user.class_name || null,
           className: user.class_name || null
-        } 
+        },
+        dailyLoginXpEarned,
       });
     }
 

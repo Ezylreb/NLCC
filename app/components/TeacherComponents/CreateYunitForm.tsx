@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { TopicEditor, TopicData } from './TopicEditor';
 
 interface CreateYunitFormProps {
@@ -13,13 +13,13 @@ interface CreateYunitFormProps {
 }
 
 const createEmptyTopic = (): TopicData => ({
-  id: crypto.randomUUID(),
-  title: '',
-  content: '',
-  images: [],
-  audio: '',
-  quotes: [],
-  isExpanded: true,
+    id: crypto.randomUUID(),
+    title: '',
+    content: '',
+    images: [],
+    audio: '',
+    quotes: [],
+    isExpanded: true,
 });
 
 export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
@@ -28,12 +28,14 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
     onSubmit,
     bahagiId,
     bahagiTitle,
-    isLoading = false
+    isLoading = false,
 }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [topics, setTopics] = useState<TopicData[]>([]);
     const [mediaUrl, setMediaUrl] = useState('');
+    const [weekNumber, setWeekNumber] = useState('');
+    const [moduleNumber, setModuleNumber] = useState('');
     const [audioUrl, setAudioUrl] = useState('');
     const mediaInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
@@ -45,39 +47,36 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
             return;
         }
 
-        // Build the discussion as JSON of topics
-        const topicsPayload = topics.map((t, i) => ({
-          order: i,
-          title: t.title,
-          content: t.content,
-          images: t.images,
-          audio: t.audio,
-          quotes: t.quotes,
+        const topicsPayload = topics.map((topic, index) => ({
+            order: index,
+            title: topic.title,
+            content: topic.content,
+            images: topic.images,
+            audio: topic.audio,
+            quotes: topic.quotes,
         }));
 
-        // Use dedicated yunit audio, fallback to first topic's audio
-        const yunitAudio = audioUrl || topics.find(t => t.audio)?.audio || '';
+        const yunitAudio = audioUrl || topics.find((topic) => topic.audio)?.audio || '';
 
-        const data = {
+        onSubmit({
             bahagiId,
             bahagiTitle,
             title,
             subtitle: description,
             discussion: JSON.stringify(topicsPayload),
-            media_url: mediaUrl || (topics.find(t => t.images.length > 0)?.images[0] || ''),
+            media_url: mediaUrl || (topics.find((topic) => topic.images.length > 0)?.images[0] || ''),
             audio_url: yunitAudio,
-            lesson_order: undefined
-        };
+            week_number: weekNumber ? parseInt(weekNumber, 10) : undefined,
+            module_number: moduleNumber || undefined,
+            lesson_order: undefined,
+        });
 
-        onSubmit(data);
-        resetForm();
-    };
-
-    const resetForm = () => {
         setTitle('');
         setDescription('');
         setTopics([]);
         setMediaUrl('');
+        setWeekNumber('');
+        setModuleNumber('');
         setAudioUrl('');
     };
 
@@ -98,24 +97,24 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
     };
 
     const addTopic = () => {
-        setTopics(prev => [...prev, createEmptyTopic()]);
+        setTopics((prev) => [...prev, createEmptyTopic()]);
     };
 
     const updateTopic = (index: number, updated: TopicData) => {
-        setTopics(prev => prev.map((t, i) => i === index ? updated : t));
+        setTopics((prev) => prev.map((topic, topicIndex) => (topicIndex === index ? updated : topic)));
     };
 
     const deleteTopic = (index: number) => {
-        setTopics(prev => prev.filter((_, i) => i !== index));
+        setTopics((prev) => prev.filter((_, topicIndex) => topicIndex !== index));
     };
 
     const moveTopic = (from: number, to: number) => {
         if (to < 0 || to >= topics.length) return;
-        setTopics(prev => {
-            const arr = [...prev];
-            const [item] = arr.splice(from, 1);
-            arr.splice(to, 0, item);
-            return arr;
+        setTopics((prev) => {
+            const next = [...prev];
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            return next;
         });
     };
 
@@ -124,7 +123,6 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
     return (
         <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                {/* Loading overlay */}
                 {isLoading && (
                     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-2xl z-10 flex flex-col items-center justify-center gap-4">
                         <div className="w-12 h-12 border-4 border-brand-purple border-t-transparent rounded-full animate-spin"></div>
@@ -147,7 +145,34 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Title + image icon */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                                Week Number
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={weekNumber}
+                                onChange={(e) => setWeekNumber(e.target.value)}
+                                placeholder="e.g., 1"
+                                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
+                                Module Number
+                            </label>
+                            <input
+                                type="text"
+                                value={moduleNumber}
+                                onChange={(e) => setModuleNumber(e.target.value)}
+                                placeholder="e.g., Module 1"
+                                className="w-full bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
+                            />
+                        </div>
+                    </div>
+
                     <div>
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
                             Yunit Title *
@@ -158,7 +183,7 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                                 required
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                placeholder="e.g., 'Pagkilala sa Sarili'"
+                                placeholder="e.g., Pagkilala sa Sarili"
                                 className="flex-1 bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl text-sm font-bold focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
                                 autoFocus
                             />
@@ -181,7 +206,7 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                             <input
                                 ref={mediaInputRef}
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,video/*"
                                 onChange={handleMediaUpload}
                                 className="hidden"
                             />
@@ -195,9 +220,11 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                         </div>
                         {mediaUrl && (
                             <div className="mt-2 flex items-center gap-2">
-                                <img src={mediaUrl} alt="Cover" className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
-                                <span className="text-xs text-slate-400">Cover image set</span>
-                                <button type="button" onClick={() => setMediaUrl('')} className="text-xs text-red-400 hover:text-red-300 ml-auto">Remove</button>
+                                <img src={mediaUrl} alt="Cover" loading="lazy" className="w-10 h-10 rounded-lg object-cover border border-slate-700" />
+                                <span className="text-xs text-slate-400">Cover media set</span>
+                                <button type="button" onClick={() => setMediaUrl('')} className="text-xs text-red-400 hover:text-red-300 ml-auto">
+                                    Remove
+                                </button>
                             </div>
                         )}
                         {audioUrl && (
@@ -209,7 +236,6 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                         )}
                     </div>
 
-                    {/* Description */}
                     <div>
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-2">
                             Brief Description
@@ -223,7 +249,6 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                         />
                     </div>
 
-                    {/* Topics section */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
@@ -260,7 +285,6 @@ export const CreateYunitForm: React.FC<CreateYunitFormProps> = ({
                         </div>
                     </div>
 
-                    {/* Action buttons */}
                     <div className="flex gap-3 pt-4 border-t border-slate-800">
                         <button
                             type="button"

@@ -43,7 +43,7 @@ export const InteractiveSuriinPage: React.FC<InteractiveSuriinPageProps> = ({
   };
 
   // Start animation and audio - using ref pattern to avoid stale closures
-  const startCharacterAnimationRef = useRef<(character: 'boy' | 'girl') => void>();
+  const startCharacterAnimationRef = useRef<((character: 'boy' | 'girl') => void) | null>(null);
   
   const startCharacterAnimation = useCallback((character: 'boy' | 'girl') => {
     setActiveCharacter(character);

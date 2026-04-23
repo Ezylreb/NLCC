@@ -12,6 +12,7 @@ import {
   Event,
 } from './types';
 import GamificationService from '@/lib/services/GamificationService';
+import { ASSESSMENT_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 /**
  * Handler for assessment submissions - calculates rewards and checks milestones
@@ -23,12 +24,12 @@ export class RewardCalculationHandler implements EventHandler<AssessmentSubmitte
 
   async handle(event: AssessmentSubmittedEvent): Promise<void> {
     // Award reward (if not already awarded)
-    if (event.isCorrect && event.pointsEarned > 0) {
+    if (event.isCorrect) {
       await GamificationService.awardReward({
         studentId: event.studentId,
         assessmentId: event.assessmentId,
         yunitId: event.yunitId,
-        xpEarned: event.pointsEarned,
+        xpEarned: ASSESSMENT_COMPLETION_XP,
         reason: 'assessment-correct',
         metadata: {
           assessmentType: event.assessmentType,

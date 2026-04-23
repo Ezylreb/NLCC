@@ -1,27 +1,54 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
 interface RewardModalProps {
   isOpen: boolean;
   isPassed: boolean;
+  isRetake?: boolean;
   scorePercentage: number;
   xpEarned: number;
   coinsEarned: number;
   message: string;
-  onClose: () => void;
+  continueLabel?: string;
+  onClaimRewards?: () => void;
+  onContinue: () => void;
 }
 
 export const RewardModal: React.FC<RewardModalProps> = ({
   isOpen,
   isPassed,
+  isRetake = false,
   scorePercentage,
   xpEarned,
   coinsEarned,
   message,
-  onClose
+  continueLabel = 'Magpatuloy',
+  onClaimRewards,
+  onContinue
 }) => {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !isPassed) {
+      return;
+    }
+
+    const audio = new Audio('/audio/success.wav');
+    audioRef.current = audio;
+    audio.play().catch(() => {
+      // Ignore autoplay restrictions until the next user interaction.
+    });
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, [isOpen, isPassed]);
+
   if (!isOpen) return null;
 
   return (
@@ -32,8 +59,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         exit={{ scale: 0, opacity: 0 }}
         className={`relative p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-6 ${
           isPassed
-            ? 'bg-gradient-to-b from-green-900 to-slate-900 border-2 border-green-500'
-            : 'bg-gradient-to-b from-orange-900 to-slate-900 border-2 border-orange-500'
+            ? 'bg-linear-to-b from-green-900 to-slate-900 border-2 border-green-500'
+            : 'bg-linear-to-b from-orange-900 to-slate-900 border-2 border-orange-500'
         }`}
       >
         {/* Celebration Animation */}
@@ -69,7 +96,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         {/* Title */}
         <div>
           <h2 className={`text-3xl font-black ${isPassed ? 'text-green-300' : 'text-orange-300'}`}>
-            {isPassed ? 'Excellent Work!' : 'Good Effort!'}
+            {isPassed ? (isRetake ? 'Natapos Mong Muli' : 'Excellent Work!') : 'Good Effort!'}
           </h2>
           <p className="text-slate-300 mt-2">{message}</p>
         </div>
@@ -86,8 +113,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
             <div
               className={`h-full ${
                 isPassed
-                  ? 'bg-gradient-to-r from-green-500 to-green-400'
-                  : 'bg-gradient-to-r from-orange-500 to-orange-400'
+                  ? 'bg-linear-to-r from-green-500 to-green-400'
+                  : 'bg-linear-to-r from-orange-500 to-orange-400'
               }`}
               style={{ width: `${scorePercentage}%` }}
             />
@@ -98,7 +125,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         </div>
 
         {/* Rewards */}
-        {isPassed && (
+        {isPassed && !isRetake && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -119,17 +146,36 @@ export const RewardModal: React.FC<RewardModalProps> = ({
           </motion.div>
         )}
 
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className={`w-full py-3 rounded-lg font-bold text-white transition-all ${
-            isPassed
-              ? 'bg-green-600 hover:bg-green-700'
-              : 'bg-orange-600 hover:bg-orange-700'
-          }`}
-        >
-          {isPassed ? '✨ Continue' : '🔄 Try Again'}
-        </button>
+        {isPassed ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">
+              {isRetake
+                ? 'Practice retake ito. Wala nang bagong XP o coins, pero naitala ang panibagong pagsubok mo.'
+                : 'Kunin ang iyong gantimpala para makita ang progreso ng iyong mga misyon, o magpatuloy agad sa susunod na Yunit.'}
+            </p>
+            {!isRetake && (
+              <button
+                onClick={onClaimRewards}
+                className="w-full py-3 rounded-lg font-bold text-slate-950 bg-yellow-400 hover:bg-yellow-300 transition-all"
+              >
+                Kunin
+              </button>
+            )}
+            <button
+              onClick={onContinue}
+              className="w-full py-3 rounded-lg font-bold text-white bg-green-600 hover:bg-green-700 transition-all"
+            >
+              {continueLabel}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onContinue}
+            className="w-full py-3 rounded-lg font-bold text-white bg-orange-600 hover:bg-orange-700 transition-all"
+          >
+            🔄 Try Again
+          </button>
+        )}
       </motion.div>
     </div>
   );

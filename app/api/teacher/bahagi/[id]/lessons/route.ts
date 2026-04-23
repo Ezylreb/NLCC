@@ -10,7 +10,7 @@ export async function POST(
 ) {
   try {
     const { id: bahagiId } = await params;
-    const { title, subtitle, discussion, lesson_order, media_url, audio_url } = await request.json();
+    const { title, subtitle, discussion, lesson_order, media_url, audio_url, quarter, week_number, module_number } = await request.json();
 
     if (!bahagiId) {
       return NextResponse.json(
@@ -45,13 +45,17 @@ export async function POST(
       nextOrder = orderResult.rows[0].next_order;
     }
 
+    const normalizedSubtitle = typeof subtitle === 'string'
+      ? subtitle.trim().slice(0, 255)
+      : null;
+
     // Insert lesson with media URLs
     console.log('[POST lesson] Creating lesson:', { bahagiId, title, subtitle, discussion, nextOrder, has_media: !!media_url, has_audio: !!audio_url });
     const result = await query(
-      `INSERT INTO lesson (bahagi_id, title, subtitle, discussion, lesson_order, media_url, audio_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, bahagi_id, title, subtitle, discussion, lesson_order, media_url, audio_url, created_at, updated_at`,
-      [bahagiId, title, subtitle || null, discussion || null, nextOrder, media_url || null, audio_url || null]
+      `INSERT INTO lesson (bahagi_id, title, subtitle, discussion, lesson_order, media_url, audio_url, quarter, week_number, module_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id, bahagi_id, title, subtitle, discussion, lesson_order, media_url, audio_url, quarter, week_number, module_number, created_at, updated_at`,
+      [bahagiId, title, normalizedSubtitle, discussion || null, nextOrder, media_url || null, audio_url || null, quarter || null, week_number || null, module_number || null]
     );
     
     console.log('[POST lesson] Lesson created successfully with ID:', result.rows[0].id);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { LESSON_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 export async function POST(
   request: NextRequest,
@@ -39,26 +40,26 @@ export async function POST(
     const lessonTitle = lessonResult.rows[0].title;
     console.log(`Lesson found: "${lessonTitle}" (Bahagi: ${bahagiId})`);
 
-    // Get rewards for this Bahagi
+    // Keep coin rewards from Bahagi configuration, but standardize each yunit to fixed XP.
     const rewardsResult = await query(
       `SELECT reward_type, amount FROM bahagi_reward WHERE bahagi_id = $1`,
       [bahagiId]
     );
 
-    let xpEarned = 0;
+    const xpEarned = LESSON_COMPLETION_XP;
     let coinsEarned = 0;
 
     for (const reward of rewardsResult.rows) {
-      if (reward.reward_type === 'xp') {
-        xpEarned = reward.amount;
-      } else if (reward.reward_type === 'coins') {
+      if (reward.reward_type === 'coins') {
         coinsEarned = reward.amount;
       }
     }
 
     // Check if lesson progress already exists
     const existingProgress = await query(
-      `SELECT id, completed FROM lesson_progress WHERE student_id = $1 AND lesson_id = $2`,
+      `SELECT id, completed, xp_earned, coins_earned
+       FROM lesson_progress
+       WHERE student_id = $1 AND lesson_id = $2`,
       [studentId, lessonId]
     );
 
@@ -67,8 +68,30 @@ export async function POST(
       console.log(`  Current status: completed=${existingProgress.rows[0].completed}`);
     }
 
+    const existingRecord = existingProgress.rows[0];
+    const alreadyCompleted = Boolean(existingRecord?.completed);
+
     let result;
-    if (existingProgress.rows.length > 0) {
+    let xpDelta = 0;
+    let coinDelta = 0;
+
+    if (alreadyCompleted) {
+      const previousXp = Number(existingRecord.xp_earned || 0);
+      const previousCoins = Number(existingRecord.coins_earned || 0);
+      xpDelta = Math.max(0, xpEarned - previousXp);
+      coinDelta = Math.max(0, coinsEarned - previousCoins);
+
+      console.log(`Lesson already completed. Syncing rewards if needed...`);
+      result = await query(
+        `UPDATE lesson_progress
+         SET xp_earned = $3,
+             coins_earned = $4,
+             updated_at = NOW()
+         WHERE student_id = $1 AND lesson_id = $2
+         RETURNING id, student_id, lesson_id, completed, completion_date, xp_earned, coins_earned`,
+        [studentId, lessonId, xpEarned, coinsEarned]
+      );
+    } else if (existingProgress.rows.length > 0) {
       // Update existing record to mark as completed
       console.log(`Updating existing progress to completed=true...`);
       result = await query(
@@ -82,6 +105,8 @@ export async function POST(
          RETURNING id, student_id, lesson_id, completed, completion_date, xp_earned, coins_earned`,
         [studentId, lessonId, xpEarned, coinsEarned]
       );
+      xpDelta = xpEarned;
+      coinDelta = coinsEarned;
       console.log(`✅ UPDATE successful:`, result.rows[0]);
     } else {
       // Create new progress record
@@ -92,7 +117,19 @@ export async function POST(
          RETURNING id, student_id, lesson_id, completed, completion_date, xp_earned, coins_earned`,
         [studentId, lessonId, xpEarned, coinsEarned]
       );
+      xpDelta = xpEarned;
+      coinDelta = coinsEarned;
       console.log(`✅ INSERT successful:`, result.rows[0]);
+    }
+
+    if (xpDelta > 0 || coinDelta > 0) {
+      await query(
+        `UPDATE users
+         SET xp = COALESCE(xp, 0) + $1,
+             coins = COALESCE(coins, 0) + $2
+         WHERE id = $3`,
+        [xpDelta, coinDelta, studentId]
+      );
     }
 
     console.log(`=== COMPLETE LESSON API DONE ===\n`);

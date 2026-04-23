@@ -36,6 +36,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     };
 
     const [activeTab, setActiveTab] = useState<TabType>(getInitialTab);
+    const [visitedTabs, setVisitedTabs] = useState<Record<TabType, boolean>>(() => {
+        const initialTab = getInitialTab();
+        return {
+            lessons: initialTab === 'lessons',
+            leaders: initialTab === 'leaders',
+            missions: initialTab === 'missions',
+            store: initialTab === 'store',
+            avatar: initialTab === 'avatar',
+            profile: initialTab === 'profile',
+        };
+    });
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [userProfile, setUserProfile] = useState<any>(null);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -55,9 +66,37 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     const [profileSuccess, setProfileSuccess] = useState('');
     const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
+    // Badges state
+    const [completedMissions, setCompletedMissions] = useState<any[]>([]);
+    const [trophies, setTrophies] = useState<any[]>([]);
+    const [lessonsRefreshToken, setLessonsRefreshToken] = useState(0);
+    const [leadersRefreshToken, setLeadersRefreshToken] = useState(0);
+    const [missionsRefreshToken, setMissionsRefreshToken] = useState(0);
+
     // Save active tab to localStorage when it changes
     useEffect(() => {
         localStorage.setItem('studentActiveTab', activeTab);
+    }, [activeTab]);
+
+    useEffect(() => {
+        setVisitedTabs((prev) => ({
+            ...prev,
+            [activeTab]: true,
+        }));
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'lessons') {
+            setLessonsRefreshToken((prev) => prev + 1);
+        }
+
+        if (activeTab === 'leaders') {
+            setLeadersRefreshToken((prev) => prev + 1);
+        }
+
+        if (activeTab === 'missions') {
+            setMissionsRefreshToken((prev) => prev + 1);
+        }
     }, [activeTab]);
 
     const tabs = [
@@ -89,6 +128,31 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         };
         fetchUserProfile();
     }, [user?.email]);
+
+    // Fetch badges (completed missions + trophies) when profile tab is visited
+    useEffect(() => {
+        if (activeTab !== 'profile' || !user?.id) return;
+        const fetchBadges = async () => {
+            try {
+                const [missionsRes, rewardsRes] = await Promise.all([
+                    fetch('/api/student/missions', { headers: { 'x-student-id': user.id! } }),
+                    fetch(`/api/student/rewards?studentId=${user.id}`)
+                ]);
+                if (missionsRes.ok) {
+                    const mData = await missionsRes.json();
+                    const missions = mData.data || mData.missions || [];
+                    setCompletedMissions(missions.filter((m: any) => m.completed));
+                }
+                if (rewardsRes.ok) {
+                    const rData = await rewardsRes.json();
+                    setTrophies(rData.trophies || []);
+                }
+            } catch (err) {
+                console.error('Error fetching badges:', err);
+            }
+        };
+        fetchBadges();
+    }, [activeTab, user?.id]);
 
     // Handle password change
     const handlePasswordChange = async () => {
@@ -249,53 +313,49 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
             {/* Main Content */}
             <div className="flex-1 overflow-y-auto relative z-10">
-                <AnimatePresence mode="wait">
-                    {activeTab === 'lessons' && (
-                        <motion.div
-                            key="lessons"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="w-full h-full"
-                        >
-                            <MagAralPage
-                                studentId={user?.id || ''}
-                                studentName={`${user?.firstName} ${user?.lastName}`}
-                                onNavigate={(view) => {
-                                    // Navigation handler for MagAralPage
-                                }}
-                            />
-                        </motion.div>
-                    )}
+                {visitedTabs.lessons && (
+                    <div className={activeTab === 'lessons' ? 'w-full h-full' : 'hidden'}>
+                        <MagAralPage
+                            studentId={user?.id || ''}
+                            studentName={`${user?.firstName} ${user?.lastName}`}
+                            refreshToken={lessonsRefreshToken}
+                            onNavigate={(view) => {
+                                if (view === 'missions' || view === 'lessons' || view === 'leaders' || view === 'store' || view === 'avatar' || view === 'profile') {
+                                    setActiveTab(view as TabType);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
 
-                    {activeTab === 'leaders' && (
-                        <motion.div key="leaders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentLeaderboard />
-                        </motion.div>
-                    )}
+                {visitedTabs.leaders && (
+                    <div className={activeTab === 'leaders' ? 'w-full' : 'hidden'}>
+                        <StudentLeaderboard studentId={user?.id || ''} refreshToken={leadersRefreshToken} />
+                    </div>
+                )}
 
-                    {activeTab === 'missions' && (
-                        <motion.div key="missions" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentMissions />
-                        </motion.div>
-                    )}
+                {visitedTabs.missions && (
+                    <div className={activeTab === 'missions' ? 'w-full' : 'hidden'}>
+                        <StudentMissions refreshToken={missionsRefreshToken} />
+                    </div>
+                )}
 
-                    {activeTab === 'store' && (
-                        <motion.div key="store" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentShop />
-                        </motion.div>
-                    )}
+                {visitedTabs.store && (
+                    <div className={activeTab === 'store' ? 'w-full' : 'hidden'}>
+                        <StudentShop userId={user?.id || ''} />
+                    </div>
+                )}
 
-                    {activeTab === 'avatar' && (
-                        <motion.div key="avatar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full">
-                            <StudentAvatarCustomization />
-                        </motion.div>
-                    )}
+                {visitedTabs.avatar && (
+                    <div className={activeTab === 'avatar' ? 'w-full' : 'hidden'}>
+                        <StudentAvatarCustomization />
+                    </div>
+                )}
 
-                    {activeTab === 'profile' && (
-                        <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
+                {visitedTabs.profile && (
+                    <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={activeTab === 'profile' ? 'p-8' : 'hidden'}>
                             <h1 className="text-4xl font-black text-white mb-8">← Profile</h1>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl items-stretch">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full items-stretch">
                                 {/* Left Side - Profile Information */}
                                 <div className="space-y-6 flex flex-col">
                                     <div className="space-y-4">
@@ -489,10 +549,46 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* Right Side - Badges Achieved */}
+                                <div className="flex flex-col h-full">
+                                    <h3 className="text-2xl font-bold text-white mb-2 text-center">Mga Badge</h3>
+                                    <p className="text-slate-400 text-sm text-center mb-4">Mga nakamit mula sa misyon at milestone</p>
+                                    <div className="flex-1 bg-slate-800/30 border border-white/10 rounded-2xl p-4 overflow-y-auto max-h-150 space-y-3">
+                                        {/* Trophies */}
+                                        {trophies.length > 0 && trophies.map((trophy: any, i: number) => (
+                                            <div key={`trophy-${i}`} className="flex items-center gap-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                                                <span className="text-3xl">{trophy.icon || '🏆'}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-white font-bold text-sm truncate">{trophy.title}</p>
+                                                    <p className="text-yellow-400 text-xs">Trophy</p>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {/* Completed Missions */}
+                                        {completedMissions.length > 0 && completedMissions.map((mission: any, i: number) => (
+                                            <div key={`mission-${i}`} className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+                                                <span className="text-3xl">🎯</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-white font-bold text-sm truncate">{mission.title}</p>
+                                                    <p className="text-green-400 text-xs">+{mission.xp_reward} XP · +{mission.coin_reward} Coins</p>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {trophies.length === 0 && completedMissions.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                                                <span className="text-5xl mb-4">🎖️</span>
+                                                <p className="font-semibold">Wala pang badge</p>
+                                                <p className="text-xs mt-1">Kumpletuhin ang mga misyon para makakuha!</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </motion.div>
                     )}
-                </AnimatePresence>
             </div>
 
             {/* Logout Modal */}

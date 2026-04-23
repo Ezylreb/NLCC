@@ -11,12 +11,20 @@ import { AdaptiveQuizScreen } from './AdaptiveQuizScreen';
 import { RewardModal } from './RewardModal';
 import { TeacherLessonsView } from './TeacherLessonsView';
 
+interface StartAssessmentOptions {
+  openAssessmentDirectly?: boolean;
+  isRetake?: boolean;
+  nextYunitId?: string | number | null;
+  attemptCount?: number;
+}
+
 type ViewType = 'lessons' | 'classes' | 'bahagis' | 'yunits' | 'lessonContent' | 'assessment' | 'adaptiveQuiz';
 
 interface MagAralPageProps {
   studentId: string;
   studentName: string;
   onNavigate?: (view: string) => void;
+  refreshToken?: number;
 }
 
 interface TeacherInfo {
@@ -30,15 +38,26 @@ interface TeacherInfo {
 export const MagAralPage: React.FC<MagAralPageProps> = ({
   studentId,
   studentName,
-  onNavigate
+  onNavigate,
+  refreshToken = 0,
 }) => {
-  // Initialize view and selections from localStorage
-  const getInitialView = (): ViewType => {
+  const getStoredValue = (key: string): string | null => {
     if (typeof window !== 'undefined') {
-      const savedView = localStorage.getItem('magAralView');
-      if (savedView && ['lessons', 'classes', 'bahagis', 'yunits', 'lessonContent', 'assessment', 'adaptiveQuiz'].includes(savedView)) {
-        return savedView as ViewType;
-      }
+      return localStorage.getItem(key);
+    }
+    return null;
+  };
+
+  // Cache for lessons data to avoid re-fetching
+  const [lessonsCache, setLessonsCache] = useState<any>(null);
+  const [classesCache, setClassesCache] = useState<any>(null);
+  const [yunitsCache, setYunitsCache] = useState<Record<string, any>>({});
+
+  // Initialize view from localStorage or default
+  const getInitialView = (): ViewType => {
+    const savedView = getStoredValue('magAralView');
+    if (savedView && ['lessons', 'classes', 'bahagis', 'yunits', 'lessonContent', 'assessment', 'adaptiveQuiz'].includes(savedView)) {
+      return savedView as ViewType;
     }
     return 'classes';
   };
@@ -70,46 +89,53 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
   const [yunitViewKey, setYunitViewKey] = useState(0); // For forcing YunitView refresh
   const [lessonsViewKey, setLessonsViewKey] = useState(0); // For forcing TeacherLessonsView refresh
 
-  // Reset to classes view on first mount (ensure clean state)
+  // Fetch student's teacher info and pre-fetch lessons on component mount
   useEffect(() => {
-    setCurrentView('classes');
-    localStorage.removeItem('magAralBahagiId'); // Clear old bahagi selection
-  }, []); // Run only once on mount
-
-  // Fetch student's teacher info on component mount
-  useEffect(() => {
-    const fetchTeacherInfo = async () => {
+    const fetchTeacherInfoAndLessons = async () => {
       try {
-        console.log('🔍 [MagAralPage] Fetching teacher info for student:', studentId);
         const res = await apiClient.student.getDetails(studentId);
-        console.log('🔍 [MagAralPage] Teacher info response:', res);
         
         if (res.success) {
-          console.log('🔍 [MagAralPage] Teacher info data:', res.data);
           setTeacherInfo(res.data);
-          // Always start with classes view - let user choose which class
+          
+          // Pre-fetch lessons if teacher is assigned (but stay on classes view)
+          if (res.data?.isAssigned && res.data?.teacherId) {
+            // Fetch lessons in background for faster access later
+            const lessonsRes = await apiClient.student.getTeacherLessons(studentId, res.data.teacherId);
+            if (lessonsRes.success) {
+              setLessonsCache(lessonsRes);
+            }
+          }
+          
+          const savedView = getInitialView();
+          setCurrentView(savedView);
         } else {
-          console.error('🔍 [MagAralPage] Failed to get teacher info:', res.error);
+          setCurrentView('classes'); // Fallback to classes view
         }
       } catch (err) {
         console.error('Failed to fetch teacher info:', err);
+        setCurrentView('classes'); // Fallback to classes view
       } finally {
         setIsLoadingTeacher(false);
       }
     };
 
     if (studentId) {
-      fetchTeacherInfo();
+      fetchTeacherInfoAndLessons();
     }
   }, [studentId]);
   
   const [selectedClassId, setSelectedClassId] = useState<string | null>(getInitialClassId);
-  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(null);
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
-  const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(null);
+  const [selectedClassTeacherId, setSelectedClassTeacherId] = useState<string | null>(() => getStoredValue('magAralClassTeacherId'));
+  const [selectedClassName, setSelectedClassName] = useState<string | null>(() => getStoredValue('magAralClassName'));
+  const [selectedTeacherName, setSelectedTeacherName] = useState<string | null>(() => getStoredValue('magAralTeacherName'));
   const [selectedBahagiId, setSelectedBahagiId] = useState<string | number | null>(getInitialBahagiId);
   const [selectedYunitId, setSelectedYunitId] = useState<string | number | null>(getInitialYunitId);
-  const [pendingNextYunitId, setPendingNextYunitId] = useState<string | number | null>(null);
+  const [nextYunitAfterAssessment, setNextYunitAfterAssessment] = useState<string | number | null>(null);
+  const [assessmentRetakeInfo, setAssessmentRetakeInfo] = useState<{ isRetake: boolean; previousAttempts: number }>({
+    isRetake: false,
+    previousAttempts: 0,
+  });
 
   // Save navigation state to localStorage whenever it changes
   useEffect(() => {
@@ -140,6 +166,52 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     }
   }, [selectedYunitId]);
 
+  useEffect(() => {
+    if (selectedClassTeacherId) {
+      localStorage.setItem('magAralClassTeacherId', selectedClassTeacherId);
+    } else {
+      localStorage.removeItem('magAralClassTeacherId');
+    }
+  }, [selectedClassTeacherId]);
+
+  useEffect(() => {
+    if (selectedClassName) {
+      localStorage.setItem('magAralClassName', selectedClassName);
+    } else {
+      localStorage.removeItem('magAralClassName');
+    }
+  }, [selectedClassName]);
+
+  useEffect(() => {
+    if (selectedTeacherName) {
+      localStorage.setItem('magAralTeacherName', selectedTeacherName);
+    } else {
+      localStorage.removeItem('magAralTeacherName');
+    }
+  }, [selectedTeacherName]);
+
+  useEffect(() => {
+    if (!teacherInfo?.isAssigned) {
+      return;
+    }
+
+    if (!selectedClassId && teacherInfo.classId) {
+      setSelectedClassId(teacherInfo.classId);
+    }
+
+    if (!selectedClassTeacherId && teacherInfo.teacherId) {
+      setSelectedClassTeacherId(teacherInfo.teacherId);
+    }
+
+    if (!selectedClassName && teacherInfo.className) {
+      setSelectedClassName(teacherInfo.className);
+    }
+
+    if (!selectedTeacherName && teacherInfo.teacherName) {
+      setSelectedTeacherName(teacherInfo.teacherName);
+    }
+  }, [teacherInfo, selectedClassId, selectedClassTeacherId, selectedClassName, selectedTeacherName]);
+
   // Reward modal state
   const [showRewardModal, setShowRewardModal] = useState(false);
   const [rewardData, setRewardData] = useState<any>(null);
@@ -152,9 +224,27 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     setCurrentView('lessons');
   };
 
-  const handleSelectLesson = (bahagiId: string) => {
+  const handleSelectLesson = async (bahagiId: string) => {
+    const key = String(bahagiId);
     setSelectedBahagiId(bahagiId);
     setCurrentView('yunits');
+    
+    // Only fetch if not already cached
+    if (!yunitsCache[key]) {
+      try {
+        const response = await fetch(`/api/student/yunits-progress?bahagiId=${bahagiId}&studentId=${studentId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          setYunitsCache(prev => ({
+            ...prev,
+            [key]: data
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch yunits:', err);
+      }
+    }
   };
 
   const handleSelectBahagi = (bahagiId: string | number) => {
@@ -162,23 +252,14 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     setCurrentView('yunits');
   };
 
-  const handleStartAssessment = (yunitId: string | number) => {
+  const handleStartAssessment = (yunitId: string | number, options?: StartAssessmentOptions) => {
     setSelectedYunitId(yunitId);
-    setCurrentView('lessonContent');
-  };
-
-  const handleLessonComplete = () => {
-    // Move from lesson content to assessment (called after last yunit with no assessment)
-    // Go back to yunits view with celebration already shown
-    setYunitViewKey(prev => prev + 1);
-    setCurrentView('yunits');
-  };
-
-  const handleShowAssessment = (yunitId: string | number, nextYunitId?: string | number) => {
-    // Show assessment for the current yunit, remembering where to go next
-    setSelectedYunitId(yunitId);
-    setPendingNextYunitId(nextYunitId || null);
-    setCurrentView('assessment');
+    setNextYunitAfterAssessment(options?.nextYunitId ?? null);
+    setAssessmentRetakeInfo({
+      isRetake: Boolean(options?.isRetake),
+      previousAttempts: options?.attemptCount || 0,
+    });
+    setCurrentView(options?.openAssessmentDirectly ? 'assessment' : 'lessonContent');
   };
 
   const handleStartQuiz = (bahagiId: string) => {
@@ -186,9 +267,21 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     setCurrentView('adaptiveQuiz');
   };
 
+  const handleLessonComplete = (options?: { nextYunitId?: string | number | null }) => {
+    setNextYunitAfterAssessment(options?.nextYunitId ?? null);
+    setAssessmentRetakeInfo({ isRetake: false, previousAttempts: 0 });
+    setCurrentView('assessment');
+  };
+
   const handleNextYunit = (yunitId: string | number) => {
     // Navigate to next yunit in the sequence
     setSelectedYunitId(yunitId);
+  };
+
+  const handleLessonCompleted = () => {
+    // Don't invalidate cache - keep the data to prevent skeleton screens
+    // Progress will be updated on next navigation or refresh
+    // This provides a smoother UX without loading states
   };
 
   const handleAssessmentComplete = (result: any) => {
@@ -196,26 +289,48 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
     setShowRewardModal(true);
   };
 
-  const handleCloseReward = () => {
+  const refreshYunitProgressCache = () => {
+    setYunitViewKey(prev => prev + 1);
+
+    if (selectedBahagiId) {
+      setYunitsCache(prev => {
+        const newCache = { ...prev };
+        delete newCache[selectedBahagiId.toString()];
+        return newCache;
+      });
+    }
+  };
+
+  const handleClaimReward = () => {
     setShowRewardModal(false);
-    if (rewardData?.success && rewardData?.progress?.is_passed) {
-      // If there's a pending next yunit, navigate to it
-      if (pendingNextYunitId) {
-        setSelectedYunitId(pendingNextYunitId);
-        setPendingNextYunitId(null);
-        setCurrentView('lessonContent');
-      } else {
-        // Refresh YunitView when returning after assessment completion
-        setYunitViewKey(prev => prev + 1);
-        // Go back to yunits view after successful completion
-        setCurrentView('yunits');
-      }
+    refreshYunitProgressCache();
+
+    if (nextYunitAfterAssessment) {
+      setSelectedYunitId(nextYunitAfterAssessment);
+      setCurrentView('lessonContent');
     } else {
-      // Failed assessment - go back to yunits view
-      setPendingNextYunitId(null);
-      setYunitViewKey(prev => prev + 1);
       setCurrentView('yunits');
     }
+
+    setNextYunitAfterAssessment(null);
+    setAssessmentRetakeInfo({ isRetake: false, previousAttempts: 0 });
+    onNavigate?.('missions');
+  };
+
+  const handleContinueReward = () => {
+    setShowRewardModal(false);
+    refreshYunitProgressCache();
+
+    if (nextYunitAfterAssessment) {
+      setSelectedYunitId(nextYunitAfterAssessment);
+      setNextYunitAfterAssessment(null);
+      setAssessmentRetakeInfo({ isRetake: false, previousAttempts: 0 });
+      setCurrentView('lessonContent');
+      return;
+    }
+
+    setAssessmentRetakeInfo({ isRetake: false, previousAttempts: 0 });
+    setCurrentView('yunits');
   };
 
   const goBack = () => {
@@ -226,18 +341,16 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
       setSelectedClassName(null);
       setSelectedTeacherName(null);
     } else if (currentView === 'yunits') {
-      // Refresh TeacherLessonsView when going back from yunits
-      setLessonsViewKey(prev => prev + 1);
+      // Don't refresh lessons - use cache for instant navigation
       setCurrentView('lessons');
       setSelectedBahagiId(null);
     } else if (currentView === 'lessonContent') {
-      // Refresh YunitView when going back from lesson content
-      setYunitViewKey(prev => prev + 1);
+      // Go back to yunits view without clearing cache
+      // This prevents skeleton screens when navigating back
       setCurrentView('yunits');
     } else if (currentView === 'assessment') {
       setCurrentView('lessonContent');
     } else if (currentView === 'adaptiveQuiz') {
-      setLessonsViewKey(prev => prev + 1);
       setCurrentView('lessons');
       setSelectedBahagiId(null);
     }
@@ -266,6 +379,16 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           teacherId={selectedClassTeacherId}
           teacherName={selectedTeacherName || 'Your Teacher'}
           className={selectedClassName || 'Your Class'}
+          cachedData={lessonsCache}
+          refreshToken={refreshToken}
+          onDataFetched={(data) => setLessonsCache(data)}
+          onYunitsCached={(bahagiId, data) => {
+            const key = String(bahagiId);
+            setYunitsCache(prev => ({
+              ...prev,
+              [key]: data
+            }));
+          }}
           onSelectLesson={handleSelectLesson}
           onStartQuiz={handleStartQuiz}
           onBack={() => setCurrentView('classes')}
@@ -284,6 +407,8 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
         <ClassView
           studentId={studentId}
           studentName={studentName}
+          cachedData={classesCache}
+          onDataFetched={(data) => setClassesCache(data)}
           onSelectClass={handleSelectClass}
           onBack={() => onNavigate?.('dashboard')}
         />
@@ -296,6 +421,14 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           key={yunitViewKey}
           studentId={studentId}
           bahagiId={selectedBahagiId}
+          cachedData={yunitsCache[String(selectedBahagiId)]}
+          refreshToken={refreshToken}
+          onDataFetched={(data) => {
+            setYunitsCache(prev => ({
+              ...prev,
+              [selectedBahagiId.toString()]: data
+            }));
+          }}
           onStartAssessment={handleStartAssessment}
           onBack={goBack}
         />
@@ -306,6 +439,7 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           yunitId={selectedYunitId}
           bahagiId={selectedBahagiId}
           studentId={studentId}
+          cachedYunits={yunitsCache[String(selectedBahagiId)]?.data}
           onComplete={handleLessonComplete}
           onNextYunit={handleNextYunit}
           onShowAssessment={handleShowAssessment}
@@ -318,8 +452,10 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
           studentId={studentId}
           yunitId={selectedYunitId}
           bahagiId={selectedBahagiId}
+          isRetake={assessmentRetakeInfo.isRetake}
+          previousAttempts={assessmentRetakeInfo.previousAttempts}
           onComplete={handleAssessmentComplete}
-          onBack={goBack}
+          onBack={() => setCurrentView('yunits')}
         />
       )}
 
@@ -335,11 +471,14 @@ export const MagAralPage: React.FC<MagAralPageProps> = ({
       <RewardModal
         isOpen={showRewardModal}
         isPassed={rewardData?.isPassed || false}
+        isRetake={rewardData?.isRetake || false}
         scorePercentage={rewardData?.scorePercentage || 0}
         xpEarned={rewardData?.xpEarned || 0}
         coinsEarned={rewardData?.coinsEarned || 0}
         message={rewardData?.message || ''}
-        onClose={handleCloseReward}
+        continueLabel={nextYunitAfterAssessment ? 'Magpatuloy sa Susunod na Yunit' : 'Bumalik sa mga Yunit'}
+        onClaimRewards={handleClaimReward}
+        onContinue={handleContinueReward}
       />
     </>
   );

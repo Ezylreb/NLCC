@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { ASSESSMENT_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 // Assign difficulty: 1=easy, 2=medium, 3=hard
 function getDifficulty(type: string): number {
@@ -27,7 +28,8 @@ export async function GET(request: NextRequest) {
 
     // Fetch all assessments for this bahagi
     const result = await query(
-      `SELECT * FROM bahagi_assessment
+      `SELECT id, title, type, content, points, assessment_order
+       FROM bahagi_assessment
        WHERE bahagi_id = $1 AND (is_archived IS NULL OR is_archived = false)
        ORDER BY assessment_order ASC, id ASC`,
       [bahagiId]
@@ -36,7 +38,17 @@ export async function GET(request: NextRequest) {
     // Flatten all questions from assessments
     const allQuestions: any[] = [];
     for (const assessment of result.rows) {
-      const questions = assessment.content?.questions;
+      const content = typeof assessment.content === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(assessment.content);
+            } catch {
+              return null;
+            }
+          })()
+        : assessment.content;
+
+      const questions = content?.questions;
       if (questions && Array.isArray(questions) && questions.length > 0) {
         for (let i = 0; i < questions.length; i++) {
           const q = questions[i];
@@ -108,20 +120,12 @@ export async function GET(request: NextRequest) {
     // Sort by difficulty for adaptive ordering
     const sorted = allQuestions.sort((a, b) => a.difficulty - b.difficulty);
 
-    // Get existing progress
-    const progressResult = await query(
-      `SELECT * FROM lesson_progress WHERE student_id = $1 AND lesson_id IN (
-        SELECT id FROM bahagi_assessment WHERE bahagi_id = $2
-      )`,
-      [studentId, bahagiId]
-    );
-
     return NextResponse.json({
       success: true,
       bahagiId: Number(bahagiId),
       totalQuestions: sorted.length,
       questions: sorted,
-      previousAttempts: progressResult.rows.length,
+      previousAttempts: 0,
     });
   } catch (error: any) {
     console.error('[GET /api/student/adaptive-quiz] Error:', error);
@@ -151,46 +155,47 @@ export async function POST(request: NextRequest) {
 
     const scorePercentage = Math.round((correctCount / totalQuestions) * 100);
     const isPassed = scorePercentage >= 75;
+    const assessmentIds = [...new Set(
+      (Array.isArray(answers) ? answers : [])
+        .map((answer: any) => String(answer?.questionId || '').split('-')[0])
+        .filter(Boolean)
+    )];
 
-    // Calculate XP and coins based on performance and difficulty
-    const baseXP = 10;
+    // Standardize assessment/quiz XP while preserving coin scaling.
     const baseCoins = 5;
     const difficultyMultiplier = difficultyLevel || 1;
-    const xpEarned = isPassed ? Math.round(correctCount * baseXP * difficultyMultiplier) : Math.round(correctCount * 2);
+    const xpEarned = isPassed ? ASSESSMENT_COMPLETION_XP : 0;
     const coinsEarned = isPassed ? Math.round(correctCount * baseCoins * difficultyMultiplier) : Math.round(correctCount * 1);
 
-    // Save individual assessment responses
-    for (const answer of answers) {
-      const assessmentId = answer.questionId.split('-')[0];
-      try {
-        await query(
+    const saveResponsesTask = Promise.allSettled(
+      (Array.isArray(answers) ? answers : []).map((answer: any) => {
+        const assessmentId = String(answer?.questionId || '').split('-')[0];
+        if (!assessmentId) {
+          return Promise.resolve();
+        }
+
+        return query(
           `INSERT INTO assessment_responses 
            (assessment_id, student_id, response_data, is_correct, score, attempted_at, completed_at)
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
           [assessmentId, studentId, JSON.stringify(answer.answer), answer.isCorrect, answer.isCorrect ? 1 : 0]
-        );
-      } catch {
-        // Ignore duplicate insert errors
-      }
-    }
+        ).catch(() => {
+          // Ignore duplicate insert errors.
+          return null;
+        });
+      })
+    );
 
-    // Update student XP and coins
-    if (xpEarned > 0 || coinsEarned > 0) {
-      await query(
-        `UPDATE users SET xp = COALESCE(xp, 0) + $1, coins = COALESCE(coins, 0) + $2 WHERE id = $3`,
-        [xpEarned, coinsEarned, studentId]
-      );
-    }
+    const updateRewardsTask = (xpEarned > 0 || coinsEarned > 0)
+      ? query(
+          `UPDATE users SET xp = COALESCE(xp, 0) + $1, coins = COALESCE(coins, 0) + $2 WHERE id = $3`,
+          [xpEarned, coinsEarned, studentId]
+        )
+      : Promise.resolve();
 
-    // Save/update bahagi-level progress in lesson_progress
-    try {
-      // Get any assessment ID from this bahagi to use as lesson_id reference
-      const assessmentRef = await query(
-        `SELECT id FROM bahagi_assessment WHERE bahagi_id = $1 LIMIT 1`,
-        [bahagiId]
-      );
-      if (assessmentRef.rows.length > 0) {
-        await query(
+    const progressAssessmentId = assessmentIds[0];
+    const updateProgressTask = progressAssessmentId
+      ? query(
           `INSERT INTO lesson_progress (student_id, lesson_id, completed, completion_date, xp_earned, coins_earned, created_at, updated_at)
            VALUES ($1, $2, $3, NOW(), $4, $5, NOW(), NOW())
            ON CONFLICT (student_id, lesson_id) DO UPDATE SET
@@ -199,12 +204,14 @@ export async function POST(request: NextRequest) {
              coins_earned = GREATEST(lesson_progress.coins_earned, $5),
              completion_date = NOW(),
              updated_at = NOW()`,
-          [studentId, assessmentRef.rows[0].id, isPassed, xpEarned, coinsEarned]
-        );
-      }
-    } catch (err) {
-      console.error('[POST /api/student/adaptive-quiz] Progress save error:', err);
-    }
+          [studentId, progressAssessmentId, isPassed, xpEarned, coinsEarned]
+        ).catch((err) => {
+          console.error('[POST /api/student/adaptive-quiz] Progress save error:', err);
+          return null;
+        })
+      : Promise.resolve();
+
+    await Promise.all([saveResponsesTask, updateRewardsTask, updateProgressTask]);
 
     return NextResponse.json({
       success: true,

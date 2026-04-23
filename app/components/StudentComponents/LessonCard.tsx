@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { memo } from 'react';
 import { motion } from 'framer-motion';
 
 interface LessonCardProps {
@@ -11,15 +11,19 @@ interface LessonCardProps {
   imageUrl?: string;
   passedYunits: number;
   totalYunits: number;
+  completedAssessments?: number;
+  totalAssessments?: number;
   isCompleted: boolean;
   isUnlocked: boolean;
   xpReward: number;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  quarter?: string | null;
+  week_number?: number | null;
+  module_number?: string | null;
   onStart: () => void;
   onMatuto?: () => void;
 }
 
-export const LessonCard: React.FC<LessonCardProps> = ({
+const LessonCardComponent: React.FC<LessonCardProps> = ({
   bahagiNumber,
   yunitCount,
   title,
@@ -27,14 +31,20 @@ export const LessonCard: React.FC<LessonCardProps> = ({
   imageUrl,
   passedYunits,
   totalYunits,
+  completedAssessments = 0,
+  totalAssessments = 0,
   isCompleted,
   isUnlocked,
   xpReward,
-  difficulty,
+  quarter,
+  week_number,
+  module_number,
   onStart,
   onMatuto,
 }) => {
-  const progressPercentage = totalYunits > 0 ? Math.round((passedYunits / totalYunits) * 100) : 0;
+  const totalItems = totalYunits + totalAssessments;
+  const completedItems = passedYunits + completedAssessments;
+  const progressPercentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   const displayPercentage = passedYunits > 0 && progressPercentage < 5 ? 5 : progressPercentage;
 
   return (
@@ -48,7 +58,6 @@ export const LessonCard: React.FC<LessonCardProps> = ({
           : 'border-slate-700/50 bg-slate-900/40 opacity-60'
       }`}
     >
-      {/* Locked Overlay */}
       {!isUnlocked && (
         <div className="absolute inset-0 z-20 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center rounded-2xl">
           <div className="text-center">
@@ -58,7 +67,6 @@ export const LessonCard: React.FC<LessonCardProps> = ({
         </div>
       )}
 
-      {/* Completed Badge */}
       {isCompleted && (
         <div className="absolute top-3 left-3 z-10">
           <div className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-400 text-xs font-bold">
@@ -68,28 +76,41 @@ export const LessonCard: React.FC<LessonCardProps> = ({
       )}
 
       <div className="p-6 flex items-center gap-6">
-        {/* Left Side - Info & Button */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-2xl font-black text-white mb-1">
-            Bahagi {bahagiNumber}
-          </h3>
-          <p className="text-base text-slate-400 mb-4">
-            {passedYunits} / {totalYunits} na-tapos
-          </p>
+          <h3 className="text-2xl font-black text-white mb-1">Bahagi {bahagiNumber}</h3>
+          <p className="text-base text-slate-400 mb-1">{title}</p>
+          {description && <p className="text-sm text-slate-500 mb-3 line-clamp-2">{description}</p>}
 
-          {/* Progress Bar */}
-          <div className="flex items-center gap-3 mb-6">
+          {(quarter || week_number || module_number) && (
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {quarter && (
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-900/30 text-indigo-400">
+                  {quarter} Q
+                </span>
+              )}
+              {week_number && (
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-cyan-900/30 text-cyan-400">
+                  Week {week_number}
+                </span>
+              )}
+              {module_number && (
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-purple-900/30 text-purple-400">
+                  {module_number}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mb-4">
             <div className="relative w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
-              {/* Purple dot at the progress position */}
               <motion.div
-                key={`progress-${passedYunits}-${totalYunits}`}
+                key={`progress-${completedItems}-${totalItems}`}
                 initial={{ width: 0 }}
                 animate={{ width: `${displayPercentage}%` }}
                 transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
                 className="h-full bg-purple-500 rounded-full"
-                style={{ minWidth: passedYunits > 0 ? '5%' : '0%' }}
+                style={{ minWidth: completedItems > 0 ? '5%' : '0%' }}
               />
-              {/* Dot indicator */}
               <motion.div
                 initial={{ left: 0 }}
                 animate={{ left: `${Math.max(displayPercentage - 2, 0)}%` }}
@@ -102,9 +123,16 @@ export const LessonCard: React.FC<LessonCardProps> = ({
             </span>
           </div>
 
-          {/* Buttons */}
+          <div className="flex items-center justify-between mb-6 gap-3">
+            <p className="text-xs text-slate-400">
+              {passedYunits} / {totalYunits} yunit{totalAssessments > 0 ? ` · ${completedAssessments} / ${totalAssessments} assessment` : ''}
+            </p>
+            <span className="text-sm font-black text-amber-400 whitespace-nowrap">
+              ⚡ +{xpReward * totalYunits} XP
+            </span>
+          </div>
+
           <div className="flex items-center gap-3">
-            {/* Matuto Button - navigates to yunit content */}
             <motion.button
               whileHover={{ scale: isUnlocked ? 1.02 : 1 }}
               whileTap={{ scale: isUnlocked ? 0.97 : 1 }}
@@ -119,7 +147,6 @@ export const LessonCard: React.FC<LessonCardProps> = ({
               📖 Matuto
             </motion.button>
 
-            {/* Magpatuloy Button - navigates to adaptive quiz */}
             <motion.button
               whileHover={{ scale: isUnlocked ? 1.02 : 1 }}
               whileTap={{ scale: isUnlocked ? 0.97 : 1 }}
@@ -136,18 +163,12 @@ export const LessonCard: React.FC<LessonCardProps> = ({
           </div>
         </div>
 
-        {/* Right Side - Avatar & Speech Bubble */}
         <div className="shrink-0 flex flex-col items-center gap-2">
-          {/* Speech Bubble */}
-          <div className="relative bg-slate-700/80 border border-slate-600/50 rounded-2xl px-4 py-2.5 max-w-[200px]">
-            <p className="text-sm text-white font-medium text-center">
-              Hello, tara na matuto!
-            </p>
-            {/* Bubble tail */}
+          <div className="relative bg-slate-700/80 border border-slate-600/50 rounded-2xl px-4 py-2.5 max-w-50">
+            <p className="text-sm text-white font-medium text-center">Hello, tara na matuto!</p>
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-700/80 border-r border-b border-slate-600/50 rotate-45" />
           </div>
 
-          {/* Character Image */}
           <div className="w-32 h-32 rounded-xl overflow-hidden flex items-center justify-center">
             <img
               src={imageUrl || '/Character/NLLCTeachHalf1.png'}
@@ -160,3 +181,5 @@ export const LessonCard: React.FC<LessonCardProps> = ({
     </motion.div>
   );
 };
+
+export const LessonCard = memo(LessonCardComponent);

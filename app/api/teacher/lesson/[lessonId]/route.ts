@@ -83,6 +83,12 @@ export async function DELETE(
       );
     }
 
+    // Delete student progress for this lesson
+    await query(
+      'DELETE FROM lesson_progress WHERE lesson_id = $1',
+      [lessonId]
+    );
+
     const result = await query(
       'DELETE FROM lesson WHERE id = $1 RETURNING id',
       [lessonId]

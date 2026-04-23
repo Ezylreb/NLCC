@@ -8,6 +8,7 @@ interface CreateAssessmentFormProps {
     onSubmit: (data: any) => void;
     bahagiId: number;
     bahagiTitle: string;
+    availableYunits?: any[];
     isLoading?: boolean;
 }
 
@@ -26,10 +27,12 @@ export const CreateAssessmentForm: React.FC<CreateAssessmentFormProps> = ({
     onSubmit,
     bahagiId,
     bahagiTitle,
+    availableYunits = [],
     isLoading = false
 }) => {
     const [title, setTitle] = useState('');
     const [instructions, setInstructions] = useState('');
+    const [selectedYunitId, setSelectedYunitId] = useState<string>('');
     const [questions, setQuestions] = useState<any[]>([
         { 
             type: 'multiple-choice',
@@ -94,11 +97,18 @@ export const CreateAssessmentForm: React.FC<CreateAssessmentFormProps> = ({
             return;
         }
 
+        const yunitIdNum = parseInt(selectedYunitId, 10);
+        if (!Number.isFinite(yunitIdNum) || yunitIdNum <= 0) {
+            alert('Please select which Yunit this assessment belongs to');
+            return;
+        }
+
         // Use the first question's type as the assessment type
         const assessmentType = questions[0].type;
 
         const data = {
             bahagiId,
+            yunitId: yunitIdNum,
             title,
             type: assessmentType,
             instructions,
@@ -151,6 +161,45 @@ export const CreateAssessmentForm: React.FC<CreateAssessmentFormProps> = ({
                                 placeholder="e.g. Reading Comprehension Quiz"
                                 className="bg-slate-950 border border-slate-800 text-white px-5 py-4 rounded-xl text-sm focus:border-brand-purple outline-none transition-all placeholder:text-slate-700"
                             />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bahagi</label>
+                                <input
+                                    type="text"
+                                    value={bahagiTitle || `Bahagi ${bahagiId}`}
+                                    readOnly
+                                    className="bg-slate-950 border border-slate-800 text-slate-300 px-5 py-4 rounded-xl text-sm"
+                                />
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Yunit</label>
+                                <select
+                                    value={selectedYunitId}
+                                    onChange={(e) => setSelectedYunitId(e.target.value)}
+                                    className="bg-slate-950 border border-slate-800 text-white px-5 py-4 rounded-xl text-sm focus:border-brand-purple outline-none transition-all"
+                                    required
+                                >
+                                    <option value="">Select Yunit (e.g. Week 1, Bahagi 1, Yunit 1)</option>
+                                    {availableYunits.map((yunit: any) => {
+                                        const weekText = yunit?.week_number ? `Week ${yunit.week_number}` : 'Week -';
+                                        const bahagiText = bahagiTitle || `Bahagi ${bahagiId}`;
+                                        const yunitText = yunit?.title || `Yunit ${yunit?.id || ''}`;
+                                        return (
+                                            <option key={yunit.id} value={String(yunit.id)}>
+                                                {`${weekText} • ${bahagiText} • ${yunitText}`}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                {availableYunits.length === 0 && (
+                                    <p className="text-[11px] text-amber-400 font-bold">
+                                        No Yunit found for this Bahagi yet. Create a Yunit first before creating an assessment.
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex flex-col gap-2">

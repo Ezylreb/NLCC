@@ -16,9 +16,13 @@ interface ShopItem {
     image_url?: string;
 }
 
-export const StudentShop: React.FC = () => {
+interface StudentShopProps {
+    userId: string;
+}
+
+export const StudentShop: React.FC<StudentShopProps> = ({ userId }) => {
     const [items, setItems] = useState<ShopItem[]>([]);
-    const [coins, setCoins] = useState(340);
+    const [coins, setCoins] = useState(0);
     const [activeCategory, setActiveCategory] = useState<'all' | 'avatar' | 'power-up' | 'cosmetic' | 'background'>('all');
     const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -34,78 +38,26 @@ export const StudentShop: React.FC = () => {
         }
     };
 
-    useEffect(() => {
-        // Fetch shop items and coins
-        const fetchShopData = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
-                
-                // Fetch items
-                const itemsResult = await apiClient.student.getShopItems();
-                if (itemsResult.success && itemsResult.data) {
-                    const enrichedItems = itemsResult.data.map((item: any) => ({
-                        ...item,
-                        icon: getCategoryIcon(item.category),
-                    }));
-                    setItems(enrichedItems);
-                } else {
-                    setError('Failed to load shop items');
-                    setItems(getMockItems());
-                }
-                
-                // Fetch coins/stats
-                const statsResult = await apiClient.student.getStats();
-                if (statsResult.success && statsResult.data) {
-                    setCoins(statsResult.data.coins || 340);
-                }
-            } catch (error) {
-                console.error('Failed to fetch shop data:', error);
-                setError('Failed to load shop. Showing mock data.');
-                setItems(getMockItems());
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchShopData();
-
-        // Add escape key handler to close modal
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && selectedItem) {
-                setSelectedItem(null);
-            }
-        };
-
-        window.addEventListener('keydown', handleEscape);
-        
-        // Cleanup: close modal when component unmounts or tab changes
-        return () => {
-            window.removeEventListener('keydown', handleEscape);
-            setSelectedItem(null);
-        };
-    }, []);
-
     const getMockItems = (): ShopItem[] => [
         {
             id: '1',
-            name: 'Purple Hair',
-            description: 'Gawing purpre ang buhok mo',
-            price: 150,
+            name: 'Cool Cap',
+            description: 'Astig na sumbrero para sa iyong avatar',
+            price: 50,
             category: 'avatar',
-            icon: '💜',
+            icon: '🧢',
             rarity: 'common',
-            owned: false
+            owned: false,
         },
         {
             id: '2',
-            name: 'Cool Sunglasses',
-            description: 'Magiging mas cool sa mga sunglasses',
+            name: 'Energy Boost',
+            description: 'Dagdag lakas para sa mas mabilis na pag-aaral',
             price: 100,
-            category: 'cosmetic',
-            icon: '😎',
-            rarity: 'common',
-            owned: false
+            category: 'power-up',
+            icon: '⚡',
+            rarity: 'rare',
+            owned: false,
         },
         {
             id: '3',
@@ -115,7 +67,7 @@ export const StudentShop: React.FC = () => {
             category: 'cosmetic',
             icon: '🐉',
             rarity: 'epic',
-            owned: false
+            owned: false,
         },
         {
             id: '4',
@@ -125,7 +77,7 @@ export const StudentShop: React.FC = () => {
             category: 'background',
             icon: '👑',
             rarity: 'legendary',
-            owned: false
+            owned: false,
         },
         {
             id: '5',
@@ -135,7 +87,7 @@ export const StudentShop: React.FC = () => {
             category: 'avatar',
             icon: '🕹️',
             rarity: 'uncommon',
-            owned: false
+            owned: false,
         },
         {
             id: '6',
@@ -145,7 +97,7 @@ export const StudentShop: React.FC = () => {
             category: 'background',
             icon: '🎮',
             rarity: 'common',
-            owned: false
+            owned: false,
         },
         {
             id: '7',
@@ -155,7 +107,7 @@ export const StudentShop: React.FC = () => {
             category: 'cosmetic',
             icon: '🌈',
             rarity: 'epic',
-            owned: false
+            owned: false,
         },
         {
             id: '8',
@@ -165,9 +117,87 @@ export const StudentShop: React.FC = () => {
             category: 'power-up',
             icon: '⚡',
             rarity: 'uncommon',
-            owned: false
-        }
+            owned: false,
+        },
     ];
+
+    useEffect(() => {
+        const fetchShopData = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+
+                // Fetch shop items
+                const itemsResult = await apiClient.student.getShopItems();
+                let shopItems = itemsResult.success && itemsResult.data ? itemsResult.data : getMockItems();
+                
+                // Fetch student inventory to mark owned items
+                let ownedItemIds: string[] = [];
+                try {
+                    const inventoryResponse = await fetch('/api/student/inventory', {
+                        headers: {
+                            'x-student-id': userId,
+                        },
+                        cache: 'no-store',
+                    });
+                    if (inventoryResponse.ok) {
+                        const inventoryResult = await inventoryResponse.json();
+                        if (inventoryResult.success && inventoryResult.data) {
+                            ownedItemIds = inventoryResult.data.map((inv: any) => String(inv.item_id));
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Could not fetch inventory:', err);
+                }
+
+                // Mark owned items
+                const enrichedItems = shopItems.map((item: any) => ({
+                    ...item,
+                    id: String(item.id),
+                    icon: getCategoryIcon(item.category),
+                    owned: ownedItemIds.includes(String(item.id)),
+                }));
+                setItems(enrichedItems);
+
+                // Fetch student coins
+                const statsResponse = await fetch('/api/student/stats', {
+                    headers: {
+                        'x-student-id': userId,
+                    },
+                    cache: 'no-store',
+                });
+
+                if (statsResponse.ok) {
+                    const statsResult = await statsResponse.json();
+                    if (statsResult.success && statsResult.data) {
+                        setCoins(Number(statsResult.data.coins) || 0);
+                    }
+                }
+            } catch (fetchError) {
+                console.error('Failed to fetch shop data:', fetchError);
+                setError('Failed to load shop. Showing mock data.');
+                setItems(getMockItems());
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchShopData();
+    }, [userId]);
+
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && selectedItem) {
+                setSelectedItem(null);
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+
+        return () => {
+            window.removeEventListener('keydown', handleEscape);
+        };
+    }, [selectedItem]);
 
     const getRarityColor = (rarity: string) => {
         switch (rarity) {
@@ -201,16 +231,28 @@ export const StudentShop: React.FC = () => {
         }
     };
 
-    const handleBuyItem = (item: ShopItem) => {
+    const handleBuyItem = async (item: ShopItem) => {
         if (coins >= item.price) {
-            setCoins(coins - item.price);
-            // TODO: Send purchase request to API
-            const updatedItems = items.map((i) =>
-                i.id === item.id ? { ...i, owned: true } : i
-            );
-            setItems(updatedItems);
-            // Immediately close modal after purchase
-            setSelectedItem(null);
+            try {
+                const response = await apiClient.student.purchaseItem(item.id, 1);
+                if (response.success) {
+                    // Update coins and mark item as owned
+                    setCoins(coins - item.price);
+                    const updatedItems = items.map((i) =>
+                        i.id === item.id ? { ...i, owned: true } : i
+                    );
+                    setItems(updatedItems);
+                    // Show success feedback
+                    console.log(`Successfully purchased ${item.name}!`);
+                    // Immediately close modal after purchase
+                    setSelectedItem(null);
+                } else {
+                    setError(`Purchase failed: ${response.error || 'Unknown error'}`);
+                }
+            } catch (err) {
+                console.error('Purchase error:', err);
+                setError('Failed to process purchase. Please try again.');
+            }
         }
     };
 
@@ -272,11 +314,11 @@ export const StudentShop: React.FC = () => {
                                 className={`cursor-pointer p-4 rounded-xl border-2 transition-all ${
                                     item.owned
                                         ? 'bg-green-500/10 border-green-500/40'
-                                        : 'bg-gradient-to-b from-white/10 to-white/5 border-white/20 hover:border-brand-purple/50'
+                                        : 'bg-linear-to-b from-white/10 to-white/5 border-white/20 hover:border-brand-purple/50'
                                 }`}
                             >
                                 {/* Rarity Border */}
-                                <div className={`absolute inset-0 rounded-xl bg-gradient-to-b ${getRarityColor(item.rarity)} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                                    <div className={`absolute inset-0 rounded-xl bg-linear-to-b ${getRarityColor(item.rarity)} opacity-0 group-hover:opacity-10 transition-opacity`} />
 
                                 {/* Item Icon */}
                                 <div className="text-5xl mb-3 text-center">{item.icon}</div>
@@ -287,7 +329,7 @@ export const StudentShop: React.FC = () => {
 
                                 {/* Rarity Badge */}
                                 <div className="flex justify-center mb-3">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded bg-gradient-to-r ${getRarityColor(item.rarity)} text-white`}>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded bg-linear-to-r ${getRarityColor(item.rarity)} text-white`}>
                                         {getRarityLabel(item.rarity)}
                                     </span>
                                 </div>

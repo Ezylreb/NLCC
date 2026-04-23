@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import AssessmentService from '@/lib/services/AssessmentService';
 import GamificationService from '@/lib/services/GamificationService';
 import { eventBus, EventType, type AssessmentSubmittedEvent } from '@/lib/events';
+import { ASSESSMENT_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 export async function POST(
   request: NextRequest,
@@ -60,6 +61,8 @@ export async function POST(
     );
 
     // Emit assessment submitted event (async handlers will process rewards, achievements, etc.)
+    const assessmentType = assessment.assessment_type || assessment.type || 'multiple-choice';
+
     const submissionEvent: AssessmentSubmittedEvent = {
       type: EventType.ASSESSMENT_SUBMITTED,
       timestamp: new Date(),
@@ -70,7 +73,7 @@ export async function POST(
       isCorrect: validation.isCorrect,
       pointsEarned: validation.pointsEarned,
       attemptNumber,
-      assessmentType: assessment.assessment_type,
+      assessmentType,
       metadata: {
         feedback: validation.feedback,
         partialCredit: validation.partialCredit,
@@ -80,8 +83,18 @@ export async function POST(
     // Emit event (async handlers will process)
     await eventBus.emit(submissionEvent);
 
+    const xpEarned = validation.isCorrect ? ASSESSMENT_COMPLETION_XP : 0;
+    const message = validation.isCorrect
+      ? `🎉 Mahusay! Earned +${xpEarned} XP.`
+      : validation.feedback;
+
     return NextResponse.json({
       success: true,
+      isPassed: validation.isCorrect,
+      scorePercentage: validation.isCorrect ? 100 : 0,
+      xpEarned,
+      coinsEarned: 0,
+      message,
       data: {
         answerId: savedAnswer.id,
         isCorrect: validation.isCorrect,
@@ -89,6 +102,8 @@ export async function POST(
         feedback: validation.feedback,
         correctAnswer: validation.correctAnswer,
         partialCredit: validation.partialCredit,
+        xpEarned,
+        coinsEarned: 0,
       },
     });
   } catch (error: any) {

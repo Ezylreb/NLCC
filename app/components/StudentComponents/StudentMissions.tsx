@@ -18,11 +18,16 @@ interface Mission {
     icon?: string;
 }
 
-export const StudentMissions: React.FC = () => {
+interface StudentMissionsProps {
+    refreshToken?: number;
+}
+
+export const StudentMissions: React.FC<StudentMissionsProps> = ({ refreshToken = 0 }) => {
     const [missions, setMissions] = useState<Mission[]>([]);
     const [activeFilter, setActiveFilter] = useState<'all' | 'daily' | 'active' | 'completed'>('all');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [completingMissionId, setCompletingMissionId] = useState<string | null>(null);
 
     const getCategoryIcon = (category: string): string => {
         switch (category) {
@@ -116,7 +121,6 @@ export const StudentMissions: React.FC = () => {
     ];
 
     useEffect(() => {
-        // Fetch missions data
         const fetchMissions = async () => {
             try {
                 setIsLoading(true);
@@ -124,7 +128,6 @@ export const StudentMissions: React.FC = () => {
                 const result = await apiClient.student.getMissions();
                 
                 if (result.success && result.data) {
-                    // Transform API data to component format
                     const transformedMissions = result.data.map((mission: any, idx: number) => ({
                         id: mission.id || `mission-${idx}`,
                         title: mission.title,
@@ -153,7 +156,7 @@ export const StudentMissions: React.FC = () => {
         };
 
         fetchMissions();
-    }, []);
+    }, [refreshToken]);
 
     const getDifficultyColor = (difficulty: string) => {
         switch (difficulty) {
@@ -178,6 +181,52 @@ export const StudentMissions: React.FC = () => {
                 return 'Mahirap';
             default:
                 return difficulty;
+        }
+    };
+
+    const handleCompleteMission = async (mission: Mission) => {
+        if (mission.completed) {
+            return; // Already completed
+        }
+
+        if (mission.progress < mission.target) {
+            alert(`Kumpleto muna ang mission! ${mission.progress}/${mission.target}`);
+            return;
+        }
+
+        try {
+            setCompletingMissionId(mission.id);
+            const response = await apiClient.student.completeMission(mission.id);
+
+            if (response.success) {
+                // Update mission to completed
+                setMissions((prev) =>
+                    prev.map((m) =>
+                        m.id === mission.id
+                            ? { ...m, completed: true }
+                            : m
+                    )
+                );
+                console.log(`Mission completed! Earned ${response.data?.xp_reward || 0} XP and ${response.data?.coin_reward || 0} coins!`);
+            } else {
+                if (response.data?.alreadyCompleted) {
+                    // Mission was already completed
+                    setMissions((prev) =>
+                        prev.map((m) =>
+                            m.id === mission.id
+                                ? { ...m, completed: true }
+                                : m
+                        )
+                    );
+                } else {
+                    alert(`Failed to complete mission: ${response.error}`);
+                }
+            }
+        } catch (err) {
+            console.error('Error completing mission:', err);
+            alert('Failed to complete mission. Please try again.');
+        } finally {
+            setCompletingMissionId(null);
         }
     };
 
@@ -265,12 +314,21 @@ export const StudentMissions: React.FC = () => {
                                                         initial={{ width: 0 }}
                                                         animate={{ width: `${(mission.progress / mission.target) * 100}%` }}
                                                         transition={{ duration: 0.8, delay: 0.2 }}
-                                                        className="bg-gradient-to-r from-brand-purple to-brand-sky h-full"
+                                                        className="bg-linear-to-r from-brand-purple to-brand-sky h-full"
                                                     />
                                                 </div>
                                                 <p className="text-xs text-slate-400 mt-1">
                                                     {mission.progress} / {mission.target}
                                                 </p>
+                                                {mission.progress >= mission.target && (
+                                                    <button
+                                                        onClick={() => handleCompleteMission(mission)}
+                                                        disabled={completingMissionId === mission.id}
+                                                        className="mt-3 w-full py-2 px-4 bg-linear-to-r from-brand-purple to-brand-sky hover:opacity-90 disabled:opacity-50 text-white font-semibold rounded-lg transition-all"
+                                                    >
+                                                        {completingMissionId === mission.id ? 'Completing...' : '✨ Kumpletuhin ang Misyon'}
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
 

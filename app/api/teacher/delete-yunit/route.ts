@@ -28,6 +28,12 @@ export async function DELETE(request: NextRequest) {
       [id]
     );
 
+    // Delete student progress for this lesson
+    await query(
+      `DELETE FROM lesson_progress WHERE lesson_id = $1`,
+      [id]
+    );
+
     // Delete the lesson itself
     const result = await query(
       `DELETE FROM lesson WHERE id = $1 RETURNING id, title, bahagi_id`,

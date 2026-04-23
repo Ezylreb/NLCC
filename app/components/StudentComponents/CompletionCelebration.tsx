@@ -1,40 +1,49 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
+
+let sharedSuccessAudio: HTMLAudioElement | null = null;
+let lastSuccessAudioPlayAt = 0;
+
+const SUCCESS_AUDIO_COOLDOWN_MS = 1200;
 
 interface CompletionCelebrationProps {
   onContinue: () => void;
   message?: string;
+  nextStepLabel?: string;
+  xpEarned?: number;
+  coinsEarned?: number;
 }
 
 export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
   onContinue,
-  message = "Mahusay! Natapos mo na ang aralin!"
+  message = "Mahusay! Natapos mo na ang aralin!",
+  nextStepLabel = 'Magpatuloy',
+  xpEarned = 0,
+  coinsEarned = 0,
 }) => {
-  const [showCelebration, setShowCelebration] = useState(false);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
-
   useEffect(() => {
-    // Show celebration after a brief delay
-    const timer = setTimeout(() => setShowCelebration(true), 300);
+    const now = Date.now();
 
-    // Play success audio (you can add yay.wav or success.mp3 to public/audio/)
-    const audio = new Audio('/audio/yay.wav');
-    audioRef.current = audio;
-    audio.play().catch(err => console.log('Audio play failed:', err));
+    if (!sharedSuccessAudio) {
+      sharedSuccessAudio = new Audio('/audio/success.wav');
+      sharedSuccessAudio.preload = 'auto';
+    }
 
-    // Auto-continue after 3 seconds
+    if (now - lastSuccessAudioPlayAt > SUCCESS_AUDIO_COOLDOWN_MS) {
+      lastSuccessAudioPlayAt = now;
+      sharedSuccessAudio.pause();
+      sharedSuccessAudio.currentTime = 0;
+      sharedSuccessAudio.play().catch(err => console.log('Audio play failed:', err));
+    }
+
     const autoContinue = setTimeout(() => {
       onContinue();
     }, 3000);
 
     return () => {
-      clearTimeout(timer);
       clearTimeout(autoContinue);
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
     };
   }, [onContinue]);
 
@@ -49,7 +58,7 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-purple-900/95 via-blue-900/95 to-pink-900/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-linear-to-br from-purple-900/95 via-blue-900/95 to-pink-900/95 backdrop-blur-sm">
       {/* Confetti */}
       {confetti.map((item) => (
         <motion.div
@@ -74,77 +83,75 @@ export const CompletionCelebration: React.FC<CompletionCelebrationProps> = ({
       ))}
 
       {/* Celebration Content */}
-      {showCelebration && (
+      <motion.div
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+        className="text-center z-10 px-8"
+      >
+        {/* Star Animation */}
         <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-          className="text-center z-10 px-8"
+          animate={{ 
+            scale: [1, 1.2, 1],
+            rotate: [0, 360]
+          }}
+          transition={{ 
+            duration: 2,
+            repeat: Infinity,
+            ease: 'easeInOut'
+          }}
+          className="text-9xl mb-6"
         >
-          {/* Star Animation */}
-          <motion.div
-            animate={{ 
-              scale: [1, 1.2, 1],
-              rotate: [0, 360]
-            }}
-            transition={{ 
-              duration: 2,
-              repeat: Infinity,
-              ease: 'easeInOut'
-            }}
-            className="text-9xl mb-6"
-          >
-            ⭐
-          </motion.div>
-
-          {/* Success Message */}
-          <motion.h1
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-5xl md:text-6xl font-black text-white mb-4 drop-shadow-2xl"
-          >
-            Mahusay!
-          </motion.h1>
-
-          <motion.p
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-2xl md:text-3xl text-white/90 font-bold mb-8"
-          >
-            {message}
-          </motion.p>
-
-          {/* Reward Display */}
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.4, type: 'spring' }}
-            className="flex items-center justify-center gap-6 mb-8"
-          >
-            <div className="bg-yellow-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-yellow-400">
-              <div className="text-4xl mb-2">🏆</div>
-              <div className="text-yellow-400 font-black text-lg">+10 XP</div>
-            </div>
-            <div className="bg-blue-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-blue-400">
-              <div className="text-4xl mb-2">🪙</div>
-              <div className="text-blue-400 font-black text-lg">+5 Coins</div>
-            </div>
-          </motion.div>
-
-          {/* Continue Button */}
-          <motion.button
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            onClick={onContinue}
-            className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl font-black text-xl shadow-2xl transition-all hover:scale-105"
-          >
-            Magpatuloy
-          </motion.button>
+          ⭐
         </motion.div>
-      )}
+
+        {/* Success Message */}
+        <motion.h1
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="text-5xl md:text-6xl font-black text-white mb-4 drop-shadow-2xl"
+        >
+          Mahusay!
+        </motion.h1>
+
+        <motion.p
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-2xl md:text-3xl text-white/90 font-bold mb-8"
+        >
+          {message}
+        </motion.p>
+
+        {/* Reward Display */}
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.3, type: 'spring' }}
+          className="flex items-center justify-center gap-6 mb-8"
+        >
+          <div className="bg-yellow-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-yellow-400">
+            <div className="text-4xl mb-2">🏆</div>
+            <div className="text-yellow-400 font-black text-lg">+{xpEarned} XP</div>
+          </div>
+          <div className="bg-blue-500/20 backdrop-blur-sm rounded-2xl px-6 py-4 border-2 border-blue-400">
+            <div className="text-4xl mb-2">🪙</div>
+            <div className="text-blue-400 font-black text-lg">+{coinsEarned} Coins</div>
+          </div>
+        </motion.div>
+
+        {/* Continue Button */}
+        <motion.button
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          onClick={onContinue}
+          className="px-8 py-4 bg-linear-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl font-black text-xl shadow-2xl transition-all hover:scale-105"
+        >
+          {nextStepLabel}
+        </motion.button>
+      </motion.div>
     </div>
   );
 };

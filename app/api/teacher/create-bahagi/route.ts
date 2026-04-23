@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, classId, className, teacherId } = body;
+    const { title, classId, className, teacherId, quarter, week_number, module_number } = body;
 
     if (!title || !teacherId) {
       return NextResponse.json(
@@ -32,22 +32,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create bahagi in database
+    // Create bahagi in database with metadata
     const result = await query(
-      `INSERT INTO bahagi (title, yunit, class_name, teacher_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())
-       RETURNING id, title, yunit, class_name, teacher_id, created_at`,
-      [title, 'Yunit 1', finalClassName || null, teacherId]
+      `INSERT INTO bahagi (title, yunit, class_name, teacher_id, quarter, week_number, module_number, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+       RETURNING id, title, yunit, class_name, teacher_id, quarter, week_number, module_number, created_at`,
+      [title, 'Yunit 1', finalClassName || null, teacherId, quarter || null, week_number || null, module_number || null]
     );
 
     if (!result.rows || result.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Failed to create bahagi' },
+        { success: false, error: 'Failed to create bahagi' },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
+      success: true,
+      data: result.rows[0],
       bahagi: result.rows[0]
     });
   } catch (error: any) {
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
       detail: error?.detail
     });
     return NextResponse.json(
-      { error: 'Failed to create bahagi', details: error?.message },
+      { success: false, error: 'Failed to create bahagi', details: error?.message },
       { status: 500 }
     );
   }

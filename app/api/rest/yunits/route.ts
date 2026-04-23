@@ -49,7 +49,10 @@ export async function GET(request: NextRequest) {
     const published = searchParams.get('published');
     const archived = searchParams.get('archived');
 
+    console.log('[GET /api/rest/yunits] Request params:', { bahagiId, published, archived });
+
     if (!bahagiId) {
+      console.error('[GET /api/rest/yunits] Missing bahagiId');
       return NextResponse.json(
         { error: 'Bahagi ID is required' },
         { status: 400 }
@@ -65,22 +68,29 @@ export async function GET(request: NextRequest) {
     }
 
     // List yunits
+    console.log('[GET /api/rest/yunits] Calling YunitService.listByBahagi with:', bahagiIdNum);
     let yunits = await YunitService.listByBahagi(String(bahagiIdNum));
+    console.log('[GET /api/rest/yunits] YunitService returned:', yunits.length, 'yunits');
+    console.log('[GET /api/rest/yunits] First yunit:', yunits[0]);
 
     // Filter by status
     if (published !== null) {
       const publishedBool = published === 'true';
       yunits = yunits.filter((y: any) => y.is_published === publishedBool);
+      console.log('[GET /api/rest/yunits] After published filter:', yunits.length);
     }
 
     if (archived !== null) {
       const archivedBool = archived === 'true';
       yunits = yunits.filter((y: any) => y.is_archived === archivedBool);
+      console.log('[GET /api/rest/yunits] After archived filter:', yunits.length);
     }
 
+    console.log('[GET /api/rest/yunits] Returning:', yunits.length, 'yunits');
     return NextResponse.json({ success: true, data: yunits });
   } catch (error: any) {
-    console.error('[GET /api/rest/yunits]', error);
+    console.error('[GET /api/rest/yunits] Error:', error);
+    console.error('[GET /api/rest/yunits] Stack:', error.stack);
     return NextResponse.json(
       { error: 'Failed to fetch yunits', detail: error.message },
       { status: 500 }

@@ -11,10 +11,21 @@ import { CreateBahagiForm } from './TeacherComponents/CreateBahagiForm';
 import { CreateLessonForm } from './TeacherComponents/CreateLessonForm';
 import { CreateYunitForm } from './TeacherComponents/CreateYunitForm';
 import { CreateAssessmentForm } from './TeacherComponents/CreateAssessmentForm';
+import { EditAssessmentV2Form } from './TeacherComponents/EditAssessmentV2Form';
 
 interface TeacherDashboardV2Props {
     onLogout: () => void;
     user: { firstName: string; lastName: string; id?: string; email?: string } | null;
+}
+
+type FeedbackDialogVariant = 'success' | 'error' | 'info';
+
+interface FeedbackDialogState {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: FeedbackDialogVariant;
+    onClose?: () => void;
 }
 
 export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout, user }) => {
@@ -64,9 +75,45 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const [showLessonForm, setShowLessonForm] = useState(false);
     const [showYunitForm, setShowYunitForm] = useState(false);
     const [showAssessmentForm, setShowAssessmentForm] = useState(false);
+    const [editingAssessmentId, setEditingAssessmentId] = useState<string | null>(null);
     const [selectedBahagiId, setSelectedBahagiId] = useState<number | null>(null);
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [feedbackDialog, setFeedbackDialog] = useState<FeedbackDialogState>({
+        isOpen: false,
+        title: '',
+        message: '',
+        variant: 'info'
+    });
+
+    const openFeedbackDialog = (
+        variant: FeedbackDialogVariant,
+        message: string,
+        title?: string,
+        onClose?: () => void
+    ) => {
+        const defaultTitle =
+            variant === 'success' ? 'Success' : variant === 'error' ? 'Error' : 'Notice';
+
+        setFeedbackDialog({
+            isOpen: true,
+            title: title || defaultTitle,
+            message,
+            variant,
+            onClose
+        });
+    };
+
+    const closeFeedbackDialog = () => {
+        const onClose = feedbackDialog.onClose;
+        setFeedbackDialog({
+            isOpen: false,
+            title: '',
+            message: '',
+            variant: 'info'
+        });
+        onClose?.();
+    };
 
     // Fetch dashboard data
     const fetchData = async () => {
@@ -161,13 +208,13 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             if (response.success && response.data) {
                 const newClass = response.data.class || response.data;
                 setClasses([newClass, ...classes]);
-                alert('✅ Class created successfully! Students will be automatically enrolled.');
+                openFeedbackDialog('success', 'Class created successfully! Students will be automatically enrolled.');
             } else {
-                alert(`❌ Error: ${response.error || 'Failed to create class'}`);
+                openFeedbackDialog('error', `Error: ${response.error || 'Failed to create class'}`);
             }
         } catch (err) {
             console.error('Error creating class:', err);
-            alert('❌ Failed to create class. Check browser console for details.');
+            openFeedbackDialog('error', 'Failed to create class. Check browser console for details.');
         }
     };
 
@@ -203,8 +250,15 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                     setClassBahagi([]);
                 }
                 
-                // Clear lessons (we'll show bahagi with nested yunits instead)
-                setClassLessons([]);
+                // Fetch standalone lessons for this class
+                try {
+                    const lessonsRes = await fetch(`/api/teacher/class-lessons?classId=${classId}`);
+                    const lessonsData = await lessonsRes.json();
+                    setClassLessons(lessonsData.lessons || []);
+                } catch (lessonsErr) {
+                    console.warn('Failed to fetch lessons:', lessonsErr);
+                    setClassLessons([]);
+                }
             } catch (err) {
                 console.error('Error fetching class data:', err);
                 setClassBahagi([]);
@@ -232,15 +286,15 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             const response = await apiClient.class.archiveClass(classId);
             
             if (response.success) {
-                alert('✅ Class archived successfully!');
+                openFeedbackDialog('success', 'Class archived successfully!');
                 // Refresh dashboard data to update class lists
                 await fetchData();
             } else {
-                alert(`❌ Error: ${response.error || 'Failed to archive class'}`);
+                openFeedbackDialog('error', `Error: ${response.error || 'Failed to archive class'}`);
             }
         } catch (err) {
             console.error('Error archiving class:', err);
-            alert('❌ Failed to archive class. Check browser console for details.');
+            openFeedbackDialog('error', 'Failed to archive class. Check browser console for details.');
         }
     };
 
@@ -250,15 +304,15 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             const response = await apiClient.class.restoreClass(classId);
             
             if (response.success) {
-                alert('✅ Class restored successfully!');
+                openFeedbackDialog('success', 'Class restored successfully!');
                 // Refresh dashboard data to update class lists
                 await fetchData();
             } else {
-                alert(`❌ Error: ${response.error || 'Failed to restore class'}`);
+                openFeedbackDialog('error', `Error: ${response.error || 'Failed to restore class'}`);
             }
         } catch (err) {
             console.error('Error restoring class:', err);
-            alert('❌ Failed to restore class. Check browser console for details.');
+            openFeedbackDialog('error', 'Failed to restore class. Check browser console for details.');
         }
     };
 
@@ -270,7 +324,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle profile update
     const handleUpdateProfile = async (data: { firstName: string; lastName: string; email: string }) => {
         if (!user?.id) {
-            alert('❌ User ID not found');
+            openFeedbackDialog('error', 'User ID not found');
             return;
         }
 
@@ -282,8 +336,6 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             });
 
             if (response.success && response.data) {
-                alert('✅ Profile updated successfully!');
-                
                 // Update local user state to reflect changes in the UI
                 const savedUser = localStorage.getItem('nllc_user');
                 if (savedUser) {
@@ -297,14 +349,18 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 // Save current tab to persist after reload
                 sessionStorage.setItem('teacher_active_tab', 'profile');
                 
-                // Force page reload to update all user references
-                window.location.reload();
+                openFeedbackDialog(
+                    'success',
+                    'Profile updated successfully!',
+                    'Success',
+                    () => window.location.reload()
+                );
             } else {
-                alert(`❌ Error: ${response.error || 'Failed to update profile'}`);
+                openFeedbackDialog('error', `Error: ${response.error || 'Failed to update profile'}`);
             }
         } catch (err) {
             console.error('Error updating profile:', err);
-            alert('❌ Failed to update profile. Check browser console for details.');
+            openFeedbackDialog('error', 'Failed to update profile. Check browser console for details.');
         }
     };
 
@@ -346,6 +402,9 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
         try {
             const bahagiData = {
                 title: data.title,
+                quarter: data.quarter,
+                week_number: data.week_number,
+                module_number: data.module_number,
                 classId: selectedClassId || data.classId,
                 className: selectedClassName || data.className,
                 teacher_id: user?.id || ''
@@ -357,18 +416,18 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
 
             console.log('[handleBahagiSubmit] Response:', response);
 
-            if (response && response.bahagi) {
+            if (response.success || response.data || (response as any).bahagi) {
                 setShowBahagiForm(false);
                 // Refresh bahagi list to show the newly created one
                 await handleRefreshBahagi();
-                alert('✅ Bahagi created successfully!');
+                openFeedbackDialog('success', 'Bahagi created successfully!');
             } else {
                 console.error('[handleBahagiSubmit] Unexpected response:', response);
-                alert(`❌ Error: Failed to create bahagi`);
+                openFeedbackDialog('error', `Error: ${response.error || 'Failed to create bahagi'}`);
             }
         } catch (err: any) {
             console.error('[handleBahagiSubmit] Exception:', err);
-            alert(`❌ Failed to create bahagi: ${err.message || 'Unknown error'}`);
+            openFeedbackDialog('error', `Failed to create bahagi: ${err.message || 'Unknown error'}`);
         }
     };
 
@@ -380,22 +439,44 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     // Handle lesson form submission
     const handleLessonSubmit = async (data: any) => {
         try {
-            const response = await apiClient.lesson.addItem('0', {
-                ...data,
-                teacher_id: user?.id,
-                class_name: selectedClassName
+            const response = await fetch('/api/teacher/create-lesson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: data.title,
+                    description: data.description,
+                    category: data.category,
+                    icon: data.icon,
+                    color: data.color,
+                    teacherId: user?.id,
+                    className: selectedClassName,
+                    classId: selectedClassId
+                })
             });
 
-            if (response.success) {
-                alert('✅ Lesson created successfully!');
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                openFeedbackDialog('success', 'Lesson created successfully!');
                 setShowLessonForm(false);
-                // TODO: Refresh Bahagi view
+                // Refresh lessons for the current class
+                if (selectedClassId) {
+                    try {
+                        const lessonsRes = await fetch(`/api/teacher/class-lessons?classId=${selectedClassId}`);
+                        const lessonsData = await lessonsRes.json();
+                        if (lessonsData.lessons) {
+                            setClassLessons(lessonsData.lessons);
+                        }
+                    } catch (fetchErr) {
+                        console.warn('Failed to refresh lessons:', fetchErr);
+                    }
+                }
             } else {
-                alert(`❌ Error: ${response.error}`);
+                openFeedbackDialog('error', `Error: ${result.error || 'Failed to create lesson'}`);
             }
         } catch (err) {
             console.error('Error creating lesson:', err);
-            alert('❌ Failed to create lesson');
+            openFeedbackDialog('error', 'Failed to create lesson');
         }
     };
 
@@ -415,63 +496,65 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     const handleYunitSubmit = async (data: any) => {
         try {
             console.log('[handleYunitSubmit] Creating yunit with data:', data);
-            
-            // Call the bahagi lessons endpoint
-            const response = await fetch(`/api/teacher/bahagi/${data.bahagiId}/lessons`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    title: data.title,
-                    subtitle: data.subtitle || data.description,
-                    discussion: data.discussion,
-                    media_url: data.media_url,
-                    audio_url: data.audio_url,
-                    lesson_order: data.lesson_order
-                })
+            const result = await apiClient.yunit.create({
+                bahagi_id: data.bahagiId,
+                title: data.title,
+                subtitle: data.subtitle,
+                discussion: data.discussion,
+                media_url: data.media_url,
+                audio_url: data.audio_url,
+                lesson_order: data.lesson_order,
+                week_number: data.week_number,
+                module_number: data.module_number
             });
-
-            const result = await response.json();
             
             console.log('[handleYunitSubmit] Response:', result);
 
-            if (response.ok && result.lesson) {
+            if (result.success && result.data) {
                 setShowYunitForm(false);
                 setSelectedBahagiId(null);
                 // Refresh bahagi list to show the new yunit count
                 await handleRefreshBahagi();
-                alert('✅ Yunit created successfully!');
+                openFeedbackDialog('success', 'Yunit created successfully!');
             } else {
-                alert(`❌ Error: ${result.error || 'Failed to create yunit'}`);
+                openFeedbackDialog('error', `Error: ${result.error || 'Failed to create yunit'}`);
             }
         } catch (err: any) {
             console.error('[handleYunitSubmit] Exception:', err);
-            alert(`❌ Failed to create yunit: ${err.message || 'Unknown error'}`);
+            openFeedbackDialog('error', `Failed to create yunit: ${err.message || 'Unknown error'}`);
         }
     };
 
     // Handle assessment form submission
     const handleAssessmentSubmit = async (data: any) => {
         try {
+            const totalPoints = data.questions?.reduce((sum: number, q: any) => {
+                return sum + (parseInt(q.xp) || 0);
+            }, 0) || 0;
+
+            const assessmentType = data.questions?.[0]?.type || data.type || 'multiple-choice';
+
             const response = await apiClient.assessment.create({
-                ...data,
-                yunit_id: 0,
-                bahagi_id: 0,
-                teacher_id: user?.id
+                yunit_id: data.yunitId || data.lessonId || 0,
+                bahagi_id: data.bahagiId || selectedBahagiId || 0,
+                title: data.title,
+                description: data.instructions,
+                assessment_type: assessmentType,
+                points: totalPoints,
+                questions: data.questions,
+                total_questions: data.questions?.length || 0
             });
 
             if (response.success) {
-                alert('✅ Assessment created successfully!');
+                openFeedbackDialog('success', 'Assessment created successfully!');
                 setShowAssessmentForm(false);
-                // Refresh lessons
-                // TODO: Refresh class lessons
+                await handleRefreshBahagi();
             } else {
-                alert(`❌ Error: ${response.error}`);
+                openFeedbackDialog('error', `Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error creating assessment:', err);
-            alert('❌ Failed to create assessment');
+            openFeedbackDialog('error', 'Failed to create assessment');
         }
     };
 
@@ -481,26 +564,26 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             const response = await apiClient.lesson.deleteLesson(lessonId);
 
             if (response.success) {
-                alert('✅ Lesson deleted successfully!');
+                openFeedbackDialog('success', 'Lesson deleted successfully!');
                 // TODO: Refresh Bahagi view
             } else {
-                alert(`❌ Error: ${response.error}`);
+                openFeedbackDialog('error', `Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting lesson:', err);
-            alert('❌ Failed to delete lesson');
+            openFeedbackDialog('error', 'Failed to delete lesson');
         }
     };
 
     // Handle editing lesson
     const handleEditLesson = (lessonId: string) => {
-        alert('Edit lesson modal will be implemented');
+        openFeedbackDialog('info', 'Edit lesson modal will be implemented', 'Coming Soon');
         // TODO: Show edit lesson modal
     };
 
     // Handle editing yunit
     const handleEditYunit = (lessonId: string, yunitId: string) => {
-        alert('Edit yunit modal will be implemented');
+        openFeedbackDialog('info', 'Edit yunit modal will be implemented', 'Coming Soon');
         // TODO: Show edit yunit modal
     };
 
@@ -510,21 +593,20 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             const response = await apiClient.yunit.deleteYunit(parseInt(yunitId));
 
             if (response.success) {
-                alert('✅ Yunit deleted successfully!');
+                openFeedbackDialog('success', 'Yunit deleted successfully!');
                 await handleRefreshBahagi();
             } else {
-                alert(`❌ Error: ${response.error}`);
+                openFeedbackDialog('error', `Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting yunit:', err);
-            alert('❌ Failed to delete yunit');
+            openFeedbackDialog('error', 'Failed to delete yunit');
         }
     };
 
     // Handle editing assessment
     const handleEditAssessment = (lessonId: string, assessmentId: string) => {
-        alert('Edit assessment modal will be implemented');
-        // TODO: Show edit assessment modal
+        setEditingAssessmentId(assessmentId);
     };
 
     // Handle deleting assessment
@@ -533,14 +615,15 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             const response = await apiClient.assessment.deleteAssessment(parseInt(assessmentId));
 
             if (response.success) {
-                alert('✅ Assessment deleted successfully!');
-                // TODO: Refresh Bahagi view
+                openFeedbackDialog('success', 'Assessment deleted successfully!');
+                // Refresh Bahagi view to show updated assessment list
+                await handleRefreshBahagi();
             } else {
-                alert(`❌ Error: ${response.error}`);
+                openFeedbackDialog('error', `Error: ${response.error}`);
             }
         } catch (err) {
             console.error('Error deleting assessment:', err);
-            alert('❌ Failed to delete assessment');
+            openFeedbackDialog('error', 'Failed to delete assessment');
         }
     };
 
@@ -555,7 +638,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
     };
 
     return (
-        <div className="min-h-screen bg-[#0f172a] flex selection:bg-brand-purple text-slate-200 relative overflow-hidden">
+        <div className="min-h-screen bg-[#0f172a] flex selection:bg-brand-purple text-slate-200 relative overflow-hidden" role="application" aria-label="Teacher Dashboard">
             {/* Sidebar */}
             <TeacherSidebar
                 activeTab={activeTab}
@@ -573,13 +656,15 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
             />
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col h-screen overflow-hidden">
+            <main className="flex-1 flex flex-col h-screen overflow-hidden" role="main" aria-label="Main content">
                 {/* Header */}
-                <header className="bg-[#020617]/50 backdrop-blur-md border-b border-slate-800/50 p-4 md:p-6 flex justify-between items-center relative z-20">
+                <header className="bg-[#020617]/50 backdrop-blur-md border-b border-slate-800/50 p-4 md:p-6 flex justify-between items-center relative z-20" role="banner" aria-label="Page header">
                     <div className="flex items-center gap-4">
                         <button 
                             onClick={() => setIsSidebarOpen(true)}
                             className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center md:hidden"
+                            aria-label="Toggle sidebar menu"
+                            aria-expanded={isSidebarOpen}
                         >
                             <span className="text-xl">☰</span>
                         </button>
@@ -588,7 +673,7 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                                 {selectedClassId ? selectedClassName : activeTab} 
                                 <span className="text-brand-purple"> Dashboard</span>
                             </h2>
-                            <p className="hidden sm:block text-slate-500 font-bold text-[10px] uppercase tracking-widest mt-0.5">
+                            <p className="hidden sm:block text-slate-500 font-bold text-[10px] uppercase tracking-widest mt-0.5" aria-live="polite">
                                 Academic Year 2025-2026
                             </p>
                         </div>
@@ -600,9 +685,11 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                             disabled={isSyncing}
                             title="Sync all data"
                             className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-brand-purple/50 hover:bg-slate-800 px-4 py-2 rounded-xl transition-all disabled:opacity-70"
+                            aria-label={isSyncing ? 'Syncing data' : 'Sync all data'}
+                            aria-busy={isSyncing}
                         >
                             {isSyncing ? (
-                                <div className="w-4 h-4 border-2 border-brand-purple border-t-transparent rounded-full animate-spin" />
+                                <div className="w-4 h-4 border-2 border-brand-purple border-t-transparent rounded-full animate-spin" role="status" aria-label="Loading" />
                             ) : (
                                 <span className="text-base">🔄</span>
                             )}
@@ -730,6 +817,32 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                 />
             )}
 
+            {/* Edit Assessment Modal */}
+            {editingAssessmentId && user?.id && (
+                <EditAssessmentV2Form
+                    assessmentId={editingAssessmentId}
+                    userId={user.id}
+                    onClose={() => setEditingAssessmentId(null)}
+                    onSuccess={async () => {
+                        setEditingAssessmentId(null);
+                        // Refresh the class bahagi data
+                        if (selectedClassId && selectedClassName) {
+                            setIsLoadingBahagi(true);
+                            try {
+                                const bahagiResult = await apiClient.bahagi.fetchAll(user?.id, selectedClassName);
+                                if (bahagiResult?.success) {
+                                    setClassBahagi(bahagiResult.data || []);
+                                }
+                            } catch (err) {
+                                console.error('Error refreshing bahagi:', err);
+                            } finally {
+                                setIsLoadingBahagi(false);
+                            }
+                        }
+                    }}
+                />
+            )}
+
             {/* Logout Confirmation Modal */}
             {showLogoutModal && (
                 <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -755,6 +868,39 @@ export const TeacherDashboardV2: React.FC<TeacherDashboardV2Props> = ({ onLogout
                                 YES, LOGOUT
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Feedback Dialog */}
+            {feedbackDialog.isOpen && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden text-center" role="dialog" aria-modal="true" aria-label={feedbackDialog.title}>
+                        <div
+                            className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mb-6 mx-auto shadow-inner ${
+                                feedbackDialog.variant === 'success'
+                                    ? 'bg-emerald-500/10 text-emerald-400 shadow-emerald-500/20'
+                                    : feedbackDialog.variant === 'error'
+                                    ? 'bg-red-500/10 text-red-400 shadow-red-500/20'
+                                    : 'bg-sky-500/10 text-sky-400 shadow-sky-500/20'
+                            }`}
+                        >
+                            {feedbackDialog.variant === 'success' ? '✅' : feedbackDialog.variant === 'error' ? '❌' : 'ℹ️'}
+                        </div>
+                        <h2 className="text-2xl font-black text-white tracking-tight mb-2">{feedbackDialog.title}</h2>
+                        <p className="text-slate-400 font-bold text-sm mb-8">{feedbackDialog.message}</p>
+                        <button
+                            onClick={closeFeedbackDialog}
+                            className={`w-full px-4 py-3 rounded-2xl font-black text-xs text-white transition-colors shadow-lg ${
+                                feedbackDialog.variant === 'success'
+                                    ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'
+                                    : feedbackDialog.variant === 'error'
+                                    ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
+                                    : 'bg-sky-500 hover:bg-sky-600 shadow-sky-500/20'
+                            }`}
+                        >
+                            OK
+                        </button>
                     </div>
                 </div>
             )}

@@ -23,6 +23,9 @@ export interface Bahagi {
   icon_type?: string;
   custom_icon_url?: string;
   description?: string;
+  quarter?: string;
+  week_number?: number;
+  module_number?: string;
   teacher_id: string;
   class_name?: string;
   is_open: boolean;
@@ -41,6 +44,9 @@ export interface Lesson {
   media_url?: string;
   audio_url?: string;
   lesson_order?: number;
+  quarter?: string;
+  week_number?: number;
+  module_number?: string;
   is_published: boolean;
   is_archived: boolean;
   created_at: Date;
@@ -66,6 +72,8 @@ export interface BahagiAssessment {
   assessment_type?: string;
   correct_answers?: Record<string, any>;
   description?: string;
+  questions?: any[];
+  instructions?: string;
 }
 
 export interface YunitAnswer {

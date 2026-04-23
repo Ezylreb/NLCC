@@ -127,11 +127,27 @@ export async function POST(req: NextRequest) {
       }
 
       case 'audio': {
-        // Audio validation is manual for now (requires teacher review)
-        isCorrect = false;
-        pointsEarned = 0;
-        correctAnswer = 'Pending teacher review';
-        feedback = 'Audio response recorded. Teacher will grade this.';
+        // Audio validation with file checks
+        const audioFile = studentAnswer?.file || studentAnswer?.url;
+        const audioMeta = studentAnswer?.metadata || {};
+        
+        // Validate audio file exists and has reasonable duration
+        const duration = audioMeta.duration || 0;
+        const isValidAudio = audioFile && (typeof audioFile === 'string' && audioFile.length > 0);
+        const hasMinimalDuration = duration > 3; // At least 3 seconds
+        
+        isCorrect = false; // Audio always requires manual review
+        pointsEarned = 0; // Pending teacher review
+        correctAnswer = assessment.instructions || 'Audio recording received';
+        
+        if (!isValidAudio) {
+          feedback = '❌ Audio file not found. Please re-record and submit.';
+        } else if (!hasMinimalDuration && duration > 0) {
+          feedback = '⚠️ Audio is very short (less than 3 seconds). Teacher will review.';
+        } else {
+          feedback = `✅ Audio recorded successfully (${duration?.toFixed(1)}s). Teacher will grade this submission.`;
+        }
+        
         break;
       }
 

@@ -3,7 +3,7 @@ import { query } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    const { title, description, category, icon, color, teacherId, className } = await request.json();
+    const { title, description, category, icon, color, teacherId, className, classId } = await request.json();
 
     if (!title || !category || !teacherId) {
       return NextResponse.json({ error: 'Title, Category, and Teacher ID are required' }, { status: 400 });
@@ -19,10 +19,10 @@ export async function POST(request: Request) {
     console.log(`Attempting to create lesson: ${id} for teacher: ${teacherId} in class: ${className}`);
 
     const insertRes = await query(
-      `INSERT INTO lessons (id, title, description, category, icon, color, status, students_count, rating, teacher_id, class_name) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+      `INSERT INTO lessons (id, title, description, category, icon, color, status, students_count, rating, teacher_id, class_name, class_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
        RETURNING *`,
-      [id, title, description || '', category, icon || '📚', color || 'bg-brand-purple', 'Published', 0, 5.0, teacherId, className || 'General']
+      [id, title, description || '', category, icon || '📚', color || 'bg-brand-purple', 'Published', 0, 5.0, teacherId, className || 'General', classId || null]
     );
 
     // Link teacher to lesson - wrap in try-catch to prevent blocking the main response

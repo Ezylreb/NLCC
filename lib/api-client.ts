@@ -145,10 +145,16 @@ class BahagiAPI extends APIClient {
     className?: string;
     subject?: string;
     image_url?: string;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<APIResponse> {
     // Use teacher endpoint for creating
     return this.post('/create-bahagi', {
       title: data.title,
+      quarter: data.quarter,
+      week_number: data.week_number,
+      module_number: data.module_number,
       teacherId: data.teacher_id,
       classId: data.classId || data.class_name,
       className: data.className || data.class_name
@@ -167,13 +173,14 @@ class BahagiAPI extends APIClient {
       image_url: string;
       is_archived: boolean;
       is_published: boolean;
+      quarter: string;
+      week_number: number;
+      module_number: string;
+      iconPath: string;
+      iconType: string;
     }>
   ): Promise<APIResponse> {
-    const { is_published, is_archived, ...rest } = data;
-    const payload: any = { id: bahagiId, ...rest };
-    if (is_published !== undefined) payload.isPublished = is_published;
-    if (is_archived !== undefined) payload.isArchived = is_archived;
-    return this.put('/update-bahagi', payload);
+    return this.put('/update-bahagi', { id: bahagiId, ...data });
   }
 
   /**
@@ -233,11 +240,15 @@ class YunitAPI extends APIClient {
   async create(data: {
     bahagi_id: number;
     title: string;
-    subtitle: string;
+    subtitle?: string;
     discussion?: string;
     media_url?: string;
     audio_url?: string;
     order?: number;
+    lesson_order?: number;
+    quarter?: string;
+    week_number?: number;
+    module_number?: string;
   }): Promise<APIResponse> {
     return this.post('/yunits', data);
   }
@@ -296,11 +307,15 @@ class AssessmentAPI extends APIClient {
   async fetch(filters?: {
     yunit_id?: number;
     bahagi_id?: number;
+    student_view?: boolean;
+    first_only?: boolean;
   }): Promise<APIResponse> {
     const query = new URLSearchParams();
     if (filters?.yunit_id) query.append('yunitId', String(filters.yunit_id));
     if (filters?.bahagi_id)
       query.append('bahagiId', String(filters.bahagi_id));
+    if (filters?.student_view) query.append('studentView', 'true');
+    if (filters?.first_only) query.append('firstOnly', 'true');
 
     const queryStr = query.toString() ? `?${query.toString()}` : '';
     return this.get(`/assessments${queryStr}`);
@@ -310,19 +325,36 @@ class AssessmentAPI extends APIClient {
    * Fetch single assessment by ID
    */
   async fetchById(assessmentId: number): Promise<APIResponse> {
-    return this.get(`/assessments/${assessmentId}`);
+    const response = await fetch(`/api/rest/assessments/${assessmentId}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch assessment');
+    }
+
+    return await response.json();
   }
 
   /**
    * Create new assessment
    */
   async create(data: {
+    yunit_id: number;
     bahagi_id: number;
     title: string;
-    assessment_type: string;
-    content?: Record<string, any>;
+    description?: string;
+    type?: string;
+    assessment_type?: string;
     points?: number;
-    lesson_id?: number;
+    total_questions?: number;
+    time_limit?: number;
+    questions?: any[];
   }): Promise<APIResponse> {
     return this.post('/assessments', data);
   }
@@ -333,24 +365,31 @@ class AssessmentAPI extends APIClient {
   async update(
     assessmentId: number,
     data: Partial<{
+      yunit_id: number;
+      bahagi_id: number;
       title: string;
-      assessment_type: string;
-      content: any;
-      points: number;
       description: string;
+      instructions: string;
+      type: string;
+      assessment_type: string;
+      points: number;
       total_questions: number;
       time_limit: number;
       questions: any[];
-    }>
+    }>,
+    options?: {
+      minimalResponse?: boolean;
+    }
   ): Promise<APIResponse> {
-    return this.patch(`/assessments?id=${assessmentId}`, data);
+    const query = options?.minimalResponse ? `?id=${assessmentId}&minimal=true` : `?id=${assessmentId}`;
+    return this.patch(`/assessments${query}`, data);
   }
 
   /**
    * Delete assessment
    */
   async deleteAssessment(assessmentId: number): Promise<APIResponse> {
-    return this.delete(`/assessments?id=${assessmentId}&permanent=true`);
+    return this.delete(`/assessments?id=${assessmentId}`);
   }
 
   /**
@@ -904,13 +943,6 @@ class StudentService extends APIClient {
   }
 
   /**
-   * Check if a student ID is available in the session
-   */
-  hasStudentId(): boolean {
-    return !!this.getStudentId();
-  }
-
-  /**
    * Override request to add student ID header
    */
   private async requestWithStudentId<T>(
@@ -1037,7 +1069,7 @@ class StudentService extends APIClient {
    * Get student missions
    */
   async getMissions(): Promise<APIResponse> {
-    return this.getWithStudentId(`/missions`);
+    return this.getWithStudentId(`/missions?_t=${Date.now()}`);
   }
 
   /**

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { motion } from 'framer-motion';
 
@@ -15,21 +15,40 @@ interface Class {
 interface ClassViewProps {
   studentId: string;
   studentName: string;
+  cachedData?: any; // Pre-fetched classes data
+  onDataFetched?: (data: any) => void; // Callback to cache fetched data
   onSelectClass: (classId: string, teacherId: string, className: string, teacherName: string) => void;
   onBack: () => void;
 }
 
-export const ClassView: React.FC<ClassViewProps> = ({
+const ClassViewComponent: React.FC<ClassViewProps> = ({
   studentId,
   studentName,
+  cachedData,
+  onDataFetched,
   onSelectClass,
   onBack
 }) => {
   const [classes, setClasses] = useState<Class[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!cachedData); // Don't show loading if we have cached data
   const [error, setError] = useState<string | null>(null);
 
+  // Use cached data immediately if available
   useEffect(() => {
+    if (cachedData) {
+      console.log('🎓 [ClassView] Using cached data');
+      setClasses(cachedData.classes || cachedData.data?.classes || cachedData.data || []);
+      setIsLoading(false);
+      return;
+    }
+  }, [cachedData]);
+
+  useEffect(() => {
+    // Skip fetching if we already have cached data
+    if (cachedData) {
+      return;
+    }
+
     const fetchClasses = async () => {
       try {
         setIsLoading(true);
@@ -37,7 +56,13 @@ export const ClassView: React.FC<ClassViewProps> = ({
         
         if (!res.success) throw new Error(res.error || 'Failed to fetch classes');
         
-        setClasses(res.data?.classes || res.data || []);
+        const fetchedClasses = res.data?.classes || res.data || [];
+        setClasses(fetchedClasses);
+        
+        // Cache the fetched data
+        if (onDataFetched) {
+          onDataFetched(res);
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -46,14 +71,34 @@ export const ClassView: React.FC<ClassViewProps> = ({
     };
 
     fetchClasses();
-  }, [studentId]);
+  }, [studentId, cachedData, onDataFetched]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">📚</div>
-          <p className="text-slate-400">Loading classes...</p>
+      <div className="flex flex-col gap-6 p-6 h-full overflow-auto">
+        {/* Skeleton Header */}
+        <div className="animate-pulse">
+          <div className="h-10 bg-slate-800/50 rounded w-48 mb-2"></div>
+          <div className="h-4 bg-slate-800/50 rounded w-64"></div>
+        </div>
+
+        {/* Skeleton Classes Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="p-6 bg-linear-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl animate-pulse">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="h-6 bg-slate-700/50 rounded w-3/4 mb-2"></div>
+                  <div className="h-4 bg-slate-700/50 rounded w-1/2 ml-8"></div>
+                </div>
+                <div className="w-8 h-8 bg-slate-700/50 rounded"></div>
+              </div>
+              <div className="flex items-center justify-between pt-4 border-t border-slate-700">
+                <div className="h-4 bg-slate-700/50 rounded w-20"></div>
+                <div className="h-6 bg-slate-700/50 rounded w-6"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -87,7 +132,7 @@ export const ClassView: React.FC<ClassViewProps> = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
               onClick={() => onSelectClass(cls.id, cls.teacherId, cls.name, cls.teacher)}
-              className="text-left p-6 bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl hover:border-brand-purple hover:from-slate-700 hover:to-slate-800 transition-all group cursor-pointer"
+              className="text-left p-6 bg-linear-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-xl hover:border-brand-purple hover:from-slate-700 hover:to-slate-800 transition-all group cursor-pointer"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
@@ -121,3 +166,5 @@ export const ClassView: React.FC<ClassViewProps> = ({
     </div>
   );
 };
+
+export const ClassView = memo(ClassViewComponent);

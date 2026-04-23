@@ -183,6 +183,102 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * Handle mission completion via REST endpoint pattern
+ * Kept for backward compatibility - prefer POST to /missions with missionId
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const studentId = request.headers.get("x-student-id");
+    if (!studentId) {
+      return NextResponse.json(
+        { error: "Student ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const { missionId, action } = body;
+
+    if (!missionId) {
+      return NextResponse.json(
+        { error: "Mission ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Support different actions (complete, reset)
+    if (action === "reset") {
+      await query(
+        `UPDATE student_missions SET completed = false, progress = 0 WHERE id = $1 AND student_id = $2`,
+        [missionId, studentId]
+      );
+      const missionResult = await query(
+        `SELECT * FROM student_missions WHERE id = $1 AND student_id = $2`,
+        [missionId, studentId]
+      );
+      return NextResponse.json({
+        success: true,
+        data: missionResult.rows[0],
+        message: "Mission reset successfully",
+      });
+    }
+
+    // Default: complete mission
+    const missionResult = await query(
+      `SELECT * FROM student_missions WHERE id = $1 AND student_id = $2`,
+      [missionId, studentId]
+    );
+
+    if (missionResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Mission not found" },
+        { status: 404 }
+      );
+    }
+
+    const mission = missionResult.rows[0];
+
+    if (mission.completed) {
+      return NextResponse.json({
+        success: false,
+        error: "Mission already completed",
+        data: mission,
+      });
+    }
+
+    // Mark as complete
+    await query(
+      `UPDATE student_missions SET completed = true WHERE id = $1`,
+      [missionId]
+    );
+
+    // Award XP and coins to the student
+    try {
+      await query(
+        `UPDATE users SET xp = COALESCE(xp, 0) + $1, coins = COALESCE(coins, 0) + $2 WHERE id = $3`,
+        [mission.xp_reward, mission.coin_reward, studentId]
+      );
+    } catch (err) {
+      console.warn("Could not update user XP/coins:", err);
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: { ...mission, completed: true },
+      xpAwarded: mission.xp_reward,
+      coinsAwarded: mission.coin_reward,
+      message: "Mission completed successfully!",
+    });
+  } catch (error) {
+    console.error("Mission update error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * Update mission progress based on actual student activity in the database
  */
 async function updateMissionProgress(studentId: string, missions: any[]) {
@@ -193,11 +289,19 @@ async function updateMissionProgress(studentId: string, missions: any[]) {
       [studentId]
     ).catch(() => ({ rows: [{ count: 0 }] }));
 
-    // Get assessment completion count
+    // Get assessment completion count.
+    // Prefer student_progress for current student assessment flow, then fall back to yunit_answer.
     const assessmentCount = await query(
-      `SELECT COUNT(*) as count FROM yunit_answer WHERE student_id = $1`,
+      `SELECT COUNT(DISTINCT yunit_id) as count
+       FROM student_progress
+       WHERE student_id = $1 AND is_passed = true`,
       [studentId]
-    ).catch(() => ({ rows: [{ count: 0 }] }));
+    ).catch(async () => {
+      return await query(
+        `SELECT COUNT(*) as count FROM yunit_answer WHERE student_id = $1`,
+        [studentId]
+      ).catch(() => ({ rows: [{ count: 0 }] }));
+    });
 
     // Get total XP
     const xpResult = await query(

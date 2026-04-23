@@ -1,7 +1,41 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
+
+interface MediaPreview {
+    name: string;
+    type: string;
+    preview: string;
+    size?: number;
+    isExisting?: boolean;
+}
+
+interface EditorOption {
+    text: string;
+    media: MediaPreview | null;
+    match?: string;
+    matchMedia?: MediaPreview | null;
+}
+
+interface EditorQuestion {
+    type: string;
+    question: string;
+    questionMedia: MediaPreview | null;
+    options: EditorOption[];
+    correctAnswer: any;
+    xp: string;
+    coins: string;
+    scrambleWords?: Array<string | { text: string; media: MediaPreview | null }>;
+}
+
+interface EditAssessmentV2FormProps {
+    assessmentId: string;
+    onClose: () => void;
+    onSuccess?: () => void;
+    userId: string;
+    initialAssessment?: any;
+}
 
 const QUESTION_TYPES = [
     { value: 'multiple-choice', label: 'Multiple Choice' },
@@ -12,203 +46,390 @@ const QUESTION_TYPES = [
     { value: 'matching', label: 'Matching Pairs' }
 ];
 
-interface EditAssessmentV2FormProps {
-    assessmentId: string;
-    onClose: () => void;
-    onSuccess?: () => void;
-    userId: string;
-}
+const defaultOption = (): EditorOption => ({ text: '', media: null });
+
+const defaultQuestion = (): EditorQuestion => ({
+    type: 'multiple-choice',
+    question: '',
+    questionMedia: null,
+    options: [defaultOption(), defaultOption(), defaultOption(), defaultOption()],
+    correctAnswer: 0,
+    xp: '10',
+    coins: '5'
+});
+
+const mapStoredTypeToEditor = (type?: string) => {
+    if (type === 'audio') return 'media-audio';
+    if (type === 'scramble-word') return 'scramble';
+    return type || 'multiple-choice';
+};
+
+const toMediaPreview = (value: any, fallbackName: string): MediaPreview | null => {
+    if (!value) return null;
+
+    if (typeof value === 'string') {
+        const lower = value.toLowerCase();
+        const type = lower.match(/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/)
+            ? 'image/existing'
+            : 'audio/existing';
+        return {
+            name: fallbackName,
+            type,
+            preview: value,
+            isExisting: true,
+        };
+    }
+
+    if (typeof value === 'object' && typeof value.preview === 'string') {
+        return {
+            name: value.name || fallbackName,
+            type: value.type || 'application/octet-stream',
+            preview: value.preview,
+            size: value.size,
+            isExisting: value.isExisting,
+        };
+    }
+
+    return null;
+};
+
+const normalizeOptions = (question: any): EditorOption[] => {
+    const options = Array.isArray(question?.options) ? question.options : [];
+
+    if (options.length === 0 && ['multiple-choice', 'checkbox'].includes(mapStoredTypeToEditor(question?.type || question?.question_type))) {
+        return [defaultOption(), defaultOption(), defaultOption(), defaultOption()];
+    }
+
+    return options.map((option: any) => ({
+        text: option?.text ?? option?.option_text ?? '',
+        media: toMediaPreview(option?.media ?? option?.image_url ?? option?.audio_url, 'Existing option media'),
+        match: option?.match ?? '',
+        matchMedia: toMediaPreview(option?.matchMedia, 'Existing match media'),
+    }));
+};
+
+const normalizeCorrectAnswer = (question: any, options: EditorOption[]) => {
+    const type = mapStoredTypeToEditor(question?.type || question?.question_type);
+
+    if (type === 'checkbox') {
+        if (Array.isArray(question?.correctAnswer)) return question.correctAnswer;
+        if (Array.isArray(question?.correct_answer)) return question.correct_answer;
+        return Array.isArray(question?.options)
+            ? question.options
+                .map((option: any, index: number) => option?.is_correct ? index : -1)
+                .filter((index: number) => index >= 0)
+            : [];
+    }
+
+    if (type === 'multiple-choice') {
+        if (typeof question?.correctAnswer === 'number') return question.correctAnswer;
+
+        const correctText = question?.correct_answer;
+        if (typeof correctText === 'string' && correctText.trim()) {
+            const index = options.findIndex((option) => option.text === correctText);
+            if (index >= 0) return index;
+        }
+
+        if (Array.isArray(question?.options)) {
+            const index = question.options.findIndex((option: any) => option?.is_correct);
+            if (index >= 0) return index;
+        }
+
+        return 0;
+    }
+
+    if (typeof question?.correctAnswer !== 'undefined') return question.correctAnswer;
+    if (typeof question?.correct_answer !== 'undefined') return question.correct_answer;
+    return '';
+};
+
+const normalizeQuestion = (question: any, assessmentPoints?: number): EditorQuestion => {
+    const type = mapStoredTypeToEditor(question?.type || question?.question_type);
+    const options = normalizeOptions(question);
+    return {
+        type,
+        question: question?.question ?? question?.question_text ?? '',
+        questionMedia: toMediaPreview(question?.questionMedia ?? question?.image_url ?? question?.audio_url, 'Existing question media'),
+        options,
+        correctAnswer: normalizeCorrectAnswer(question, options),
+        xp: String(question?.xp ?? assessmentPoints ?? 10),
+        coins: String(question?.coins ?? 5),
+        scrambleWords: Array.isArray(question?.scrambleWords) ? question.scrambleWords : [],
+    };
+};
+
+const readFileAsPreview = (file: File, callback: (preview: MediaPreview) => void) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        callback({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            preview: event.target?.result as string,
+        });
+    };
+    reader.readAsDataURL(file);
+};
+
+const serializeMediaPreview = (media: MediaPreview | null) => {
+    if (!media) return null;
+
+    return {
+        name: media.name,
+        type: media.type,
+        preview: media.preview,
+        isExisting: media.isExisting,
+    };
+};
+
+const serializeQuestionForSave = (question: EditorQuestion) => {
+    const baseQuestion: any = {
+        type: question.type,
+        question: question.question,
+        questionMedia: serializeMediaPreview(question.questionMedia),
+        correctAnswer: question.type === 'short-answer' && typeof question.correctAnswer === 'string'
+            ? question.correctAnswer.trim()
+            : question.correctAnswer,
+        xp: parseInt(question.xp, 10) || 0,
+        coins: parseInt(question.coins, 10) || 0,
+    };
+
+    if (question.type === 'multiple-choice' || question.type === 'checkbox' || question.type === 'matching') {
+        baseQuestion.options = question.options.map((option) => ({
+            text: option.text,
+            media: serializeMediaPreview(option.media),
+            match: option.match,
+            matchMedia: serializeMediaPreview(option.matchMedia || null),
+        }));
+    }
+
+    if (question.type === 'scramble' || question.type === 'scramble-word') {
+        baseQuestion.scrambleWords = Array.isArray(question.scrambleWords) ? question.scrambleWords : [];
+        if (baseQuestion.scrambleWords.length) {
+            baseQuestion.correctAnswer = baseQuestion.scrambleWords
+                .map((word: any) => (typeof word === 'string' ? word : word.text || '').trim())
+                .filter((word: string) => word.length > 0);
+        }
+    }
+
+    if (question.type === 'media-audio') {
+        baseQuestion.correctAnswer = question.correctAnswer;
+    }
+
+    return baseQuestion;
+};
 
 export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
     assessmentId,
     onClose,
     onSuccess,
-    userId
+    userId,
+    initialAssessment,
 }) => {
     const [title, setTitle] = useState('');
     const [instructions, setInstructions] = useState('');
-    const [questions, setQuestions] = useState<any[]>([]);
+    const [questions, setQuestions] = useState<EditorQuestion[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
-    const [bahagiId, setBahagiId] = useState<number>(0);
-    const [points, setPoints] = useState(10);
+    const [availableBahagis, setAvailableBahagis] = useState<any[]>([]);
+    const [availableYunits, setAvailableYunits] = useState<any[]>([]);
+    const [selectedBahagiId, setSelectedBahagiId] = useState<string>('');
+    const [selectedYunitId, setSelectedYunitId] = useState<string>('');
 
-    // Load assessment data
+    const applyAssessmentToForm = (assessment: any) => {
+        setTitle(assessment?.title || '');
+        setInstructions(assessment?.instructions || assessment?.description || '');
+        setSelectedBahagiId(assessment?.bahagi_id ? String(assessment.bahagi_id) : '');
+        setSelectedYunitId(assessment?.lesson_id ? String(assessment.lesson_id) : '');
+        setQuestions(
+            Array.isArray(assessment?.questions) && assessment.questions.length > 0
+                ? assessment.questions.map((question: any) => normalizeQuestion(question, assessment.points))
+                : [defaultQuestion()]
+        );
+    };
+
     useEffect(() => {
-        const loadAssessment = async () => {
+        const loadBahagis = async () => {
             try {
-                const response = await apiClient.assessment.fetchById(Number(assessmentId));
-                if (response.success && response.data) {
-                    const data = response.data;
-                    setTitle(data.title || '');
-                    setBahagiId(data.bahagi_id || 0);
-                    setPoints(data.points || 10);
-                    setInstructions(data.content?.instructions || data.instructions || '');
-
-                    // Load questions from content.questions (same structure as CreateAssessmentForm)
-                    const loadedQuestions = data.content?.questions || [];
-                    if (loadedQuestions.length > 0) {
-                        setQuestions(loadedQuestions.map((q: any) => ({
-                            type: q.type || 'multiple-choice',
-                            question: q.question || '',
-                            questionMedia: q.questionMedia || null,
-                            options: q.options || [
-                                { text: '', media: null },
-                                { text: '', media: null },
-                                { text: '', media: null },
-                                { text: '', media: null }
-                            ],
-                            correctAnswer: q.correctAnswer ?? 0,
-                            xp: String(q.xp ?? 10),
-                            coins: String(q.coins ?? 5),
-                            scrambleWords: q.scrambleWords || [],
-                        })));
-                    } else {
-                        // No questions found, start with one empty
-                        setQuestions([{
-                            type: data.type || 'multiple-choice',
-                            question: '',
-                            questionMedia: null,
-                            options: [
-                                { text: '', media: null },
-                                { text: '', media: null },
-                                { text: '', media: null },
-                                { text: '', media: null }
-                            ],
-                            correctAnswer: 0,
-                            xp: '10',
-                            coins: '5'
-                        }]);
-                    }
-                } else {
-                    setError('Failed to load assessment');
+                const response = await apiClient.bahagi.fetchAll(userId);
+                if (response?.success && Array.isArray(response.data)) {
+                    setAvailableBahagis(response.data);
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to load assessment');
+                console.error('Error loading bahagi options:', err);
+            }
+        };
+
+        loadBahagis();
+    }, [userId]);
+
+    useEffect(() => {
+        const loadAssessment = async () => {
+            if (initialAssessment) {
+                applyAssessmentToForm(initialAssessment);
+                setLoading(false);
+            }
+
+            try {
+                const response = await apiClient.assessment.fetchById(Number(assessmentId));
+                if (!response.success || !response.data) {
+                    throw new Error(response.error || 'Failed to load assessment');
+                }
+
+                applyAssessmentToForm(response.data);
+                setError('');
+            } catch (err) {
+                if (!initialAssessment) {
+                    setError(err instanceof Error ? err.message : 'Failed to load assessment');
+                } else {
+                    console.error('Error refreshing assessment details:', err);
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         loadAssessment();
-    }, [assessmentId]);
+    }, [assessmentId, userId, initialAssessment]);
+
+    useEffect(() => {
+        if (!availableBahagis.length) {
+            return;
+        }
+
+        const loadAllYunits = async () => {
+            try {
+                const responses = await Promise.all(
+                    availableBahagis.map(async (bahagi) => {
+                        const response = await apiClient.yunit.fetchByBahagi(Number(bahagi.id));
+                        const yunits = response?.success && Array.isArray(response.data) ? response.data : [];
+                        return yunits.map((yunit: any) => ({
+                            ...yunit,
+                            bahagi_id: yunit?.bahagi_id || bahagi.id,
+                            bahagiTitle: bahagi.title,
+                            week_number: yunit?.week_number || bahagi.week_number || null,
+                        }));
+                    })
+                );
+
+                const flattened = responses.flat();
+                setAvailableYunits(flattened);
+
+                if (selectedYunitId) {
+                    const selectedYunit = flattened.find((yunit: any) => String(yunit.id) === selectedYunitId);
+                    if (selectedYunit?.bahagi_id) {
+                        setSelectedBahagiId(String(selectedYunit.bahagi_id));
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading yunit options:', err);
+                setAvailableYunits([]);
+            }
+        };
+
+        loadAllYunits();
+    }, [availableBahagis, selectedYunitId]);
+
+    const selectedBahagi = availableBahagis.find((bahagi) => String(bahagi.id) === selectedBahagiId);
 
     const handleAddQuestion = () => {
-        setQuestions([...questions, {
-            type: 'multiple-choice',
-            question: '',
-            questionMedia: null,
-            options: [
-                { text: '', media: null },
-                { text: '', media: null },
-                { text: '', media: null },
-                { text: '', media: null }
-            ],
-            correctAnswer: 0,
-            xp: '10',
-            coins: '5'
-        }]);
+        setQuestions((prev) => [...prev, defaultQuestion()]);
     };
 
     const handleRemoveQuestion = (index: number) => {
-        if (questions.length > 1) {
-            setQuestions(questions.filter((_, i) => i !== index));
-        }
+        setQuestions((prev) => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
     };
 
-    const handleUpdateQuestion = (index: number, field: string, value: any) => {
-        const updated = [...questions];
-        updated[index][field] = value;
-        setQuestions(updated);
+    const handleUpdateQuestion = (index: number, field: keyof EditorQuestion, value: any) => {
+        setQuestions((prev) => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [field]: value };
+            return updated;
+        });
     };
 
-    const handleUpdateOption = (qIndex: number, oIndex: number, field: string, value: any) => {
-        const updated = [...questions];
-        updated[qIndex].options[oIndex][field] = value;
-        setQuestions(updated);
+    const handleUpdateOption = (qIndex: number, oIndex: number, field: keyof EditorOption, value: any) => {
+        setQuestions((prev) => {
+            const updated = [...prev];
+            const nextOptions = [...updated[qIndex].options];
+            nextOptions[oIndex] = { ...nextOptions[oIndex], [field]: value };
+            updated[qIndex] = { ...updated[qIndex], options: nextOptions };
+            return updated;
+        });
     };
 
-    const handleSave = async () => {
+    const handleRemoveQuestionMedia = (qIndex: number) => {
+        handleUpdateQuestion(qIndex, 'questionMedia', null);
+    };
+
+    const handleRemoveOptionMedia = (qIndex: number, oIndex: number) => {
+        handleUpdateOption(qIndex, oIndex, 'media', null);
+    };
+
+    const handleRemoveAudioReference = (qIndex: number) => {
+        handleUpdateQuestion(qIndex, 'correctAnswer', null);
+    };
+
+    const handleSave = async (event: React.FormEvent) => {
+        event.preventDefault();
         if (!title.trim()) {
-            alert('Please enter an assessment title');
+            setError('Please enter an assessment title');
             return;
         }
+
         if (questions.length === 0) {
-            alert('Please add at least one question');
+            setError('Please add at least one question');
+            return;
+        }
+
+        if (!selectedBahagiId) {
+            setError('Please select the Bahagi for this assessment');
+            return;
+        }
+
+        if (!selectedYunitId) {
+            setError('Please select the Yunit for this assessment');
             return;
         }
 
         setSaving(true);
+        setError('');
+
         try {
-            const assessmentType = questions[0].type;
-            const typeMap: Record<string, string> = {
-                'media-audio': 'audio',
-                'scramble': 'scramble-word',
-            };
-            const totalPoints = questions.reduce(
-                (sum: number, q: any) => sum + (parseInt(q.xp) || 10), 0
-            );
+            const normalizedQuestions = questions.map(serializeQuestionForSave);
+            const totalPoints = normalizedQuestions.reduce((sum, question) => sum + (Number(question.xp) || 0), 0);
 
             const response = await apiClient.assessment.update(Number(assessmentId), {
+                bahagi_id: Number(selectedBahagiId),
+                yunit_id: Number(selectedYunitId),
                 title,
-                assessment_type: typeMap[assessmentType] || assessmentType,
-                content: {
-                    instructions,
-                    questions: questions.map(q => {
-                        const mapped: any = {
-                            ...q,
-                            xp: parseInt(q.xp),
-                            coins: parseInt(q.coins)
-                        };
-                        // For scramble questions, store the correct word order as correctAnswer
-                        if ((q.type === 'scramble' || q.type === 'scramble-word') && q.scrambleWords?.length) {
-                            mapped.correctAnswer = q.scrambleWords
-                                .map((w: any) => (typeof w === 'string' ? w : w.text || '').trim())
-                                .filter((t: string) => t.length > 0);
-                        }
-                        return mapped;
-                    }),
-                },
+                description: instructions,
+                instructions,
+                type: normalizedQuestions[0]?.type || 'multiple-choice',
                 points: totalPoints,
-            } as any);
+                total_questions: normalizedQuestions.length,
+                questions: normalizedQuestions,
+            }, {
+                minimalResponse: true,
+            });
 
-            if (response.success) {
-                alert('✅ Assessment updated successfully!');
-                onSuccess?.();
-                onClose();
-            } else {
-                setError(response.error || 'Save failed');
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to save assessment');
             }
+
+            onSuccess?.();
+            onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Save failed');
+            setError(err instanceof Error ? err.message : 'Failed to save assessment');
         } finally {
             setSaving(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-brand-purple border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-white font-bold text-lg">Loading assessment...</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="fixed inset-0 bg-[#020617]/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl max-h-[90vh] overflow-auto rounded-[2.5rem] p-10 shadow-2xl relative custom-scrollbar">
-                {/* Saving overlay */}
-                {saving && (
-                    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm rounded-[2.5rem] z-10 flex flex-col items-center justify-center gap-4">
-                        <div className="w-12 h-12 border-4 border-brand-purple border-t-transparent rounded-full animate-spin"></div>
-                        <p className="text-white font-bold text-lg">Saving changes...</p>
-                    </div>
-                )}
-
                 <button
                     onClick={onClose}
                     className="absolute top-6 right-6 text-2xl text-slate-500 hover:text-white transition-colors"
@@ -217,19 +438,52 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                 </button>
 
                 <h2 className="text-3xl font-black text-white tracking-tight mb-2">Edit Assessment</h2>
-                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mb-8">Update assessment details and questions</p>
+                <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mb-8">Update this assessment using the same builder used for creation</p>
 
-                {error && (
-                    <div className="bg-red-900/30 border border-red-800 text-red-400 p-4 rounded-xl text-sm font-bold mb-6">
-                        {error}
-                        <button onClick={() => setError('')} className="ml-3 text-red-500 hover:text-red-300">✕</button>
-                    </div>
-                )}
+                <form onSubmit={handleSave} className="space-y-8">
+                    {error && (
+                        <div className="rounded-2xl border border-rose-500/30 bg-rose-950/30 px-4 py-3 text-sm text-rose-300">
+                            {error}
+                        </div>
+                    )}
 
-                <div className="space-y-8">
-                    {/* Assessment Details */}
                     <div className="space-y-4">
                         <h3 className="text-lg font-black text-white">Assessment Details</h3>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bahagi</label>
+                                <input
+                                    type="text"
+                                    value={selectedBahagi?.title || ''}
+                                    readOnly
+                                    className="bg-slate-950 border border-slate-800 text-slate-300 px-5 py-4 rounded-xl text-sm"
+                                />
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Yunit</label>
+                                <select
+                                    value={selectedYunitId}
+                                    onChange={(e) => {
+                                        const nextYunitId = e.target.value;
+                                        setSelectedYunitId(nextYunitId);
+                                        const nextYunit = availableYunits.find((yunit) => String(yunit.id) === nextYunitId);
+                                        if (nextYunit?.bahagi_id) {
+                                            setSelectedBahagiId(String(nextYunit.bahagi_id));
+                                        }
+                                    }}
+                                    className="bg-slate-950 border border-slate-800 text-white px-5 py-4 rounded-xl text-sm focus:border-brand-purple outline-none transition-all"
+                                >
+                                    <option value="">Select Yunit</option>
+                                    {availableYunits.map((yunit) => (
+                                        <option key={yunit.id} value={String(yunit.id)}>
+                                            {`Week ${yunit.week_number || '-'} • ${yunit.bahagiTitle || selectedBahagi?.title || 'Bahagi'} • ${yunit.title}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
 
                         <div className="flex flex-col gap-2">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assessment Title</label>
@@ -255,7 +509,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                         </div>
                     </div>
 
-                    {/* Questions */}
                     <div className="space-y-4 border-t border-slate-800 pt-6 relative">
                         <div className="flex justify-between items-center">
                             <h3 className="text-lg font-black text-white">Questions</h3>
@@ -263,7 +516,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
 
                         {questions.map((question, qIdx) => (
                             <div key={qIdx} className="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 space-y-5">
-                                {/* Question Header with Type and Delete */}
                                 <div className="flex justify-between items-start">
                                     <div className="flex-1 space-y-3">
                                         <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Question {qIdx + 1}</label>
@@ -272,7 +524,7 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                             onChange={(e) => handleUpdateQuestion(qIdx, 'type', e.target.value)}
                                             className="w-full bg-slate-900 border border-slate-800 text-white px-4 py-3 rounded-lg text-sm font-bold focus:border-brand-purple outline-none cursor-pointer"
                                         >
-                                            {QUESTION_TYPES.map(type => (
+                                            {QUESTION_TYPES.map((type) => (
                                                 <option key={type.value} value={type.value}>{type.label}</option>
                                             ))}
                                         </select>
@@ -288,7 +540,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                     )}
                                 </div>
 
-                                {/* Question Text */}
                                 <div className="flex flex-col gap-2">
                                     <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Question Text</label>
                                     <input
@@ -300,32 +551,31 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                     />
                                 </div>
 
-                                {/* Question Media */}
                                 <div className="flex flex-col gap-2">
-                                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">📎 Question Media (Image/Audio)</label>
+                                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Question Media (Image/Audio)</label>
                                     <input
                                         type="file"
                                         accept="image/*,audio/*"
                                         onChange={(e) => {
                                             const file = e.target.files?.[0];
                                             if (file) {
-                                                const reader = new FileReader();
-                                                reader.onload = (event) => {
-                                                    handleUpdateQuestion(qIdx, 'questionMedia', {
-                                                        name: file.name,
-                                                        type: file.type,
-                                                        size: file.size,
-                                                        preview: event.target?.result as string
-                                                    });
-                                                };
-                                                reader.readAsDataURL(file);
+                                                readFileAsPreview(file, (preview) => handleUpdateQuestion(qIdx, 'questionMedia', preview));
                                             }
                                         }}
                                         className="w-full bg-slate-900 border border-slate-800 text-slate-400 px-4 py-3 rounded-lg text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-purple file:text-white hover:file:bg-brand-purple/80"
                                     />
                                     {question.questionMedia && (
                                         <div className="space-y-2">
-                                            <p className="text-xs text-slate-200 font-semibold">📦 Preview:</p>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <p className="text-xs text-slate-200 font-semibold">Preview:</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveQuestionMedia(qIdx)}
+                                                    className="text-[10px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                >
+                                                    {question.questionMedia.isExisting ? 'Remove Existing Media' : 'Remove Media'}
+                                                </button>
+                                            </div>
                                             {question.questionMedia.type?.startsWith('image') ? (
                                                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-2 w-fit">
                                                     <img src={question.questionMedia.preview} alt="Question preview" className="h-32 w-auto rounded object-cover" />
@@ -339,22 +589,14 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                     <p className="text-[8px] text-slate-400 font-semibold">{question.questionMedia.name}</p>
                                                 </div>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => handleUpdateQuestion(qIdx, 'questionMedia', null)}
-                                                className="text-[9px] text-rose-500 hover:text-rose-400"
-                                            >
-                                                ✕ Remove media
-                                            </button>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Options for Multiple Choice, Checkbox */}
                                 {(question.type === 'multiple-choice' || question.type === 'checkbox') && (
                                     <div className="space-y-3 pt-3 border-t border-slate-700">
                                         <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Options</label>
-                                        {question.options.map((option: any, oIdx: number) => (
+                                        {question.options.map((option, oIdx) => (
                                             <div key={oIdx} className="space-y-2 bg-slate-900/50 p-3 rounded-lg">
                                                 <div className="flex gap-2 items-center">
                                                     <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Option {oIdx + 1}</span>
@@ -372,22 +614,23 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                     onChange={(e) => {
                                                         const file = e.target.files?.[0];
                                                         if (file) {
-                                                            const reader = new FileReader();
-                                                            reader.onload = (event) => {
-                                                                handleUpdateOption(qIdx, oIdx, 'media', {
-                                                                    name: file.name,
-                                                                    type: file.type,
-                                                                    preview: event.target?.result as string
-                                                                });
-                                                            };
-                                                            reader.readAsDataURL(file);
+                                                            readFileAsPreview(file, (preview) => handleUpdateOption(qIdx, oIdx, 'media', preview));
                                                         }
                                                     }}
                                                     className="w-full bg-slate-800 border border-slate-700 text-slate-400 px-3 py-2 rounded-lg text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-brand-sky/70 file:text-white"
                                                 />
                                                 {option.media && (
                                                     <div className="space-y-2">
-                                                        <p className="text-[8px] text-slate-300 font-semibold">📦 Preview:</p>
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <p className="text-[8px] text-slate-300 font-semibold">Preview:</p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveOptionMedia(qIdx, oIdx)}
+                                                                className="text-[9px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                            >
+                                                                {option.media.isExisting ? 'Remove Existing Media' : 'Remove Media'}
+                                                            </button>
+                                                        </div>
                                                         {option.media.type?.startsWith('image') ? (
                                                             <div className="bg-slate-700 border border-slate-600 rounded p-2 w-fit">
                                                                 <img src={option.media.preview} alt="Option preview" className="h-20 w-auto rounded object-cover" />
@@ -401,13 +644,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                                 <p className="text-[7px] text-slate-400 font-semibold">{option.media.name}</p>
                                                             </div>
                                                         )}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleUpdateOption(qIdx, oIdx, 'media', null)}
-                                                            className="text-[8px] text-rose-500 hover:text-rose-400"
-                                                        >
-                                                            ✕ Remove
-                                                        </button>
                                                     </div>
                                                 )}
                                             </div>
@@ -415,175 +651,115 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                     </div>
                                 )}
 
-                                {/* Correct Answer for Multiple Choice */}
-                                {question.type === 'multiple-choice' && (
+                                {(question.type === 'multiple-choice' || question.type === 'checkbox') && (
                                     <div className="flex flex-col gap-2 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">✓ Correct Answer</label>
-                                        <select
-                                            value={question.correctAnswer}
-                                            onChange={(e) => handleUpdateQuestion(qIdx, 'correctAnswer', parseInt(e.target.value))}
-                                            className="w-full bg-slate-900 border border-slate-800 text-white px-4 py-2 rounded-lg text-xs focus:border-brand-purple outline-none cursor-pointer"
-                                        >
-                                            {question.options.map((_: any, oIdx: number) => (
-                                                <option key={oIdx} value={oIdx}>Option {oIdx + 1}</option>
-                                            ))}
-                                        </select>
+                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Correct Answer</label>
+                                        {question.type === 'checkbox' ? (
+                                            <div className="space-y-2">
+                                                {question.options.map((option, oIdx) => (
+                                                    <label key={oIdx} className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Array.isArray(question.correctAnswer) ? question.correctAnswer.includes(oIdx) : false}
+                                                            onChange={(e) => {
+                                                                const current = Array.isArray(question.correctAnswer) ? question.correctAnswer : [];
+                                                                const updated = e.target.checked
+                                                                    ? [...current, oIdx]
+                                                                    : current.filter((index: number) => index !== oIdx);
+                                                                handleUpdateQuestion(qIdx, 'correctAnswer', updated);
+                                                            }}
+                                                            className="w-4 h-4 accent-brand-purple"
+                                                        />
+                                                        <span className="text-[8px] text-slate-400">{option.text || `Option ${oIdx + 1}`}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <select
+                                                value={question.correctAnswer}
+                                                onChange={(e) => handleUpdateQuestion(qIdx, 'correctAnswer', parseInt(e.target.value, 10))}
+                                                className="w-full bg-slate-900 border border-slate-800 text-white px-4 py-2 rounded-lg text-xs focus:border-brand-purple outline-none cursor-pointer"
+                                            >
+                                                {question.options.map((_, oIdx) => (
+                                                    <option key={oIdx} value={oIdx}>Option {oIdx + 1}</option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
                                 )}
 
-                                {/* Short Answer */}
                                 {question.type === 'short-answer' && (
                                     <div className="space-y-3 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">📎 Reference Media (Optional)</label>
+                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Reference Media (Optional)</label>
                                         <input
                                             type="file"
                                             accept="image/*,audio/*"
                                             onChange={(e) => {
                                                 const file = e.target.files?.[0];
                                                 if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (event) => {
-                                                        handleUpdateQuestion(qIdx, 'questionMedia', {
-                                                            name: file.name,
-                                                            type: file.type,
-                                                            preview: event.target?.result as string
-                                                        });
-                                                    };
-                                                    reader.readAsDataURL(file);
+                                                    readFileAsPreview(file, (preview) => handleUpdateQuestion(qIdx, 'questionMedia', preview));
                                                 }
                                             }}
                                             className="w-full bg-slate-900 border border-slate-800 text-slate-400 px-4 py-3 rounded-lg text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-purple file:text-white"
                                         />
-                                        {question.questionMedia && (
-                                            <div className="space-y-2">
-                                                <p className="text-xs text-slate-200 font-semibold">📦 Preview:</p>
-                                                {question.questionMedia.type?.startsWith('image') ? (
-                                                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-2 w-fit">
-                                                        <img src={question.questionMedia.preview} alt="Reference preview" className="h-24 w-auto rounded object-cover" />
-                                                        <p className="text-[8px] text-slate-400 mt-2 font-semibold">{question.questionMedia.name}</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 w-fit">
-                                                        <audio controls className="h-8 w-64">
-                                                            <source src={question.questionMedia.preview} type={question.questionMedia.type} />
-                                                        </audio>
-                                                        <p className="text-[8px] text-slate-400 font-semibold">{question.questionMedia.name}</p>
-                                                    </div>
-                                                )}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateQuestion(qIdx, 'questionMedia', null)}
-                                                    className="text-[9px] text-rose-500 hover:text-rose-400"
-                                                >
-                                                    ✕ Remove media
-                                                </button>
-                                            </div>
-                                        )}
                                         <div className="flex flex-col gap-2 pt-2">
-                                            <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">✓ Correct Answer</label>
+                                            <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Correct Answer</label>
                                             <input
                                                 type="text"
-                                                value={question.correctAnswer || ''}
+                                                value={typeof question.correctAnswer === 'string' ? question.correctAnswer : ''}
                                                 onChange={(e) => handleUpdateQuestion(qIdx, 'correctAnswer', e.target.value)}
                                                 placeholder="Enter the model/correct answer..."
                                                 className="w-full bg-slate-900 border border-slate-800 text-white px-4 py-3 rounded-lg text-xs focus:border-brand-purple outline-none"
                                             />
                                         </div>
-                                        <p className="text-[8px] text-slate-500 italic">Students will type their answer (can be manually graded)</p>
+                                        <p className="text-[8px] text-slate-500 italic">Students will type their answer.</p>
                                     </div>
                                 )}
 
-                                {/* Audio Recording */}
                                 {question.type === 'media-audio' && (
                                     <div className="space-y-3 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">🎙️ Reference Answer</label>
+                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Reference Answer</label>
                                         <input
                                             type="file"
                                             accept="audio/*"
                                             onChange={(e) => {
                                                 const file = e.target.files?.[0];
                                                 if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (event) => {
-                                                        handleUpdateQuestion(qIdx, 'correctAnswer', {
-                                                            name: file.name,
-                                                            type: file.type,
-                                                            isAudio: true,
-                                                            preview: event.target?.result as string
-                                                        });
-                                                    };
-                                                    reader.readAsDataURL(file);
+                                                    readFileAsPreview(file, (preview) => handleUpdateQuestion(qIdx, 'correctAnswer', preview));
                                                 }
                                             }}
                                             className="w-full bg-slate-900 border border-slate-800 text-slate-400 px-4 py-3 rounded-lg text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-purple file:text-white"
                                         />
-                                        {question.correctAnswer?.name && (
+                                        {typeof question.correctAnswer === 'object' && question.correctAnswer?.preview && (
                                             <div className="space-y-2">
-                                                <p className="text-xs text-slate-200 font-semibold">📦 Preview:</p>
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-[8px] text-slate-300 font-semibold">Preview:</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveAudioReference(qIdx)}
+                                                        className="text-[9px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest"
+                                                    >
+                                                        {question.correctAnswer.isExisting ? 'Remove Existing Audio' : 'Remove Audio'}
+                                                    </button>
+                                                </div>
                                                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 w-fit">
                                                     <audio controls className="h-8 w-64">
                                                         <source src={question.correctAnswer.preview} type={question.correctAnswer.type} />
                                                     </audio>
                                                     <p className="text-[8px] text-slate-400 font-semibold">{question.correctAnswer.name}</p>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateQuestion(qIdx, 'correctAnswer', null)}
-                                                    className="text-[9px] text-rose-500 hover:text-rose-400"
-                                                >
-                                                    ✕ Remove audio
-                                                </button>
                                             </div>
                                         )}
-                                        <p className="text-[8px] text-slate-500 italic">Upload reference audio (optional - for teachers to compare with student answers)</p>
                                     </div>
                                 )}
 
-                                {/* Scramble Word */}
                                 {question.type === 'scramble' && (
                                     <div className="space-y-3 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">📎 Question Image (Optional)</label>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (event) => {
-                                                        handleUpdateQuestion(qIdx, 'questionMedia', {
-                                                            name: file.name,
-                                                            type: file.type,
-                                                            preview: event.target?.result as string
-                                                        });
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }}
-                                            className="w-full bg-slate-900 border border-slate-800 text-slate-400 px-4 py-3 rounded-lg text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-purple file:text-white"
-                                        />
-                                        {question.questionMedia && (
-                                            <div className="space-y-2">
-                                                <p className="text-xs text-slate-200 font-semibold">📦 Preview:</p>
-                                                <div className="bg-slate-800 border border-slate-700 rounded-lg p-2 w-fit">
-                                                    <img src={question.questionMedia.preview} alt="Scramble image" className="h-32 w-auto rounded object-cover" />
-                                                    <p className="text-[8px] text-slate-400 mt-2 font-semibold">{question.questionMedia.name}</p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateQuestion(qIdx, 'questionMedia', null)}
-                                                    className="text-[9px] text-rose-500 hover:text-rose-400"
-                                                >
-                                                    ✕ Remove media
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div className="flex flex-col gap-2 pt-2">
-                                            <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">✓ Words to Unscramble</label>
-                                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                                {(question.scrambleWords || []).map((word: any, wIdx: number) => {
-                                                    const wordObj = typeof word === 'string' ? { text: word, media: null } : (word || { text: '', media: null });
-                                                    return (
+                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Words to Unscramble</label>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                                            {(question.scrambleWords || []).map((word: any, wIdx: number) => {
+                                                const wordObj = typeof word === 'string' ? { text: word, media: null } : (word || { text: '', media: null });
+                                                return (
                                                     <div key={wIdx} className="bg-slate-800/50 p-3 rounded space-y-2">
                                                         <div className="flex justify-between items-center">
                                                             <span className="text-[7px] font-black text-slate-500 uppercase">Word {wIdx + 1}</span>
@@ -604,83 +780,52 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                             value={wordObj.text || ''}
                                                             onChange={(e) => {
                                                                 const words = [...(question.scrambleWords || [])];
-                                                                if (typeof words[wIdx] === 'string') {
-                                                                    words[wIdx] = { text: e.target.value, media: null };
-                                                                } else {
-                                                                    words[wIdx] = { ...words[wIdx], text: e.target.value };
-                                                                }
+                                                                words[wIdx] = { ...wordObj, text: e.target.value };
                                                                 handleUpdateQuestion(qIdx, 'scrambleWords', words);
                                                             }}
                                                             placeholder="Enter word to scramble"
                                                             className="w-full bg-slate-700 border border-slate-600 text-white px-2 py-1 rounded text-[10px] focus:border-brand-purple outline-none"
                                                         />
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*,audio/*"
-                                                            onChange={(e) => {
-                                                                const file = e.target.files?.[0];
-                                                                if (file) {
-                                                                    const reader = new FileReader();
-                                                                    reader.onload = (event) => {
-                                                                        const words = [...(question.scrambleWords || [])];
-                                                                        if (typeof words[wIdx] === 'string') {
-                                                                            words[wIdx] = { text: words[wIdx], media: null };
-                                                                        }
-                                                                        words[wIdx] = {
-                                                                            ...words[wIdx],
-                                                                            media: {
-                                                                                name: file.name,
-                                                                                type: file.type,
-                                                                                preview: event.target?.result as string
-                                                                            }
-                                                                        };
-                                                                        handleUpdateQuestion(qIdx, 'scrambleWords', words);
-                                                                    };
-                                                                    reader.readAsDataURL(file);
-                                                                }
-                                                            }}
-                                                            className="w-full bg-slate-700 border border-slate-600 text-slate-400 px-2 py-1 rounded text-[9px] file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-brand-sky/70 file:text-white"
-                                                        />
-                                                        {wordObj.media && (
-                                                            <div className="space-y-1">
-                                                                <p className="text-[7px] text-slate-400 font-semibold">📦 Preview:</p>
-                                                                {wordObj.media.type?.startsWith('image') ? (
-                                                                    <img src={wordObj.media.preview} alt="Word item" className="h-12 w-auto rounded object-cover" />
-                                                                ) : (
-                                                                    <audio controls className="h-5 w-32 scale-75 origin-left">
-                                                                        <source src={wordObj.media.preview} type={wordObj.media.type} />
-                                                                    </audio>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>);
-                                                })}
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const words = [...(question.scrambleWords || []), { text: '', media: null }];
-                                                    handleUpdateQuestion(qIdx, 'scrambleWords', words);
-                                                }}
-                                                className="text-[9px] font-black text-brand-sky px-3 py-2 rounded border border-brand-sky/30 hover:bg-brand-sky/10"
-                                            >
-                                                + Add Word
-                                            </button>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleUpdateQuestion(qIdx, 'scrambleWords', [...(question.scrambleWords || []), { text: '', media: null }])}
+                                            className="text-[9px] font-black text-brand-sky px-3 py-2 rounded border border-brand-sky/30 hover:bg-brand-sky/10"
+                                        >
+                                            + Add Word
+                                        </button>
                                     </div>
                                 )}
 
-                                {/* Matching Pairs */}
                                 {question.type === 'matching' && (
                                     <div className="space-y-3 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">📋 Matching Pairs</label>
-                                        {(question.options || []).map((option: any, oIdx: number) => (
+                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Matching Pairs</label>
+                                        {(question.options || []).map((option, oIdx) => (
                                             <div key={oIdx} className="space-y-3 bg-slate-900/50 p-4 rounded-lg border border-slate-800">
-                                                <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Pair {oIdx + 1}</span>
-                                                
-                                                {/* Left Item */}
-                                                <div className="bg-slate-800/50 p-3 rounded space-y-2">
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase">Left Item (Match From)</p>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Pair {oIdx + 1}</span>
+                                                    {(question.options || []).length > 2 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const updated = [...questions];
+                                                                updated[qIdx].options = updated[qIdx].options.filter((_, i) => i !== oIdx);
+                                                                setQuestions(updated);
+                                                            }}
+                                                            className="text-red-400 hover:text-red-300 text-[9px] font-black"
+                                                            title="Remove pair"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* Left item */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Left Item</label>
                                                     <input
                                                         type="text"
                                                         value={option.text}
@@ -694,36 +839,34 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                         onChange={(e) => {
                                                             const file = e.target.files?.[0];
                                                             if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onload = (event) => {
-                                                                    handleUpdateOption(qIdx, oIdx, 'media', {
-                                                                        name: file.name,
-                                                                        type: file.type,
-                                                                        preview: event.target?.result as string
-                                                                    });
-                                                                };
-                                                                reader.readAsDataURL(file);
+                                                                readFileAsPreview(file, (preview) => handleUpdateOption(qIdx, oIdx, 'media', preview));
                                                             }
                                                         }}
-                                                        className="w-full bg-slate-700 border border-slate-600 text-slate-400 px-3 py-2 rounded-lg text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-brand-sky/70 file:text-white"
+                                                        className="w-full bg-slate-800 border border-slate-700 text-slate-400 px-3 py-2 rounded-lg text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-brand-sky/70 file:text-white"
                                                     />
                                                     {option.media && (
                                                         <div className="space-y-1">
-                                                            <p className="text-[7px] text-slate-400 font-semibold">📦 Preview:</p>
                                                             {option.media.type?.startsWith('image') ? (
-                                                                <img src={option.media.preview} alt="Left item" className="h-16 w-auto rounded object-cover" />
+                                                                <div className="bg-slate-700 border border-slate-600 rounded p-2 w-fit">
+                                                                    <img src={option.media.preview} alt="Left item" className="h-16 w-auto rounded object-cover" />
+                                                                    <p className="text-[7px] text-slate-400 mt-1 font-semibold">{option.media.name}</p>
+                                                                </div>
                                                             ) : (
-                                                                <audio controls className="h-6 w-40 scale-75 origin-left">
-                                                                    <source src={option.media.preview} type={option.media.type} />
-                                                                </audio>
+                                                                <div className="bg-slate-700 border border-slate-600 rounded p-2 space-y-1 w-fit">
+                                                                    <audio controls className="h-6 w-40 scale-75 origin-left">
+                                                                        <source src={option.media.preview} type={option.media.type} />
+                                                                    </audio>
+                                                                    <p className="text-[7px] text-slate-400 font-semibold">{option.media.name}</p>
+                                                                </div>
                                                             )}
+                                                            <button type="button" onClick={() => handleUpdateOption(qIdx, oIdx, 'media', null)} className="text-[8px] text-red-400 hover:text-red-300 font-bold">Remove</button>
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Right Item */}
-                                                <div className="bg-slate-800/50 p-3 rounded space-y-2">
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase">Right Item (Correct Match)</p>
+                                                {/* Right item */}
+                                                <div className="space-y-2">
+                                                    <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Right Item (Match)</label>
                                                     <input
                                                         type="text"
                                                         value={option.match || ''}
@@ -737,70 +880,51 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                                         onChange={(e) => {
                                                             const file = e.target.files?.[0];
                                                             if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onload = (event) => {
-                                                                    handleUpdateOption(qIdx, oIdx, 'matchMedia', {
-                                                                        name: file.name,
-                                                                        type: file.type,
-                                                                        preview: event.target?.result as string
-                                                                    });
-                                                                };
-                                                                reader.readAsDataURL(file);
+                                                                readFileAsPreview(file, (preview) => handleUpdateOption(qIdx, oIdx, 'matchMedia', preview));
                                                             }
                                                         }}
-                                                        className="w-full bg-slate-700 border border-slate-600 text-slate-400 px-3 py-2 rounded-lg text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-brand-sky/70 file:text-white"
+                                                        className="w-full bg-slate-800 border border-slate-700 text-slate-400 px-3 py-2 rounded-lg text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-semibold file:bg-brand-sky/70 file:text-white"
                                                     />
                                                     {option.matchMedia && (
                                                         <div className="space-y-1">
-                                                            <p className="text-[7px] text-slate-400 font-semibold">📦 Preview:</p>
                                                             {option.matchMedia.type?.startsWith('image') ? (
-                                                                <img src={option.matchMedia.preview} alt="Right item" className="h-16 w-auto rounded object-cover" />
+                                                                <div className="bg-slate-700 border border-slate-600 rounded p-2 w-fit">
+                                                                    <img src={option.matchMedia.preview} alt="Right item" className="h-16 w-auto rounded object-cover" />
+                                                                    <p className="text-[7px] text-slate-400 mt-1 font-semibold">{option.matchMedia.name}</p>
+                                                                </div>
                                                             ) : (
-                                                                <audio controls className="h-6 w-40 scale-75 origin-left">
-                                                                    <source src={option.matchMedia.preview} type={option.matchMedia.type} />
-                                                                </audio>
+                                                                <div className="bg-slate-700 border border-slate-600 rounded p-2 space-y-1 w-fit">
+                                                                    <audio controls className="h-6 w-40 scale-75 origin-left">
+                                                                        <source src={option.matchMedia.preview} type={option.matchMedia.type} />
+                                                                    </audio>
+                                                                    <p className="text-[7px] text-slate-400 font-semibold">{option.matchMedia.name}</p>
+                                                                </div>
                                                             )}
+                                                            <button type="button" onClick={() => handleUpdateOption(qIdx, oIdx, 'matchMedia', null)} className="text-[8px] text-red-400 hover:text-red-300 font-bold">Remove</button>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const updated = [...questions];
+                                                updated[qIdx].options = [...updated[qIdx].options, { text: '', media: null, match: '', matchMedia: null }];
+                                                setQuestions(updated);
+                                            }}
+                                            className="text-[9px] font-black text-brand-sky px-3 py-2 rounded border border-brand-sky/30 hover:bg-brand-sky/10"
+                                        >
+                                            + Add Pair
+                                        </button>
                                     </div>
                                 )}
 
-                                {/* Checkbox Correct Answers */}
-                                {question.type === 'checkbox' && (
-                                    <div className="flex flex-col gap-2 pt-3 border-t border-slate-700">
-                                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">✓ Correct Answers (Multiple)</label>
-                                        <p className="text-[8px] text-slate-500 mb-2">Select all correct options below</p>
-                                        <div className="space-y-2">
-                                            {question.options?.map((option: any, oIdx: number) => (
-                                                <label key={oIdx} className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Array.isArray(question.correctAnswer) ? question.correctAnswer.includes(oIdx) : false}
-                                                        onChange={(e) => {
-                                                            const current = Array.isArray(question.correctAnswer) ? question.correctAnswer : [];
-                                                            const updated = e.target.checked
-                                                                ? [...current, oIdx]
-                                                                : current.filter((idx: number) => idx !== oIdx);
-                                                            handleUpdateQuestion(qIdx, 'correctAnswer', updated);
-                                                        }}
-                                                        className="w-4 h-4 accent-brand-purple"
-                                                    />
-                                                    <span className="text-[8px] text-slate-400">{option.text || `Option ${oIdx + 1}`}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Reward Section */}
                                 <div className="space-y-3 pt-4 border-t border-slate-700">
-                                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">🎁 Rewards for this Question</label>
+                                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Rewards for this Question</label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="flex flex-col gap-2">
-                                            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">⭐ XP Points</label>
+                                            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">XP Points</label>
                                             <input
                                                 type="number"
                                                 min="1"
@@ -811,7 +935,7 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                                             />
                                         </div>
                                         <div className="flex flex-col gap-2">
-                                            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">?? Coins</label>
+                                            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-1">Coins</label>
                                             <input
                                                 type="number"
                                                 min="1"
@@ -826,7 +950,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                             </div>
                         ))}
 
-                        {/* Add Question Button */}
                         <button
                             type="button"
                             onClick={handleAddQuestion}
@@ -836,7 +959,6 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                         </button>
                     </div>
 
-                    {/* Submit Buttons */}
                     <div className="flex gap-3 pt-6 border-t border-slate-800">
                         <button
                             type="button"
@@ -846,15 +968,14 @@ export const EditAssessmentV2Form: React.FC<EditAssessmentV2FormProps> = ({
                             Cancel
                         </button>
                         <button
-                            type="button"
-                            onClick={handleSave}
-                            disabled={saving}
+                            type="submit"
+                            disabled={saving || loading}
                             className="flex-1 px-4 py-4 bg-brand-purple hover:bg-brand-purple/80 text-white rounded-xl font-black text-sm uppercase tracking-widest transition-all disabled:opacity-70"
                         >
-                            {saving ? 'Saving...' : '? Save Changes'}
+                            {saving ? 'Saving...' : '✓ Save Changes'}
                         </button>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     );

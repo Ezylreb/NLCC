@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { apiClient } from '@/lib/api-client';
+import { exportGradebookToPDF, exportToCSV } from '@/lib/pdf-export';
 
 interface StudentGradebookProps {
   classId: string;
@@ -46,6 +47,7 @@ export const StudentGradebook: React.FC<StudentGradebookProps> = ({
   const [filterBahagi, setFilterBahagi] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'score' | 'title'>('date');
   const [progressData, setProgressData] = useState<any[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const loadGrades = async () => {
@@ -126,6 +128,48 @@ export const StudentGradebook: React.FC<StudentGradebookProps> = ({
     return 'F';
   };
 
+  const handleExportPDF = async () => {
+    try {
+      setIsExporting(true);
+      await exportGradebookToPDF(
+        studentId,
+        grades,
+        stats,
+        `gradebook_${studentId}_${new Date().toISOString().split('T')[0]}.png`
+      );
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Failed to export PDF. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    try {
+      setIsExporting(true);
+      const csvData = grades.map((grade) => ({
+        'Assessment Title': grade.assessmentTitle,
+        'Bahagi (Module)': grade.bahagiTitle,
+        'Yunit (Lesson)': grade.yunitTitle,
+        'Score': `${grade.pointsEarned}/${grade.totalPoints}`,
+        'Percentage': `${grade.percentage.toFixed(1)}%`,
+        'Grade Letter': getGradeLetter(grade.percentage),
+        'Submitted': new Date(grade.submittedAt).toLocaleDateString(),
+      }));
+
+      exportToCSV(
+        csvData,
+        `gradebook_${studentId}_${new Date().toISOString().split('T')[0]}.csv`
+      );
+    } catch (err) {
+      console.error('CSV export failed:', err);
+      alert('Failed to export CSV. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const filteredGrades = filterBahagi
     ? grades.filter(g => g.bahagiTitle === filterBahagi)
     : grades;
@@ -149,9 +193,29 @@ export const StudentGradebook: React.FC<StudentGradebookProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-black text-white">📚 Gradebook</h1>
-        <div className="text-right">
-          <p className="text-sm text-slate-400 font-bold">OVERALL GPA</p>
-          <p className="text-4xl font-black text-brand-sky">{stats.overallGPA.toFixed(2)}</p>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-sm text-slate-400 font-bold">OVERALL GPA</p>
+            <p className="text-4xl font-black text-brand-sky">{stats.overallGPA.toFixed(2)}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-semibold transition-all"
+              title="Export gradebook as PDF"
+            >
+              {isExporting ? '...' : '📄 PDF'}
+            </button>
+            <button
+              onClick={handleExportCSV}
+              disabled={isExporting}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-semibold transition-all"
+              title="Export gradebook as CSV"
+            >
+              {isExporting ? '...' : '📊 CSV'}
+            </button>
+          </div>
         </div>
       </div>
 

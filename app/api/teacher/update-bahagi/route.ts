@@ -6,8 +6,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     console.log('🔧 [UPDATE-BAHAGI] Received request body:', JSON.stringify(body, null, 2));
     
-    const { id, title, description, isPublished, iconPath, iconType } = body;
-    console.log('🔧 [UPDATE-BAHAGI] Parsed fields:', { id, title, description, isPublished, iconPath, iconType });
+    const { id, title, description, isPublished, is_published, iconPath, iconType, quarter, week_number, module_number } = body;
+    const publishValue = isPublished !== undefined ? isPublished : is_published;
+    console.log('🔧 [UPDATE-BAHAGI] Parsed fields:', { id, title, description, isPublished: publishValue, iconPath, iconType, quarter, week_number, module_number });
 
     if (!id) {
       console.error('🔧 [UPDATE-BAHAGI] Validation failed: Missing id');
@@ -36,10 +37,41 @@ export async function PUT(request: NextRequest) {
       paramCount++;
     }
 
-    // Is Open (not is_published)
-    if (isPublished !== undefined) {
-      updateFields.push(`is_open = $${paramCount}`);
-      updateValues.push(isPublished);
+    // Quarter (optional)
+    if (quarter !== undefined) {
+      updateFields.push(`quarter = $${paramCount}`);
+      updateValues.push(quarter || null);
+      paramCount++;
+    }
+
+    // Week Number (optional)
+    if (week_number !== undefined) {
+      updateFields.push(`week_number = $${paramCount}`);
+      updateValues.push(week_number || null);
+      paramCount++;
+    }
+
+    // Module Number (optional)
+    if (module_number !== undefined) {
+      updateFields.push(`module_number = $${paramCount}`);
+      updateValues.push(module_number || null);
+      paramCount++;
+    }
+
+    // Publish status (schema-compatible: prefer is_published, fallback to is_open)
+    if (publishValue !== undefined) {
+      const columnCheck = await query(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_name = 'bahagi' AND column_name = 'is_published'
+         ) AS has_is_published`
+      );
+
+      const hasIsPublished = Boolean(columnCheck.rows?.[0]?.has_is_published);
+      const publishColumn = hasIsPublished ? 'is_published' : 'is_open';
+      updateFields.push(`${publishColumn} = $${paramCount}`);
+      updateValues.push(publishValue);
       paramCount++;
     }
 
@@ -63,7 +95,7 @@ export async function PUT(request: NextRequest) {
     const updateQuery = `UPDATE bahagi 
        SET ${updateFields.join(', ')}
        WHERE id = $${paramCount}
-       RETURNING id, title, description, is_open, icon_path, icon_type, created_at, updated_at`;
+       RETURNING *`;
 
     console.log('🔧 [UPDATE-BAHAGI] Update Query:', updateQuery);
     console.log('🔧 [UPDATE-BAHAGI] Update Values:', updateValues);
@@ -83,6 +115,9 @@ export async function PUT(request: NextRequest) {
     }
 
     const updatedBahagi = result.rows[0];
+    if (updatedBahagi && updatedBahagi.is_published === undefined && updatedBahagi.is_open !== undefined) {
+      updatedBahagi.is_published = Boolean(updatedBahagi.is_open);
+    }
     console.log('🔧 [UPDATE-BAHAGI] Successfully updated bahagi:', JSON.stringify(updatedBahagi, null, 2));
     return NextResponse.json({
       success: true,

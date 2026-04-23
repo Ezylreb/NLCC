@@ -3,13 +3,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
+import { useQuizAudio } from './useQuizAudio';
+import { ASSESSMENT_COMPLETION_XP } from '@/lib/constants/xp-rewards';
 
 interface Question {
   id?: string;
   question: string;
   type: string;
-  options?: string[];
+  options?: Array<string | { option_text?: string; text?: string; option_order?: number }>;
   correctAnswer?: any;
+  correct_answer?: any;
   questionMedia?: any;
   media?: any;
   pairs?: any[];
@@ -27,14 +30,97 @@ interface AssessmentScreenProps {
   studentId: string;
   yunitId: string | number;
   bahagiId: string | number;
+  isRetake?: boolean;
+  previousAttempts?: number;
   onComplete: (result: any) => void;
   onBack: () => void;
 }
+
+const assessmentCache = new Map<string, Assessment>();
+
+const getOptionLabel = (option: string | { option_text?: string; text?: string }) => {
+  if (typeof option === 'string') {
+    return option;
+  }
+
+  return option.option_text ?? option.text ?? '';
+};
+
+const normalizeMatchingPairs = (question: Question) => {
+  if (Array.isArray(question.pairs) && question.pairs.length > 0) {
+    return question.pairs.map((pair) => ({
+      ...pair,
+      left: pair?.left ?? pair?.text ?? '',
+      correctMatch: pair?.correctMatch ?? pair?.match ?? '',
+      rightOptions: Array.isArray(pair?.rightOptions)
+        ? pair.rightOptions.map((option: any) => getOptionLabel(option))
+        : pair?.correctMatch ?? pair?.match
+          ? [pair.correctMatch ?? pair.match]
+          : [],
+    }));
+  }
+
+  if (!Array.isArray(question.options)) {
+    return [];
+  }
+
+  const derivedPairs = question.options.map((option: any) => ({
+    left: option?.left ?? option?.text ?? option?.option_text ?? '',
+    correctMatch: option?.correctMatch ?? option?.match ?? '',
+  }));
+
+  const rightOptions = derivedPairs
+    .map((pair) => pair.correctMatch)
+    .filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+  return derivedPairs.map((pair) => ({
+    ...pair,
+    rightOptions,
+  }));
+};
+
+const normalizeQuestionForScreen = (question: Question): Question => {
+  if (question.type !== 'matching') {
+    return question;
+  }
+
+  return {
+    ...question,
+    pairs: normalizeMatchingPairs(question),
+  };
+};
+
+const hasAnswerForQuestion = (question: Question, answer: any) => {
+  if (question.type === 'checkbox') {
+    return Array.isArray(answer) && answer.length > 0;
+  }
+
+  if (question.type === 'short-answer') {
+    return String(answer ?? '').trim().length > 0;
+  }
+
+  if (question.type === 'matching') {
+    const pairs = normalizeMatchingPairs(question);
+    return pairs.length > 0 && Array.isArray(answer) && pairs.every((_, idx) => String(answer?.[idx] ?? '').trim().length > 0);
+  }
+
+  if (question.type === 'scramble' || question.type === 'scramble-word') {
+    return Array.isArray(answer) && answer.length > 0;
+  }
+
+  if (question.type === 'audio' || question.type === 'media-audio') {
+    return answer === 'audio-recorded';
+  }
+
+  return answer !== null && typeof answer !== 'undefined';
+};
 
 export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   studentId,
   yunitId,
   bahagiId,
+  isRetake = false,
+  previousAttempts = 0,
   onComplete,
   onBack
 }) => {
@@ -62,12 +148,23 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   // Scramble word state
   const [scramblePool, setScramblePool] = useState<string[]>([]);
   const [scrambleSelected, setScrambleSelected] = useState<string[]>([]);
+  const {
+    ensureBackgroundPlayback,
+    playCorrectSound,
+    playWrongSound,
+    playCompletionSound,
+    playLoseSound,
+    registerQuestionAudio,
+  } = useQuizAudio();
+
+  const hasPlayedLoseSoundRef = useRef(false);
 
   const isAudioQuestion = (type: string) =>
     type === 'audio' || type === 'media-audio';
 
   const startRecording = useCallback(async () => {
     try {
+      ensureBackgroundPlayback();
       setMicError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -96,7 +193,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     } catch {
       setMicError('Hindi ma-access ang mikropono. Pakisuri ang pahintulot.');
     }
-  }, []);
+  }, [ensureBackgroundPlayback]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -154,29 +251,34 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
 
   useEffect(() => {
     const fetchAssessment = async () => {
+      const cacheKey = String(yunitId);
+      const cachedAssessment = assessmentCache.get(cacheKey);
+
+      if (cachedAssessment) {
+        setAssessment(cachedAssessment);
+        setAnswers(new Array(cachedAssessment.questions?.length || 0).fill(null));
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
+        const response = await apiClient.assessment.fetch({
+          yunit_id: Number(yunitId),
+          student_view: true,
+          first_only: true,
+        });
         
-        // Try fetching assessment by yunit_id first
-        let response = await apiClient.assessment.fetch({ yunit_id: Number(yunitId) });
-        
-        // Handle both response formats: { data: [...] } or { data: { assessments: [...] } }
-        let assessments = response.data?.assessments || response.data;
-        if (!Array.isArray(assessments)) assessments = [];
-        
-        // If no yunit-level assessment found, fall back to bahagi-level
-        if (assessments.length === 0 && bahagiId) {
-          response = await apiClient.assessment.fetch({ bahagi_id: Number(bahagiId) });
-          assessments = response.data?.assessments || response.data;
-          if (!Array.isArray(assessments)) assessments = [];
-        }
-
-        if (assessments.length > 0) {
-          const assessmentData = assessments[0];
-          // Extract questions from content if needed
-          const questions = assessmentData.questions || assessmentData.content?.questions || [];
-          setAssessment({ ...assessmentData, questions });
-          setAnswers(new Array(questions.length || 0).fill(null));
+        if (response.data?.assessments?.length > 0) {
+          const assessmentData = {
+            ...response.data.assessments[0],
+            questions: Array.isArray(response.data.assessments[0]?.questions)
+              ? response.data.assessments[0].questions.map((question: Question) => normalizeQuestionForScreen(question))
+              : [],
+          };
+          assessmentCache.set(cacheKey, assessmentData);
+          setAssessment(assessmentData);
+          setAnswers(new Array(assessmentData.questions?.length || 0).fill(null));
         } else if (response.error) {
           throw new Error(response.error);
         }
@@ -188,7 +290,18 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     };
 
     fetchAssessment();
-  }, [studentId, yunitId, bahagiId]);
+  }, [studentId, yunitId]);
+
+  useEffect(() => {
+    if (lives === 0 && !hasPlayedLoseSoundRef.current) {
+      playLoseSound();
+      hasPlayedLoseSoundRef.current = true;
+    }
+
+    if (lives > 0) {
+      hasPlayedLoseSoundRef.current = false;
+    }
+  }, [lives, playLoseSound]);
 
   if (isLoading) {
     return (
@@ -216,14 +329,17 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   }
 
   const currentQuestion = assessment.questions[currentQuestionIdx];
+  const matchingPairs = normalizeMatchingPairs(currentQuestion);
   const totalQuestions = assessment.questions.length;
 
   const handleAnswerSelect = (answer: any) => {
+    ensureBackgroundPlayback();
     setSelectedAnswer(answer);
   };
 
   const handleSubmitAnswer = () => {
-    if (selectedAnswer === null && selectedAnswer !== 0) {
+    ensureBackgroundPlayback();
+    if (!hasAnswerForQuestion(currentQuestion, selectedAnswer)) {
       alert('Please select an answer');
       return;
     }
@@ -232,6 +348,12 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
     const correct = checkAnswer(currentQuestion, selectedAnswer);
     setIsCorrect(correct);
     setShowResult(true);
+
+    if (correct) {
+      playCorrectSound();
+    } else {
+      playWrongSound();
+    }
 
     // Update answers
     const newAnswers = [...answers];
@@ -250,8 +372,22 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   const checkAnswer = (question: Question, answer: any): boolean => {
     if (question.type === 'multiple-choice') {
       return answer === question.correctAnswer;
+    } else if (question.type === 'checkbox') {
+      if (Array.isArray(question.correctAnswer) && Array.isArray(answer)) {
+        return JSON.stringify([...answer].sort()) === JSON.stringify([...question.correctAnswer].sort());
+      }
+      return false;
+    } else if (question.type === 'short-answer') {
+      const normalizedAnswer = String(answer ?? '').trim().toLowerCase();
+      const expectedAnswer = String(question.correctAnswer ?? question.correct_answer ?? '').trim().toLowerCase();
+      if (!expectedAnswer) {
+        return normalizedAnswer.length > 0;
+      }
+      return normalizedAnswer === expectedAnswer;
     } else if (question.type === 'matching') {
-      return question.pairs?.every((pair: any, idx: number) => answer?.[idx] === pair.correctMatch) ?? false;
+      return normalizeMatchingPairs(question).every((pair: any, idx: number) =>
+        String(answer?.[idx] ?? '').trim().toLowerCase() === String(pair.correctMatch ?? '').trim().toLowerCase()
+      );
     } else if (question.type === 'scramble' || question.type === 'scramble-word') {
       if (Array.isArray(answer) && Array.isArray(question.correctAnswer)) {
         return JSON.stringify(answer.map((w: string) => w.toLowerCase().trim())) ===
@@ -286,20 +422,49 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   const handleSubmitAssessment = async () => {
     try {
       setIsSubmitting(true);
+      setError(null);
       const correctCount = answers.filter((answer, idx) => 
         checkAnswer(assessment.questions[idx], answer)
       ).length;
 
-      const result = await apiClient.assessment.submit(Number(assessment.id), {
-        student_id: studentId,
-        answers,
-        yunit_id: Number(yunitId),
-        bahagi_id: Number(bahagiId),
-        total_questions: assessment.questions.length
+      const response = await fetch('/api/student/assessments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId,
+          yunitId: Number(yunitId),
+          bahagiId: Number(bahagiId),
+          assessmentId: Number(assessment.id),
+          answers,
+          totalQuestions: assessment.questions.length,
+          isRetake,
+          previousAttempts,
+        }),
       });
 
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit assessment');
+      }
+
       if (result.success) {
-        onComplete(result);
+        playCompletionSound();
+        const isPassed = Boolean(result.isPassed ?? result.data?.isCorrect);
+        onComplete({
+          ...result,
+          isPassed,
+          scorePercentage: result.scorePercentage ?? (isPassed ? 100 : 0),
+          xpEarned: result.xpEarned ?? (isPassed ? ASSESSMENT_COMPLETION_XP : 0),
+          coinsEarned: result.coinsEarned ?? 0,
+          message:
+            result.message ??
+            (isPassed
+              ? `🎉 Mahusay! Earned +${ASSESSMENT_COMPLETION_XP} XP.`
+              : result.data?.feedback ?? 'Subukan muli.'),
+        });
       } else {
         throw new Error(result.error || 'Failed to submit assessment');
       }
@@ -325,7 +490,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="fixed inset-0 bg-slate-950 flex items-center justify-center z-50"
+        className="fixed inset-0 md:left-48 bg-slate-950 flex items-center justify-center z-40"
       >
         <div className="text-center space-y-6">
           <div className="text-7xl animate-bounce">💔</div>
@@ -358,22 +523,27 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-950 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 md:left-48 bg-slate-950 flex flex-col overflow-hidden z-40">
       {/* Header */}
-      <div className="bg-linear-to-b from-slate-900 to-slate-950 border-b border-white/10 p-4">
+      <div className="bg-slate-900 border-b border-white/10 px-4 py-3">
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={onBack}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="text-slate-400 hover:text-white transition-colors font-semibold"
           >
             ← Bumalik
           </button>
           
           <div className="flex items-center gap-4">
+            {isRetake && (
+              <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                Retake #{previousAttempts + 1}
+              </span>
+            )}
             {/* Hearts */}
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
               {Array.from({ length: 3 }).map((_, i) => (
-                <span key={i} className={`text-2xl ${i < lives ? '❤️' : '🖤'}`} />
+                <span key={i} className="text-xl">{i < lives ? '❤️' : '🖤'}</span>
               ))}
             </div>
 
@@ -389,29 +559,36 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${((currentQuestionIdx + 1) / totalQuestions) * 100}%` }}
-            className="h-full bg-gradient-to-r from-brand-purple to-brand-sky"
+            className="h-full bg-brand-purple rounded-full"
+            transition={{ duration: 0.3 }}
           />
         </div>
+
+        {isRetake && (
+          <div className="mt-2 text-xs text-amber-300 font-semibold">
+            Nauna nang nasagutan ang assessment na ito. Practice retake ito at wala nang dagdag na XP o coins.
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentQuestionIdx}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="space-y-6 max-w-2xl mx-auto"
+            className="space-y-6 max-w-2xl mx-auto w-full min-w-0"
           >
             {/* Question Type Badge */}
-            <div className="inline-block px-3 py-1 bg-slate-800 rounded-lg text-xs font-bold text-slate-400">
-              {currentQuestion.type.replace('-', ' ').toUpperCase()}
+            <div className="inline-block px-3 py-1 bg-slate-800 rounded-lg text-xs font-bold text-slate-400 uppercase tracking-wider">
+              {currentQuestion.type.replace('-', ' ')}
             </div>
 
             {/* Question Text */}
             <div>
-              <h3 className="text-2xl font-black text-white">{currentQuestion.question}</h3>
+              <h3 className="text-2xl font-black text-white wrap-break-word leading-snug">{currentQuestion.question}</h3>
             </div>
 
             {/* Question Media */}
@@ -424,7 +601,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                     className="max-w-full max-h-64 rounded-lg"
                   />
                 ) : (
-                  <audio controls className="w-full">
+                  <audio ref={registerQuestionAudio} controls preload="none" className="w-full">
                     <source
                       src={currentQuestion.questionMedia.preview}
                       type={currentQuestion.questionMedia.type}
@@ -438,53 +615,114 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
             <div className="space-y-3">
               {currentQuestion.type === 'multiple-choice' && (
                 <div className="space-y-3">
-                  {currentQuestion.options?.map((option: string, idx: number) => (
+                  {currentQuestion.options?.map((option, idx: number) => (
                     <motion.button
-                      key={idx}
+                      key={typeof option === 'string' ? idx : option.option_order ?? idx}
                       onClick={() => handleAnswerSelect(idx)}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`w-full p-4 rounded-lg text-left font-bold transition-all ${
+                      className={`w-full p-4 rounded-xl text-left font-semibold transition-all wrap-break-word border-2 ${
                         selectedAnswer === idx
                           ? isCorrect === true
-                            ? 'bg-green-500 border-2 border-green-400 text-white'
+                            ? 'bg-green-500/20 border-green-500 text-green-300'
                             : isCorrect === false
-                            ? 'bg-red-500 border-2 border-red-400 text-white'
-                            : 'bg-brand-purple border-2 border-brand-purple text-white'
+                            ? 'bg-red-500/20 border-red-500 text-red-300'
+                            : 'bg-brand-purple/20 border-brand-purple text-white'
                           : showResult && idx === currentQuestion.correctAnswer
-                          ? 'bg-green-500/40 border-2 border-green-400 text-white'
-                          : 'bg-slate-800 border-2 border-slate-700 text-white hover:border-slate-600'
+                          ? 'bg-green-500/20 border-green-500 text-green-300'
+                          : 'bg-slate-800 border-slate-700 text-white hover:border-slate-500'
                       }`}
                       disabled={showResult}
                     >
-                      {option}
+                      {getOptionLabel(option)}
                     </motion.button>
                   ))}
                 </div>
               )}
 
+              {currentQuestion.type === 'short-answer' && (
+                <input
+                  type="text"
+                  value={selectedAnswer || ''}
+                  onChange={(e) => {
+                    ensureBackgroundPlayback();
+                    setSelectedAnswer(e.target.value);
+                  }}
+                  placeholder="I-type ang iyong sagot..."
+                  disabled={showResult}
+                  className="w-full p-4 bg-slate-800 border-2 border-slate-700 text-white rounded-xl font-semibold text-lg focus:border-brand-purple outline-none transition-colors"
+                />
+              )}
+
+              {currentQuestion.type === 'checkbox' && (
+                <div className="space-y-3">
+                  {currentQuestion.options?.map((option, idx: number) => {
+                    const selected = Array.isArray(selectedAnswer) && selectedAnswer.includes(idx);
+
+                    return (
+                      <motion.button
+                        key={typeof option === 'string' ? idx : option.option_order ?? idx}
+                        onClick={() => {
+                          if (showResult) return;
+                          ensureBackgroundPlayback();
+
+                          const currentSelections = Array.isArray(selectedAnswer) ? [...selectedAnswer] : [];
+                          if (currentSelections.includes(idx)) {
+                            setSelectedAnswer(currentSelections.filter((value) => value !== idx));
+                          } else {
+                            setSelectedAnswer([...currentSelections, idx]);
+                          }
+                        }}
+                        disabled={showResult}
+                        className={`w-full p-4 rounded-xl text-left font-semibold transition-all border-2 wrap-break-word ${
+                          showResult
+                            ? Array.isArray(currentQuestion.correctAnswer) && currentQuestion.correctAnswer.includes(idx)
+                              ? 'bg-green-500/20 border-green-500 text-green-300'
+                              : selected
+                                ? 'bg-red-500/20 border-red-500 text-red-300'
+                                : 'bg-slate-800/50 border-slate-700/50 text-slate-500'
+                            : selected
+                              ? 'bg-brand-purple/20 border-brand-purple text-white'
+                              : 'bg-slate-800 border-slate-700 text-white hover:border-slate-500'
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-3">
+                          <span className={`w-6 h-6 rounded flex items-center justify-center text-xs shrink-0 ${
+                            selected ? 'bg-brand-purple text-white' : 'bg-slate-700 text-slate-400'
+                          }`}>
+                            {selected ? '✓' : ''}
+                          </span>
+                          {getOptionLabel(option)}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              )}
+
               {currentQuestion.type === 'matching' && (
                 <div className="space-y-3">
-                  {currentQuestion.pairs?.map((pair: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      <div className="bg-slate-800 rounded-lg p-3 flex-1">
-                        <p className="text-white font-bold">{pair.left}</p>
+                  {matchingPairs.map((pair: any, idx: number) => (
+                    <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 min-w-0">
+                      <div className="bg-slate-800 rounded-lg p-3 flex-1 min-w-0 border border-slate-700">
+                        <p className="text-white font-bold wrap-break-word">{pair.left}</p>
                       </div>
-                      <span className="text-slate-400">→</span>
+                      <span className="text-slate-400 hidden md:inline">→</span>
                       <select
                         value={selectedAnswer?.[idx] || ''}
                         onChange={(e) => {
-                          const newAnswer = [...(selectedAnswer || [])];
+                          ensureBackgroundPlayback();
+                          const newAnswer = [...(selectedAnswer || Array(matchingPairs.length).fill(''))];
                           newAnswer[idx] = e.target.value;
                           setSelectedAnswer(newAnswer);
                         }}
                         disabled={showResult}
-                        className="bg-slate-800 border-2 border-slate-700 text-white rounded-lg p-3 flex-1 font-bold"
+                        className="bg-slate-800 border-2 border-slate-700 text-white rounded-lg p-3 flex-1 font-bold min-w-0"
                       >
                         <option value="">Select match</option>
-                        {pair.rightOptions?.map((option: string, optIdx: number) => (
-                          <option key={optIdx} value={option}>
-                            {option}
+                        {pair.rightOptions?.map((option: any, optIdx: number) => (
+                          <option key={optIdx} value={getOptionLabel(option)}>
+                            {getOptionLabel(option)}
                           </option>
                         ))}
                       </select>
@@ -496,9 +734,9 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
               {(currentQuestion.type === 'scramble' || currentQuestion.type === 'scramble-word') && (
                 <div className="space-y-5">
                   {/* Selected words (answer area) */}
-                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-[60px]">
+                  <div className="bg-slate-900 border-2 border-slate-700 rounded-xl p-4 min-h-15">
                     <p className="text-xs text-slate-500 mb-2 font-bold uppercase tracking-wider">Iyong sagot:</p>
-                    <div className="flex flex-wrap gap-2 min-h-[40px]">
+                    <div className="flex flex-wrap gap-2 min-h-10">
                       {scrambleSelected.length === 0 && (
                         <p className="text-slate-600 text-sm italic">Pindutin ang mga salita sa ibaba para ayusin...</p>
                       )}
@@ -562,9 +800,9 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
               {isAudioQuestion(currentQuestion.type) && (
                 <div className="space-y-6">
                   {/* Avatar with speech bubble */}
-                  <div className="flex items-end gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3 min-w-0">
                     {/* Character avatar */}
-                    <div className="w-24 h-28 shrink-0">
+                    <div className="w-24 h-28 shrink-0 self-start">
                       <img
                         src="/Character/NLLCTeachHalf1.png"
                         alt="Teacher"
@@ -573,7 +811,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                     </div>
 
                     {/* Speech bubble with audio prompt */}
-                    <div className="relative bg-slate-800 border border-slate-600 rounded-2xl rounded-bl-sm px-4 py-3 max-w-xs">
+                    <div className="relative bg-slate-800 border border-slate-600 rounded-2xl rounded-bl-sm px-4 py-3 w-full max-w-xs min-w-0">
                       {currentQuestion.questionMedia?.preview ? (
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0">
@@ -582,10 +820,10 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
                             </svg>
                           </div>
-                          <p className="text-cyan-400 font-bold text-sm">{currentQuestion.question}</p>
+                          <p className="text-cyan-400 font-bold text-sm wrap-break-word">{currentQuestion.question}</p>
                         </div>
                       ) : (
-                        <p className="text-cyan-400 font-bold text-sm">{currentQuestion.question}</p>
+                        <p className="text-cyan-400 font-bold text-sm wrap-break-word">{currentQuestion.question}</p>
                       )}
                     </div>
                   </div>
@@ -660,7 +898,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
                           <p className="text-slate-400 text-xs">Tagal: {formatTime(recordingTime)}</p>
                         </div>
                       </div>
-                      <audio src={audioUrl} controls className="w-full h-10" />
+                      <audio src={audioUrl} controls preload="none" className="w-full h-10" />
                       {!showResult && (
                         <button
                           type="button"
@@ -681,7 +919,7 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-4 rounded-lg text-center font-bold ${
+                className={`p-4 rounded-xl text-center font-bold ${
                   isCorrect
                     ? 'bg-green-500/20 border border-green-500 text-green-300'
                     : 'bg-red-500/20 border border-red-500 text-red-300'
@@ -699,37 +937,40 @@ export const AssessmentScreen: React.FC<AssessmentScreenProps> = ({
       </div>
 
       {/* Bottom Actions */}
-      <div className="bg-linear-to-t from-slate-950 to-slate-900 border-t border-white/10 p-6">
-        <div className="flex gap-4 max-w-2xl mx-auto">
-          <button
-            onClick={handleSkip}
-            disabled={showResult}
-            className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 text-white rounded-lg font-bold hover:bg-slate-700 transition-all disabled:opacity-50"
-          >
-            Laktawan (Skip)
-          </button>
+      <div className="bg-slate-900 border-t border-white/10 p-6">
+        <div className="max-w-2xl mx-auto w-full space-y-3 min-w-0">
+          {error && (
+            <div className="bg-red-500/20 border border-red-500 rounded-xl p-4 text-red-300 wrap-break-word">
+              {error}
+            </div>
+          )}
 
-          <button
-            onClick={() => {
-              if (!showResult) {
-                handleSubmitAnswer();
-              } else {
-                handleContinue();
-              }
-            }}
-            disabled={(selectedAnswer === null && selectedAnswer !== 0) && !isRecording}
-            className="flex-1 px-4 py-3 bg-brand-purple text-white rounded-lg font-bold hover:opacity-90 transition-all disabled:opacity-50"
-          >
-            {!showResult ? 'Pakitsek' : currentQuestionIdx < totalQuestions - 1 ? 'Magpatuloy' : 'Tapusin'}
-          </button>
+          <div className="flex gap-4 min-w-0">
+            <button
+              onClick={handleSkip}
+              disabled={showResult}
+              className="flex-1 min-w-0 px-4 py-3 bg-slate-800 border border-slate-700 text-white rounded-xl font-bold hover:bg-slate-700 transition-all disabled:opacity-50"
+            >
+              Laktawan (Skip)
+            </button>
+
+            <button
+              onClick={() => {
+                if (!showResult) {
+                  handleSubmitAnswer();
+                } else {
+                  ensureBackgroundPlayback();
+                  handleContinue();
+                }
+              }}
+              disabled={!hasAnswerForQuestion(currentQuestion, selectedAnswer) && !isRecording}
+              className="flex-1 min-w-0 px-4 py-3 bg-brand-purple text-white rounded-xl font-bold hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              {!showResult ? 'Pakitsek' : currentQuestionIdx < totalQuestions - 1 ? 'Magpatuloy' : 'Tapusin'}
+            </button>
+          </div>
         </div>
       </div>
-
-      {error && (
-        <div className="fixed bottom-4 left-4 right-4 bg-red-500/20 border border-red-500 rounded-lg p-4 text-red-300">
-          {error}
-        </div>
-      )}
     </div>
   );
 };

@@ -147,6 +147,7 @@ export const StudentYunitView: React.FC<StudentYunitViewProps> = ({
                       <img
                         src={selectedYunit.media_url}
                         alt={selectedYunit.title}
+                        loading="lazy"
                         className="w-full rounded-xl max-h-96 object-cover"
                       />
                     ) : selectedYunit.media_url.match(/\.(mp4|webm|ogg)$/i) ? (

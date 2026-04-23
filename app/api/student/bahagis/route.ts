@@ -31,14 +31,32 @@ export async function GET(request: NextRequest) {
     const studentClassName = studentResult.rows[0].class_name;
     console.log('[GET /api/student/bahagis] Student class_name:', studentClassName);
 
+    const columnCheck = await query(
+      `SELECT
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'bahagi' AND column_name = 'is_published'
+         ) AS has_is_published,
+         EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'bahagi' AND column_name = 'is_archived'
+         ) AS has_is_archived`
+    );
+
+    const hasIsPublished = Boolean(columnCheck.rows?.[0]?.has_is_published);
+    const hasIsArchived = Boolean(columnCheck.rows?.[0]?.has_is_archived);
+    const publishedColumn = hasIsPublished ? 'is_published' : 'is_open';
+    const archivedFilter = hasIsArchived ? 'AND COALESCE(is_archived, false) = false' : '';
+
     // Fetch bahagi that match:
     // 1. The student's assigned teacher
     // 2. The student's class_name (grade level) - if both have class_name
-    // 3. Open (not archived)
+    // 3. Published and not archived
     let bahagiQuery = `
       SELECT * FROM bahagi 
       WHERE teacher_id = $1 
-        AND is_open = true
+        ${archivedFilter}
+        AND COALESCE(${publishedColumn}, false) = true
     `;
     const queryParams = [teacherId];
 

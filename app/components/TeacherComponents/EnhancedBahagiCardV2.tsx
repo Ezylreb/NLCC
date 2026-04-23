@@ -14,6 +14,9 @@ interface EnhancedBahagiCardProps {
     iconPath?: string;
     iconType?: string;
     description?: string;
+    quarter?: string | null;
+    week_number?: number | null;
+    module_number?: string | null;
     isOpen?: boolean;
     isArchived?: boolean;
     isPublished?: boolean;
@@ -30,6 +33,7 @@ interface EnhancedBahagiCardProps {
     userId: string;
     expanded?: boolean;
     onToggleExpand?: (id: number) => void;
+    isDraggable?: boolean;
 }
 
 export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
@@ -39,6 +43,9 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
     iconPath,
     iconType = 'default',
     description,
+    quarter,
+    week_number,
+    module_number,
     isOpen = true,
     isArchived = false,
     isPublished = false,
@@ -78,7 +85,7 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         className="w-full flex items-center gap-4 hover:gap-5 transition"
                     >
                         {/* Icon Display */}
-                        <div className="relative flex-shrink-0">
+                        <div className="relative shrink-0">
                             <div className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-purple-500/30 bg-slate-700 shadow-md hover:shadow-lg transition">
                                 <img
                                     src={displayIcon}
@@ -102,6 +109,25 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                                 <p className="text-sm text-slate-400 line-clamp-1">
                                     {description}
                                 </p>
+                            )}
+                            {(quarter || week_number || module_number) && (
+                                <div className="flex flex-wrap gap-2 mt-2 text-[10px] font-black uppercase tracking-wide">
+                                    {quarter && (
+                                        <span className="bg-indigo-900/30 text-indigo-400 px-2 py-1 rounded">
+                                            {quarter}
+                                        </span>
+                                    )}
+                                    {week_number && (
+                                        <span className="bg-cyan-900/30 text-cyan-400 px-2 py-1 rounded">
+                                            Week {week_number}
+                                        </span>
+                                    )}
+                                    {module_number && (
+                                        <span className="bg-purple-900/30 text-purple-400 px-2 py-1 rounded">
+                                            {module_number}
+                                        </span>
+                                    )}
+                                </div>
                             )}
                             <div className="flex flex-wrap gap-2 mt-2 text-xs">
                                 {isPublished ? (
@@ -226,7 +252,7 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         initial={{ scale: 0.95 }}
                         animate={{ scale: 1 }}
                         exit={{ scale: 0.95 }}
-                        className="bg-slate-900 rounded-[2rem] p-8 max-w-sm shadow-2xl border border-slate-800"
+                        className="bg-slate-900 rounded-4xl p-8 max-w-sm shadow-2xl border border-slate-800"
                         onClick={e => e.stopPropagation()}
                     >
                         <h3 className="text-2xl font-black text-white mb-3">Delete Bahagi?</h3>
@@ -267,7 +293,7 @@ export const EnhancedBahagiCardV2: React.FC<EnhancedBahagiCardProps> = ({
                         initial={{ scale: 0.95 }}
                         animate={{ scale: 1 }}
                         exit={{ scale: 0.95 }}
-                        className="bg-slate-900 rounded-[2rem] p-8 max-w-sm shadow-2xl border border-slate-800"
+                        className="bg-slate-900 rounded-4xl p-8 max-w-sm shadow-2xl border border-slate-800"
                         onClick={e => e.stopPropagation()}
                     >
                         <h3 className="text-2xl font-black text-white mb-3">Archive Bahagi?</h3>
